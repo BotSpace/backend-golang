@@ -25,7 +25,12 @@ type Project struct {
 	UpdatedAt          time.Time
 }
 
-// CreateInput is the owner-scoped create payload.
+// CreateInput is the owner-scoped create payload. Token is optional — mirrors
+// Django's CreateProjectSerializer "token" field (project.py:202): when
+// non-empty it is stored as the project's RELEASE_BOT_TOKEN environment
+// variable (see bot.py:39, kubernetes_service.py:680-685) instead of being
+// forced/required, so a tokenless create still succeeds (dashboard's
+// bot_token_required contract only kicks in later, at release-deploy time).
 type CreateInput struct {
 	OwnerID     uuid.UUID
 	Name        string
@@ -33,14 +38,17 @@ type CreateInput struct {
 	Username    string
 	Flow        json.RawMessage
 	IsTemplate  bool
+	Token       string
 }
 
-// UpdateInput carries optional fields; nil pointers are left unchanged.
+// UpdateInput carries optional fields; nil pointers are left unchanged. A
+// non-nil, non-empty Token (re)writes RELEASE_BOT_TOKEN, same as CreateInput.
 type UpdateInput struct {
 	Name        *string
 	Description *string
 	Username    *string
 	Flow        json.RawMessage
+	Token       *string
 }
 
 // ListFilter narrows and paginates an owner's project listing.
@@ -115,4 +123,13 @@ type Repository interface {
 	CountAdmin(ctx context.Context, search string) (int64, error)
 	GetAdmin(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	ListMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, error)
+
+	// SetReleaseBotToken upserts (key=RELEASE_BOT_TOKEN, project_id) in the
+	// shared enviroment table, owner-scoped. This is a SQL-only cross-module
+	// write against the release module's table (no Go import of the release
+	// package), the same convention internal/modules/administration and
+	// internal/modules/user already use for cross-module reads. It reuses the
+	// generated sqlcdb.Queries.UpsertEnviromentForOwner query that the
+	// release module's Repository also calls.
+	SetReleaseBotToken(ctx context.Context, projectID, ownerID uuid.UUID, token string) error
 }

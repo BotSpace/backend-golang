@@ -53,6 +53,30 @@ func (r *pgRepo) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateInp
 	}))
 }
 
+// releaseBotTokenKey is the environment key the deploy pipeline reads —
+// mirrors Django's EnviromentModel key="RELEASE_BOT_TOKEN" (bot.py:39,
+// kubernetes_service.py:680-685).
+const releaseBotTokenKey = "RELEASE_BOT_TOKEN"
+
+func (r *pgRepo) SetReleaseBotToken(ctx context.Context, projectID, ownerID uuid.UUID, token string) error {
+	_, err := r.queries.UpsertEnviromentForOwner(ctx, sqlcdb.UpsertEnviromentForOwnerParams{
+		ID:        uuid.New(),
+		UserID:    ownerID,
+		Key:       releaseBotTokenKey,
+		Value:     token,
+		Secret:    true,
+		ProjectID: projectID,
+		OwnerID:   ownerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return database.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("set release bot token: %w", err)
+	}
+	return nil
+}
+
 func (r *pgRepo) SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error {
 	rows, err := r.queries.SoftDeleteProject(ctx, sqlcdb.SoftDeleteProjectParams{ID: id, OwnerID: ownerID})
 	if err != nil {

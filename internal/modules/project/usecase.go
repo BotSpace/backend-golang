@@ -3,6 +3,12 @@ package project
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -36,6 +42,9 @@ func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) 
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
+	if err := u.applyToken(ctx, p, p.OwnerID, in.Token); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -46,7 +55,67 @@ func (u *usecase) Get(ctx context.Context, id, ownerID uuid.UUID) (*Project, err
 
 func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateInput) (*Project, error) {
 	p, err := u.repo.Update(ctx, id, ownerID, in)
-	return mapErr(p, err)
+	if p, err = mapErr(p, err); err != nil {
+		return nil, err
+	}
+	var token string
+	if in.Token != nil {
+		token = *in.Token
+	}
+	if err := u.applyToken(ctx, p, ownerID, token); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// applyToken stores a non-blank Telegram bot token as the project's
+// RELEASE_BOT_TOKEN environment variable and best-effort registers Telegram's
+// webhook for it — mirrors Django's EnviromentModel.objects.update_or_create
+// (bot.py:39) + core/apps/api/services/webhook.py's set_webhook(instance,
+// "release"). A blank token is a no-op: Create/Update never force a token,
+// only store one when given (dashboard's bot_token_required flow handles the
+// tokenless path at release-deploy time instead).
+func (u *usecase) applyToken(ctx context.Context, p *Project, ownerID uuid.UUID, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil
+	}
+	if err := u.repo.SetReleaseBotToken(ctx, p.ID, ownerID, token); err != nil {
+		return httpx.Internal(fmt.Errorf("store release bot token: %w", err))
+	}
+	setReleaseWebhook(token, p.ReleaseWebhookUUID)
+	return nil
+}
+
+// setReleaseWebhook registers this project's stable release webhook route
+// with Telegram for the given token. Best-effort by design (mirrors Django's
+// set_webhook, which swallows httpx errors and logs — see webhook.py:43-50):
+// a bad token or an unreachable Telegram API must never fail project
+// create/update, since the release deploy path retries this same
+// registration (release.Usecase.CreateRelease -> engine deploy) anyway.
+func setReleaseWebhook(token string, releaseWebhookUUID uuid.UUID) {
+	domain := os.Getenv("DOMAIN")
+	if domain == "" {
+		domain = "api.botspace.uz"
+	}
+	hookURL := fmt.Sprintf("https://%s/api/bot-webhook/release/%s/", domain, releaseWebhookUUID.String())
+	telegramURL := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook?url=%s", token, hookURL)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, telegramURL, nil)
+	if err != nil {
+		log.Printf("project: build setWebhook request failed: %v", err)
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("project: setWebhook call failed (will retry on release deploy): %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("project: setWebhook returned status %d", resp.StatusCode)
+	}
 }
 
 func (u *usecase) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
