@@ -63,6 +63,34 @@ type DeployResult struct {
 	Status    Status
 }
 
+// ReconcileStatus resolves the display status for a release/debug row that is
+// still in a non-terminal DB state by merging in what the orchestrator
+// reports right now. This is the "lazy" fix for status never advancing past
+// pending/initializing: Django had a k8s-watcher process updating the DB on
+// pod events; we don't run one, so callers ask the orchestrator live on each
+// read instead. Terminal DB states (running/stopped/failed/stopping/
+// suspended) are left untouched — once a release is known to have finished
+// one way or another we don't second-guess it here.
+func ReconcileStatus(dbStatus Status, live Status) Status {
+	switch dbStatus {
+	case StatusPending, StatusInitializing:
+		switch live {
+		case StatusRunning:
+			return StatusRunning
+		case StatusFailed:
+			return StatusFailed
+		case StatusStopped:
+			// The orchestrator has no record of this deployment (or it died)
+			// while we still think it's launching — it isn't coming up.
+			return StatusFailed
+		default:
+			return StatusInitializing
+		}
+	default:
+		return dbStatus
+	}
+}
+
 // MongoCredentials are the per-project MongoDB credentials.
 type MongoCredentials struct {
 	Username         string

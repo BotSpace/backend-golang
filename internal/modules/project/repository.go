@@ -77,6 +77,58 @@ func (r *pgRepo) SetReleaseBotToken(ctx context.Context, projectID, ownerID uuid
 	return nil
 }
 
+// GetDebugForOwner reuses the release module's generated debug-table query —
+// see the Repository interface doc comment for why this reaches across
+// modules via raw SQL instead of a Go import.
+func (r *pgRepo) GetDebugForOwner(ctx context.Context, projectID, ownerID uuid.UUID) (*ProjectDebug, error) {
+	row, err := r.queries.GetDebugForOwner(ctx, sqlcdb.GetDebugForOwnerParams{ProjectID: projectID, OwnerID: ownerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get debug for owner: %w", err)
+	}
+	d := &ProjectDebug{
+		ID:        row.ID,
+		ServiceID: strVal(row.ServiceID),
+		Status:    row.Status,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}
+	return d, nil
+}
+
+// UpdateDebugStatus persists a reconciled live status (see
+// release.reconcileDebug); serviceID is re-sent unchanged since the
+// underlying query writes both columns together.
+func (r *pgRepo) UpdateDebugStatus(ctx context.Context, id uuid.UUID, serviceID, status string) (*ProjectDebug, error) {
+	row, err := r.queries.UpdateDebugDeployResult(ctx, sqlcdb.UpdateDebugDeployResultParams{
+		ID:        id,
+		ServiceID: strPtr(serviceID),
+		Status:    status,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update debug status: %w", err)
+	}
+	return &ProjectDebug{
+		ID:        row.ID,
+		ServiceID: strVal(row.ServiceID),
+		Status:    row.Status,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}, nil
+}
+
+func strVal(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func (r *pgRepo) SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error {
 	rows, err := r.queries.SoftDeleteProject(ctx, sqlcdb.SoftDeleteProjectParams{ID: id, OwnerID: ownerID})
 	if err != nil {

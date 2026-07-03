@@ -26,10 +26,27 @@ func NewTokenIssuer(priv *rsa.PrivateKey, pub *rsa.PublicKey, cfg config.JWTConf
 	return &TokenIssuer{priv: priv, pub: pub, cfg: cfg}
 }
 
+// Claims mirrors Django SIMPLE_JWT's claim shape so tokens are interchangeable
+// between the Go and Django issuers for the lifetime of the migration: other
+// services (agent, webhook, worker-golang) that decode Django-issued tokens
+// read `user_id` and `token_type` (config/conf/jwt.py: USER_ID_CLAIM,
+// TOKEN_TYPE_CLAIM). `sub`/`jti`/`iat`/`exp` come from jwt.RegisteredClaims
+// and already match (JTI_CLAIM="jti" on the Django side too).
 type Claims struct {
 	jwt.RegisteredClaims
-	TokenType string `json:"typ"`
+	UserID    string `json:"user_id"`
+	TokenType string `json:"token_type"`
 	Role      string `json:"role,omitempty"`
+}
+
+// identity returns the token's user identifier, preferring the Django-style
+// user_id claim and falling back to sub for tokens that only set one (e.g.
+// the reset token, which carries a phone number in sub and has no user_id).
+func (c *Claims) identity() string {
+	if c.UserID != "" {
+		return c.UserID
+	}
+	return c.Subject
 }
 
 const (
@@ -91,6 +108,7 @@ func (t *TokenIssuer) sign(userID uuid.UUID, kind, role string, ttl time.Duratio
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
+		UserID:    userID.String(),
 		TokenType: kind,
 		Role:      role,
 	}
@@ -109,7 +127,7 @@ func (t *TokenIssuer) VerifyAccessToken(token string) (userID, role string, err 
 	if err != nil {
 		return "", "", err
 	}
-	return claims.Subject, claims.Role, nil
+	return claims.identity(), claims.Role, nil
 }
 
 // VerifyRefreshToken returns the user id and jti of a valid refresh token.
@@ -122,7 +140,7 @@ func (t *TokenIssuer) VerifyRefreshToken(token string) (userID string, jti uuid.
 	if err != nil {
 		return "", uuid.Nil, errors.New("missing token id")
 	}
-	return claims.Subject, id, nil
+	return claims.identity(), id, nil
 }
 
 func (t *TokenIssuer) verify(token, expectedType string) (*Claims, error) {
@@ -142,7 +160,7 @@ func (t *TokenIssuer) verify(token, expectedType string) (*Claims, error) {
 	if claims.TokenType != expectedType {
 		return nil, errors.New("wrong token type")
 	}
-	if claims.Subject == "" {
+	if claims.identity() == "" {
 		return nil, errors.New("missing subject")
 	}
 	return claims, nil

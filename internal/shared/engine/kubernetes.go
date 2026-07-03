@@ -299,9 +299,48 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 		return StatusRunning, nil
 	}
 	if dep.Status.Replicas > 0 {
+		// Not ready yet — tell a genuinely-still-launching pod apart from one
+		// stuck crash-looping (mirrors Django's cleanup_failed_releases
+		// CRASH_RESTART_THRESHOLD=5, core/apps/api/tasks/release.py) so
+		// ReconcileStatus can report "failed" instead of "initializing"
+		// forever.
+		if o.hasCrashLoopingPod(ctx, dep) {
+			return StatusFailed, nil
+		}
 		return StatusInitializing, nil
 	}
 	return StatusStopped, nil
+}
+
+// crashRestartThreshold mirrors Django's CRASH_RESTART_THRESHOLD
+// (core/apps/api/tasks/release.py).
+const crashRestartThreshold = 5
+
+// hasCrashLoopingPod reports whether any pod backing dep has a container
+// that's restarted past the crash threshold or is currently waiting in
+// CrashLoopBackOff. Best-effort: a list error just means "don't know",
+// treated as not-crash-looping so a transient API hiccup can't flip a
+// healthy-but-slow deploy to failed.
+func (o *KubernetesOrchestrator) hasCrashLoopingPod(ctx context.Context, dep *appsv1.Deployment) bool {
+	if dep.Spec.Selector == nil || len(dep.Spec.Selector.MatchLabels) == 0 {
+		return false
+	}
+	sel := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: dep.Spec.Selector.MatchLabels})
+	pods, err := o.cs.CoreV1().Pods(o.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return false
+	}
+	for _, pod := range pods.Items {
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.RestartCount >= crashRestartThreshold {
+				return true
+			}
+			if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ── resource builders ──────────────────────────────────────────────────

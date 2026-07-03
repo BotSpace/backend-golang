@@ -143,8 +143,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// user routes need the verifier from auth
 	user.RegisterRoutes(v1, user.NewHandler(userUC), tokens)
 
-	// project module — owner-scoped CRUD, requires auth.
-	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool))
+	// project module — owner-scoped CRUD, requires auth. orch is passed so
+	// Get can live-reconcile the nested debug status (see project.usecase.Get
+	// / release status parity fix).
+	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch)
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.

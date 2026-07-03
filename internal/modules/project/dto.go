@@ -19,6 +19,19 @@ type ProjectResponse struct {
 	DebugWebhookUUID   string          `json:"debug_webhook_uuid"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
+	// Debug is only set on the single-project fetch (Usecase.Get) — mirrors
+	// Django's RetrieveProjectSerializer nesting RetrieveDebugSerializer. The
+	// dashboard's launch-status poll reads project.debug.status directly.
+	Debug *DebugResponse `json:"debug,omitempty"`
+}
+
+// DebugResponse is the debug-container projection nested in ProjectResponse.
+type DebugResponse struct {
+	ID        string    `json:"id"`
+	ServiceID string    `json:"service_id,omitempty"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func toResponse(p *Project) ProjectResponse {
@@ -26,7 +39,7 @@ func toResponse(p *Project) ProjectResponse {
 	if len(flow) == 0 {
 		flow = json.RawMessage("[]")
 	}
-	return ProjectResponse{
+	resp := ProjectResponse{
 		ID:                 p.ID.String(),
 		UUID:               p.UUID.String(),
 		Name:               p.Name,
@@ -40,6 +53,16 @@ func toResponse(p *Project) ProjectResponse {
 		CreatedAt:          p.CreatedAt,
 		UpdatedAt:          p.UpdatedAt,
 	}
+	if p.Debug != nil {
+		resp.Debug = &DebugResponse{
+			ID:        p.Debug.ID.String(),
+			ServiceID: p.Debug.ServiceID,
+			Status:    p.Debug.Status,
+			CreatedAt: p.Debug.CreatedAt,
+			UpdatedAt: p.Debug.UpdatedAt,
+		}
+	}
+	return resp
 }
 
 type CreateRequest struct {

@@ -23,6 +23,25 @@ type Project struct {
 	DebugWebhookUUID   uuid.UUID
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+
+	// Debug is only populated by Get (single retrieve) — mirrors Django's
+	// RetrieveProjectSerializer, which nests RetrieveDebugSerializer, vs
+	// List/Create/Update which don't. The dashboard's launch-status poll
+	// reads project.debug.status directly (use-launch-polling.ts /
+	// actions.ts getBotLaunchStatusAction), since tokenless debug-mode bots
+	// never create a Release row — nil here means "no debug container ever
+	// started for this project".
+	Debug *ProjectDebug
+}
+
+// ProjectDebug is the minimal debug-container projection embedded in
+// RetrieveProjectSerializer-equivalent responses.
+type ProjectDebug struct {
+	ID        uuid.UUID
+	ServiceID string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // CreateInput is the owner-scoped create payload. Token is optional — mirrors
@@ -132,4 +151,12 @@ type Repository interface {
 	// generated sqlcdb.Queries.UpsertEnviromentForOwner query that the
 	// release module's Repository also calls.
 	SetReleaseBotToken(ctx context.Context, projectID, ownerID uuid.UUID, token string) error
+
+	// GetDebugForOwner and UpdateDebugStatus are the same cross-module
+	// SQL-only convention: they reuse the release module's "debug" table via
+	// the shared generated sqlcdb.Queries, with no Go import of the release
+	// package. Returns (nil, nil) — not an error — when the project has no
+	// debug row yet (never started).
+	GetDebugForOwner(ctx context.Context, projectID, ownerID uuid.UUID) (*ProjectDebug, error)
+	UpdateDebugStatus(ctx context.Context, id uuid.UUID, serviceID, status string) (*ProjectDebug, error)
 }
