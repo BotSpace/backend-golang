@@ -29,6 +29,16 @@ func mustParseBuiltinManifests() []map[string]any {
 	return nodes
 }
 
+// BuiltinNodeManifestsJSON returns the raw embedded builtin_node_manifests.json
+// bytes (the canonical Django core/apps/api/data/builtin_node_manifests.json
+// copy, byte-for-byte). Exported so other modules — namely config's
+// GET /shared/manifest/builtin-nodes/ (agentv3's global node-catalog boot
+// fetch) — can reuse the single embedded copy instead of duplicating this
+// ~8000-line file.
+func BuiltinNodeManifestsJSON() []byte {
+	return builtinManifestsJSON
+}
+
 // allowedFieldTypes mirrors Django's ALLOWED_FIELD_TYPES — a module manifest
 // declaring an unknown field type is rejected rather than silently breaking
 // the constructor UI.

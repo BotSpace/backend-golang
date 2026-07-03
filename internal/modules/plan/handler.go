@@ -17,9 +17,17 @@ import (
 // X-Internal-Token / settings.INTERNAL_API_TOKEN check in
 // SubscriptionViewSet.report_usage. Read directly from the environment here
 // (rather than internal/shared/config, which this module must not edit).
+//
+// The env var name is APP_INTERNAL_TOKEN, not Django's INTERNAL_API_TOKEN —
+// every other Go module's own copy of this check (config, credential,
+// plugin, webhook) reads APP_INTERNAL_TOKEN, and the k8s secret feeding this
+// deployment is named accordingly. This module previously read
+// INTERNAL_API_TOKEN (a literal port of the Django name), which is never set
+// here, so the "server konfiguratsiya xatosi" branch below always fired and
+// every call 500'd.
 const (
 	internalTokenHeader = "X-Internal-Token"
-	internalTokenEnv    = "INTERNAL_API_TOKEN"
+	internalTokenEnv    = "APP_INTERNAL_TOKEN"
 )
 
 type Handler struct {
@@ -151,7 +159,7 @@ func (h *Handler) Usage(c *gin.Context) {
 func (h *Handler) ReportUsage(c *gin.Context) {
 	expected := os.Getenv(internalTokenEnv)
 	if expected == "" {
-		httpx.Error(c, httpx.Internal(errors.New("server konfiguratsiya xatosi: INTERNAL_API_TOKEN o'rnatilmagan")))
+		httpx.Error(c, httpx.Internal(errors.New("server konfiguratsiya xatosi: APP_INTERNAL_TOKEN o'rnatilmagan")))
 		return
 	}
 	provided := c.GetHeader(internalTokenHeader)
