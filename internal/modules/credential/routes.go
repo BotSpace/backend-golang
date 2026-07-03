@@ -23,6 +23,18 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.DELETE("/:id", h.Delete)
 	}
 
+	// OAuth callback: Google redirects the user's *browser* here after
+	// consent — there is no Authorization header (this is not a dashboard
+	// API call), so it CANNOT sit inside the JWT-guarded group above. The
+	// caller is instead authenticated via the signed `state` query param
+	// (see oauth_state.go / usecase.go's OAuthCallback). Mounted directly on
+	// rg (not `g`) so it resolves to /credentials/oauth/:provider/callback
+	// without the Auth middleware. In prod this is reached as
+	// /api/v1/credentials/oauth/:provider/callback, which the gateway
+	// exposes publicly as /api/v2/credentials/oauth/:provider/callback/ —
+	// the exact redirect_uri OAuthStart hands to Google (oauth_providers.go).
+	rg.GET("/credentials/oauth/:provider/callback", h.OAuthCallback)
+
 	internal := rg.Group("/internal/credentials", internalTokenAuth())
 	{
 		internal.GET("/by-name", h.InternalByName)

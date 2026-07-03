@@ -11,11 +11,19 @@ import (
 )
 
 type Handler struct {
-	uc Usecase
+	uc       Usecase
+	panelURL string
 }
 
-func NewHandler(uc Usecase) *Handler {
-	return &Handler{uc: uc}
+// NewHandler wires the credential handler. panelURL is the dashboard/admin
+// panel origin OAuthCallback's HTML response links/postMessages back to
+// (config.Config.Google.OAuthPanelURL); empty falls back to
+// defaultOAuthPanelURL.
+func NewHandler(uc Usecase, panelURL string) *Handler {
+	if panelURL == "" {
+		panelURL = defaultOAuthPanelURL
+	}
+	return &Handler{uc: uc, panelURL: panelURL}
 }
 
 // owner extracts the authenticated user id, writing a 401 on failure.
@@ -248,6 +256,50 @@ func (h *Handler) OAuthStart(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, OAuthStartResponse{AuthorizeURL: authorizeURL})
+}
+
+// OAuthCallback godoc
+// @Summary      Complete an OAuth2 consent flow (Google redirects here)
+// @Tags         credentials
+// @Produce      html
+// @Param        provider  path      string  true  "OAuth provider (e.g. google)"
+// @Param        code      query     string  false "Authorization code"
+// @Param        state     query     string  false "Signed state token minted by OAuthStart"
+// @Param        error     query     string  false "Provider-reported error (e.g. access_denied)"
+// @Success      200  {string}  string  "tiny HTML page that postMessages the opener and closes"
+// @Failure      400  {string}  string  "tiny HTML error page"
+// @Router       /credentials/oauth/{provider}/callback [get]
+//
+// No Authorization header is present — this is the user's browser being
+// redirected by Google, not an API call from the dashboard. The caller is
+// authenticated via the signed `state` query param instead (verified inside
+// h.uc.OAuthCallback); see routes.go for why this route is mounted outside
+// the JWT-guarded group.
+func (h *Handler) OAuthCallback(c *gin.Context) {
+	provider := c.Param("provider")
+	code := c.Query("code")
+	state := c.Query("state")
+	errorParam := c.Query("error")
+
+	err := h.uc.OAuthCallback(c.Request.Context(), provider, code, state, errorParam)
+	if err != nil {
+		_ = c.Error(err)
+		writeOAuthErrorHTML(c, provider, h.panelURL, oauthErrorMessage(err))
+		return
+	}
+	writeOAuthSuccessHTML(c, provider, h.panelURL)
+}
+
+// oauthErrorMessage extracts a safe-to-display message from err: the
+// AppError's Message for 4xx (already a curated, non-sensitive string — see
+// OAuthCallback in usecase.go), or a generic message for 5xx so an internal
+// error's wrapped details never reach the browser.
+func oauthErrorMessage(err error) string {
+	ae, ok := httpx.AsAppError(err)
+	if !ok || ae.Status >= 500 {
+		return "something went wrong, please try again"
+	}
+	return ae.Message
 }
 
 // InternalByID godoc

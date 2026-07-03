@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/crypto"
 	"github.com/botspace/backend/internal/shared/database"
@@ -61,11 +62,19 @@ type Usecase interface {
 
 	// OAuthStart begins a browser OAuth2 consent flow for an oauth2-mode
 	// credential type — mirrors OAuthStartView.post. Returns the Google
-	// consent URL to redirect the user's browser to; the actual token
-	// exchange + Credential row creation happens in Django's (unported)
-	// OAuthCallbackView once Google redirects back — see oauth_state.go's
-	// package doc for why the state token must stay Django-signing-compatible.
+	// consent URL to redirect the user's browser to; OAuthCallback below
+	// completes the flow once Google redirects back.
 	OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, typeKey string) (authorizeURL string, err error)
+
+	// OAuthCallback completes an OAuth2 consent flow — mirrors Django's
+	// OAuthCallbackView.get. code/state/errorParam are the raw query params
+	// Google redirected the browser with; there is no Authorization header
+	// (the caller is the user's browser, not the dashboard), so the caller
+	// is authenticated purely via the signed state token. Returns nil on
+	// success (the credential has been created/updated for the state's
+	// owner); a non-nil *httpx.AppError otherwise (the handler renders it
+	// into the callback's HTML response, never a JSON error body).
+	OAuthCallback(ctx context.Context, provider, code, state, errorParam string) error
 }
 
 type usecase struct {
@@ -260,9 +269,9 @@ func (u *usecase) InternalGetByName(ctx context.Context, name string, projectID 
 // oauthStateSecret is read per-call (not cached at construction) so the
 // secret can be rotated without a redeploy — same rationale as
 // routes.go's internalTokenAuth() reading APP_INTERNAL_TOKEN per-request.
-// It MUST be Django's settings.SECRET_KEY (env DJANGO_SECRET_KEY): the state
-// token this mints is verified by Django's still-live OAuthCallbackView, not
-// by this backend — see oauth_state.go's package doc comment.
+// It MUST be Django's settings.SECRET_KEY (env DJANGO_SECRET_KEY): kept
+// Django-signing-compatible even though both OAuthStart and OAuthCallback
+// now live on this backend — see oauth_state.go's package doc comment.
 func oauthStateSecret() string { return os.Getenv("DJANGO_SECRET_KEY") }
 
 func (u *usecase) OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, typeKey string) (string, error) {
@@ -299,7 +308,7 @@ func (u *usecase) OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, t
 
 	q := url.Values{}
 	q.Set("client_id", prov.ClientID)
-	q.Set("redirect_uri", oauthCallbackURL(provider))
+	q.Set("redirect_uri", oauthCallbackURL(u.oauth.CallbackBaseURL, provider))
 	q.Set("response_type", "code")
 	q.Set("scope", strings.Join(typ.Scopes, " "))
 	q.Set("state", state)
@@ -307,6 +316,117 @@ func (u *usecase) OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, t
 		q.Set(k, v)
 	}
 	return prov.AuthorizeURL + "?" + q.Encode(), nil
+}
+
+func (u *usecase) OAuthCallback(ctx context.Context, provider, code, state, errorParam string) error {
+	if errorParam != "" {
+		return httpx.BadRequest("credential.oauth_denied", fmt.Sprintf("provider returned error: %s", errorParam))
+	}
+	if code == "" || state == "" {
+		return httpx.BadRequest("credential.oauth_missing_params", "missing code or state parameter")
+	}
+
+	secret := oauthStateSecret()
+	if secret == "" {
+		return httpx.Internal(fmt.Errorf("oauth state verification: DJANGO_SECRET_KEY not set"))
+	}
+	ownerIDStr, typeKey, err := verifyState(secret, state, stateMaxAgeSeconds*time.Second)
+	if err != nil {
+		return httpx.BadRequest("credential.oauth_bad_state", "state token expired or invalid — please try connecting again")
+	}
+	ownerID, err := uuid.Parse(ownerIDStr)
+	if err != nil {
+		return httpx.BadRequest("credential.oauth_bad_state", "invalid state token")
+	}
+
+	typ, ok := GetType(typeKey)
+	if !ok || typ.Provider != provider {
+		return httpx.BadRequest("credential.oauth_invalid_type", fmt.Sprintf("invalid type_key for provider %q", provider))
+	}
+	prov, ok := getOAuthProvider(provider, u.oauth)
+	if !ok {
+		return httpx.NotFound("credential.unknown_provider", fmt.Sprintf("unknown provider %q", provider))
+	}
+	if prov.ClientID == "" || prov.ClientSecret == "" {
+		return httpx.Internal(fmt.Errorf("oauth provider %q: client id/secret not configured", provider))
+	}
+
+	client := u.oauth.httpClient()
+	redirectURI := oauthCallbackURL(u.oauth.CallbackBaseURL, provider)
+	tokenResp, err := exchangeOAuthCode(ctx, client, prov, redirectURI, code)
+	if err != nil {
+		return httpx.Internal(fmt.Errorf("oauth token exchange: %w", err))
+	}
+
+	// Userinfo (account email) is best-effort — Django ignores fetch errors
+	// too, since the credential is still usable without it (just falls back
+	// to the "first credential of this type" upsert match instead of the
+	// email-scoped one).
+	var userinfo map[string]any
+	if accessToken, _ := tokenResp["access_token"].(string); accessToken != "" && prov.UserinfoURL != "" {
+		userinfo, _ = fetchOAuthUserinfo(ctx, client, prov, accessToken)
+	}
+
+	tokenData := buildOAuthTokenData(tokenResp, userinfo)
+	if err := u.upsertOAuthCredential(ctx, ownerID, typeKey, typ.Label, tokenData); err != nil {
+		return httpx.Internal(fmt.Errorf("save oauth credential: %w", err))
+	}
+	return nil
+}
+
+// upsertOAuthCredential mirrors Django's OAuthCallbackView._upsert_credential:
+// look up an existing credential for (ownerID, typeKey), narrowed by
+// account_email when known (name pattern "<Label> (<email>)"), else fall
+// back to the first credential of that type. Found -> refresh its token data
+// via the same Update path a manual PATCH would use; not found -> Create a
+// new one with a de-duplicated default name, same as the owner-facing Create
+// path.
+func (u *usecase) upsertOAuthCredential(ctx context.Context, ownerID uuid.UUID, typeKey, label string, tokenData map[string]any) error {
+	accountEmail, _ := tokenData["account_email"].(string)
+
+	existing, err := u.repo.List(ctx, ListFilter{OwnerID: ownerID, TypeKey: typeKey, Limit: 500})
+	if err != nil {
+		return fmt.Errorf("list existing credentials: %w", err)
+	}
+
+	var match *Credential
+	if accountEmail != "" {
+		expectedName := fmt.Sprintf("%s (%s)", label, accountEmail)
+		for i := range existing {
+			if existing[i].Name == expectedName {
+				match = &existing[i]
+				break
+			}
+		}
+	} else if len(existing) > 0 {
+		match = &existing[0]
+	}
+
+	if match != nil {
+		_, err := u.Update(ctx, match.ID, ownerID, UpdateData{Data: tokenData})
+		return err
+	}
+
+	existingNames := make(map[string]bool, len(existing))
+	allForOwner, err := u.repo.List(ctx, ListFilter{OwnerID: ownerID, Limit: 500})
+	if err != nil {
+		return fmt.Errorf("list owner credentials: %w", err)
+	}
+	for _, c := range allForOwner {
+		existingNames[c.Name] = true
+	}
+
+	baseName := label
+	if accountEmail != "" {
+		baseName = fmt.Sprintf("%s (%s)", label, accountEmail)
+	}
+	name := baseName
+	for n := 1; existingNames[name]; n++ {
+		name = fmt.Sprintf("%s (%d)", baseName, n)
+	}
+
+	_, err = u.Create(ctx, CreateData{OwnerID: ownerID, TypeKey: typeKey, Name: name, Data: tokenData})
+	return err
 }
 
 func (u *usecase) decryptDetail(c *Credential) (*Detail, error) {

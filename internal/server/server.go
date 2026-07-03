@@ -176,8 +176,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	credentialUC := credential.NewUsecase(credential.NewPostgresRepository(s.pool), cipher, credential.OAuthConfig{
 		GoogleClientID:     s.cfg.Google.OAuthClientID,
 		GoogleClientSecret: s.cfg.Google.OAuthClientSecret,
+		CallbackBaseURL:    s.cfg.Google.OAuthCallbackBase,
+		PanelURL:           s.cfg.Google.OAuthPanelURL,
 	})
-	credential.RegisterRoutes(v1, credential.NewHandler(credentialUC), tokens)
+	credential.RegisterRoutes(v1, credential.NewHandler(credentialUC, s.cfg.Google.OAuthPanelURL), tokens)
 
 	// webhook endpoints + managed bots.
 	webhookUC := webhook.NewUsecase(webhook.NewPostgresRepository(s.pool), cipher)
