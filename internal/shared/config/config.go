@@ -193,6 +193,7 @@ func Load() (*Config, error) {
 		"crypto.key", "internal.token",
 		"engine.mode", "engine.image_repository", "engine.image_tag",
 		"engine.redis_host", "engine.redis_port", "engine.redis_password",
+		"engine.test_bot_token",
 	} {
 		_ = v.BindEnv(key)
 	}
