@@ -1,10 +1,11 @@
 // Package engine abstracts bot deployment orchestration (Docker / Kubernetes)
 // and per-project MongoDB provisioning behind interfaces.
 //
-// The heavy cluster-side logic lives in the separate engine-golang /
-// worker-golang services; this backend only needs to *request* deploys and
-// read status. The Stub implementation is a safe no-op used until a real
-// orchestrator client is wired in (set via server.go). Every method is
+// KubernetesOrchestrator (kubernetes.go) talks to the botmother namespace
+// directly via client-go — the same Deployment/Service/ConfigMap/Secret
+// shape the old Django kubernetes_service.py produced. The Stub
+// implementation is a safe no-op used when no cluster is reachable (local
+// dev) or engine.mode=stub; server.go picks between them. Every method is
 // context-aware and returns typed errors so callers degrade gracefully.
 package engine
 
@@ -35,6 +36,25 @@ type DeploySpec struct {
 	Debug       bool
 	Flow        []byte // constructor graph JSON
 	Env         map[string]string
+
+	// Name overrides how KubernetesOrchestrator derives the Deployment/Service
+	// name. Empty means "derive from ProjectID/Version/Debug" (bot-engine
+	// convention: release-<projectID>-<version> / debug-<projectID>). Shared
+	// module deploys (see plugin.moduleDeploySpec) set this explicitly since
+	// they have no ProjectID.
+	Name string
+	// Image overrides the orchestrator's default bot-engine image. Module
+	// deploys use their own image (Module.Image); empty keeps the default.
+	Image string
+	// ContainerPort/ReadinessPath/LivenessPath override the bot-engine
+	// defaults (8000, /ready, /health). Zero value keeps the default.
+	ContainerPort int
+	ReadinessPath string
+	LivenessPath  string
+	// WebhookUUID, when set, makes KubernetesOrchestrator create/update a
+	// "bot-<uuid>" Service pointing at this deployment (release/debug bot
+	// engines only — module deploys leave this at uuid.Nil).
+	WebhookUUID uuid.UUID
 }
 
 // DeployResult is what the orchestrator returns for a deploy.
@@ -75,8 +95,8 @@ func NewStub() *Stub { return &Stub{} }
 func (Stub) Deploy(_ context.Context, spec DeploySpec) (DeployResult, error) {
 	return DeployResult{ServiceID: "", Status: StatusPending}, nil
 }
-func (Stub) Stop(context.Context, string) error                    { return nil }
-func (Stub) Status(context.Context, string) (Status, error)        { return StatusStopped, nil }
+func (Stub) Stop(context.Context, string) error             { return nil }
+func (Stub) Status(context.Context, string) (Status, error) { return StatusStopped, nil }
 func (Stub) Provision(_ context.Context, projectID uuid.UUID) (MongoCredentials, error) {
 	return MongoCredentials{}, nil
 }

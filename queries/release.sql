@@ -122,3 +122,10 @@ SELECT * FROM enviroment WHERE project_id = sqlc.arg('project_id') ORDER BY key;
 -- debug container (which, unlike a release, always runs the live draft).
 -- name: GetProjectFlowForOwner :one
 SELECT flow FROM projects WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
+
+-- Owner-scoped read of the project's stable webhook UUIDs — the engine
+-- orchestrator names the "bot-<uuid>" Service after these so Telegram
+-- webhook routing survives redeploys (see internal/shared/engine/kubernetes.go).
+-- name: GetProjectWebhookUUIDsForOwner :one
+SELECT release_webhook_uuid, debug_webhook_uuid FROM projects
+WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;

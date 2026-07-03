@@ -228,6 +228,10 @@ type Querier interface {
 	// Cross-tenant guard for the internal resolve endpoints: derive a project's
 	// owner without importing the project module (plain SQL join, per PORTING_GUIDE rule 4).
 	GetProjectOwnerForCredential(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Owner-scoped read of the project's stable webhook UUIDs — the engine
+	// orchestrator names the "bot-<uuid>" Service after these so Telegram
+	// webhook routing survives redeploys (see internal/shared/engine/kubernetes.go).
+	GetProjectWebhookUUIDsForOwner(ctx context.Context, arg GetProjectWebhookUUIDsForOwnerParams) (GetProjectWebhookUUIDsForOwnerRow, error)
 	GetPublishedBlogPostBySlug(ctx context.Context, slug string) (BlogPost, error)
 	GetRefreshToken(ctx context.Context, id uuid.UUID) (RefreshToken, error)
 	GetReleaseForOwner(ctx context.Context, arg GetReleaseForOwnerParams) (Relase, error)

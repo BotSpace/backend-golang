@@ -74,6 +74,11 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	}
 	env["IS_RELEASE"] = "true"
 
+	// Best-effort: the project row was just proven to exist/be owned above, so
+	// this practically never fails. A failure just means the orchestrator
+	// skips creating the "bot-<uuid>" Service (deployment still proceeds).
+	releaseWebhookUUID, _, _ := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
 		ProjectID:   projectID,
 		ReleaseUUID: rel.ID,
@@ -81,6 +86,7 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		Debug:       false,
 		Flow:        rel.Flow,
 		Env:         env,
+		WebhookUUID: releaseWebhookUUID,
 	})
 
 	status, serviceID := deployOutcome(result, deployErr)
@@ -143,12 +149,15 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 		return nil, httpx.Internal(err)
 	}
 
+	_, debugWebhookUUID, _ := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
 		ProjectID:   projectID,
 		ReleaseUUID: dbg.ID,
 		Debug:       true,
 		Flow:        flow,
 		Env:         env,
+		WebhookUUID: debugWebhookUUID,
 	})
 
 	status, serviceID := deployOutcome(result, deployErr)

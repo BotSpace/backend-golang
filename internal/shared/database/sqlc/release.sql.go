@@ -176,6 +176,31 @@ func (q *Queries) GetProjectFlowForOwner(ctx context.Context, arg GetProjectFlow
 	return flow, err
 }
 
+const getProjectWebhookUUIDsForOwner = `-- name: GetProjectWebhookUUIDsForOwner :one
+SELECT release_webhook_uuid, debug_webhook_uuid FROM projects
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+`
+
+type GetProjectWebhookUUIDsForOwnerParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+type GetProjectWebhookUUIDsForOwnerRow struct {
+	ReleaseWebhookUuid uuid.UUID `json:"release_webhook_uuid"`
+	DebugWebhookUuid   uuid.UUID `json:"debug_webhook_uuid"`
+}
+
+// Owner-scoped read of the project's stable webhook UUIDs — the engine
+// orchestrator names the "bot-<uuid>" Service after these so Telegram
+// webhook routing survives redeploys (see internal/shared/engine/kubernetes.go).
+func (q *Queries) GetProjectWebhookUUIDsForOwner(ctx context.Context, arg GetProjectWebhookUUIDsForOwnerParams) (GetProjectWebhookUUIDsForOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getProjectWebhookUUIDsForOwner, arg.ID, arg.OwnerID)
+	var i GetProjectWebhookUUIDsForOwnerRow
+	err := row.Scan(&i.ReleaseWebhookUuid, &i.DebugWebhookUuid)
+	return i, err
+}
+
 const getReleaseForOwner = `-- name: GetReleaseForOwner :one
 SELECT r.id, r.project_id, r.version, r.flow, r.service_id, r.status, r.created_at, r.updated_at
 FROM relase r

@@ -204,6 +204,20 @@ func (r *pgRepo) GetProjectFlowForOwner(ctx context.Context, projectID, ownerID 
 	return json.RawMessage(flow), nil
 }
 
+func (r *pgRepo) GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	row, err := r.queries.GetProjectWebhookUUIDsForOwner(ctx, sqlcdb.GetProjectWebhookUUIDsForOwnerParams{
+		ID:      projectID,
+		OwnerID: ownerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, uuid.Nil, database.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("get project webhook uuids: %w", err)
+	}
+	return row.ReleaseWebhookUuid, row.DebugWebhookUuid, nil
+}
+
 // ---- mapping helpers --------------------------------------------------
 
 func mapRelease(row sqlcdb.Relase, err error) (*Release, error) {
