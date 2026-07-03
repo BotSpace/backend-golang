@@ -312,6 +312,55 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 	return StatusStopped, nil
 }
 
+// ── Logs ────────────────────────────────────────────────────────────────
+
+// Logs ports Django's deployment_logs_snapshot() (core/apps/api/services/
+// kubernetes_service.py): find the pod backing serviceID via the same
+// "engine-name=<serviceID>" label Deploy stamps on every pod template, then
+// pull its trailing container log as a single non-streaming read (no
+// watch/follow — this is a request/response HTTP endpoint, not a WebSocket).
+func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tailLines, sinceSeconds int) (LogSnapshot, error) {
+	if serviceID == "" {
+		return LogSnapshot{}, nil
+	}
+	tail := int64(tailLines)
+	if tail <= 0 {
+		tail = 200
+	}
+	if tail > 2000 {
+		tail = 2000
+	}
+
+	pods, err := o.cs.CoreV1().Pods(o.cfg.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "engine-name=" + serviceID,
+	})
+	if err != nil {
+		return LogSnapshot{}, fmt.Errorf("list pods for %s: %w", serviceID, err)
+	}
+	if len(pods.Items) == 0 {
+		return LogSnapshot{}, nil
+	}
+	podName := pods.Items[0].Name
+
+	opts := &corev1.PodLogOptions{TailLines: &tail, Timestamps: true}
+	if sinceSeconds > 0 {
+		since := int64(sinceSeconds)
+		opts.SinceSeconds = &since
+	}
+	raw, err := o.cs.CoreV1().Pods(o.cfg.Namespace).GetLogs(podName, opts).Do(ctx).Raw()
+	if err != nil {
+		return LogSnapshot{PodName: podName}, fmt.Errorf("read pod logs %s: %w", podName, err)
+	}
+
+	lines := make([]string, 0)
+	for _, ln := range strings.Split(string(raw), "\n") {
+		if ln != "" {
+			lines = append(lines, ln)
+		}
+	}
+	return LogSnapshot{PodName: podName, Lines: lines, Truncated: int64(len(lines)) >= tail}, nil
+}
+
 // crashRestartThreshold mirrors Django's CRASH_RESTART_THRESHOLD
 // (core/apps/api/tasks/release.py).
 const crashRestartThreshold = 5

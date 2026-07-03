@@ -94,6 +94,23 @@ func (r *pgRepo) GetByID(ctx context.Context, id uuid.UUID) (*Template, error) {
 	return &t, nil
 }
 
+func (r *pgRepo) GetBySlugAny(ctx context.Context, slug string) (*Template, error) {
+	row, err := r.queries.TemplateGetBySlugAny(ctx, slug)
+	if err != nil {
+		return nil, mapNoRows(err)
+	}
+	t := templateFromSQLC(row)
+	return &t, nil
+}
+
+func (r *pgRepo) GetProjectFlow(ctx context.Context, projectID uuid.UUID) (json.RawMessage, error) {
+	raw, err := r.queries.TemplateGetProjectFlow(ctx, projectID)
+	if err != nil {
+		return nil, mapNoRows(err)
+	}
+	return json.RawMessage(raw), nil
+}
+
 func (r *pgRepo) IncrementViews(ctx context.Context, id uuid.UUID) error {
 	if err := r.queries.TemplateIncrementViews(ctx, id); err != nil {
 		return fmt.Errorf("increment template views: %w", err)

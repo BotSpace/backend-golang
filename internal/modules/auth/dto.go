@@ -61,3 +61,62 @@ type TokenResponse struct {
 	RefreshExpiresAt time.Time `json:"refresh_expires_at"`
 	TokenType        string    `json:"token_type"`
 }
+
+// ---- Personal access tokens (MCP clients) --------------------------------
+
+// CreateAPITokenRequest is POST /auth/api-tokens/'s body.
+type CreateAPITokenRequest struct {
+	Name string `json:"name" validate:"omitempty,max=100"`
+}
+
+// APITokenResponse is the owner-facing listing shape — never carries the raw
+// token (only CreateAPITokenResponse does, once, at creation).
+type APITokenResponse struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+func toAPITokenResponse(p *PersonalAccessToken) APITokenResponse {
+	return APITokenResponse{
+		ID: p.ID.String(), Name: p.Name, Prefix: p.Prefix,
+		LastUsedAt: p.LastUsedAt, CreatedAt: p.CreatedAt,
+	}
+}
+
+func toAPITokenListResponse(items []PersonalAccessToken) []APITokenResponse {
+	out := make([]APITokenResponse, len(items))
+	for i := range items {
+		out[i] = toAPITokenResponse(&items[i])
+	}
+	return out
+}
+
+// CreateAPITokenResponse mirrors APITokenViewSet.create's 201 body — the
+// only response that ever carries the raw token.
+type CreateAPITokenResponse struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Token  string `json:"token"`
+	Prefix string `json:"prefix"`
+}
+
+// TokenExchangeRequest is POST /auth/token/exchange/'s body.
+type TokenExchangeRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+// ExchangeResponse mirrors TokenExchangeView's simplejwt-shaped
+// {"access", "refresh"} body exactly — deliberately NOT TokenResponse's
+// "access_token"/"refresh_token" naming, since agent/src/agent/mcp/auth.py's
+// _exchange_bsp() reads `data.get("access")`/`data.get("refresh")`.
+type ExchangeResponse struct {
+	Access  string `json:"access"`
+	Refresh string `json:"refresh"`
+}
+
+func toExchangeResponse(t TokenResponse) ExchangeResponse {
+	return ExchangeResponse{Access: t.AccessToken, Refresh: t.RefreshToken}
+}

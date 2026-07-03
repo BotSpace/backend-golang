@@ -2,7 +2,9 @@ package credential
 
 import (
 	"context"
+	neturl "net/url"
 	"testing"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/crypto"
 	"github.com/botspace/backend/internal/shared/database"
@@ -121,7 +123,7 @@ func newTestUsecase() (*fakeRepo, Usecase) {
 	if err != nil {
 		panic(err)
 	}
-	return repo, NewUsecase(repo, cipher)
+	return repo, NewUsecase(repo, cipher, OAuthConfig{})
 }
 
 func TestCreateRejectsMissingRequiredField(t *testing.T) {
@@ -268,5 +270,81 @@ func TestInternalGetByNameCrossTenantGuard(t *testing.T) {
 	// Unknown project -> 403 (Django returns 403 when the project is missing).
 	if _, err := uc.InternalGetByName(ctx, "prod-bot", uuid.New()); status(err) != 403 {
 		t.Fatalf("expected 403 for unknown project, got %v", err)
+	}
+}
+
+// TestOAuthStart_HappyPath exercises OAuthStart end to end: a valid oauth2
+// type_key + matching provider + configured client id/secret produces a
+// Google authorize_url carrying client_id/redirect_uri/scope/state, and the
+// minted state verifies back to (ownerID, type_key) via the Django-signing
+// port in oauth_state.go.
+func TestOAuthStart_HappyPath(t *testing.T) {
+	t.Setenv("DJANGO_SECRET_KEY", "oauth-start-test-secret")
+	repo := newFakeRepo()
+	cipher, err := crypto.New([]byte("test-key-for-credential-usecase"))
+	if err != nil {
+		t.Fatalf("crypto.New: %v", err)
+	}
+	uc := NewUsecase(repo, cipher, OAuthConfig{GoogleClientID: "test-client-id", GoogleClientSecret: "test-client-secret"})
+
+	ownerID := uuid.New()
+	ctx := context.Background()
+	authorizeURL, err := uc.OAuthStart(ctx, ownerID, "google", "google_sheets")
+	if err != nil {
+		t.Fatalf("OAuthStart: %v", err)
+	}
+
+	parsed, err := neturl.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("authorize_url is not a valid URL: %v", err)
+	}
+	q := parsed.Query()
+	if got := q.Get("client_id"); got != "test-client-id" {
+		t.Fatalf("client_id = %q, want test-client-id", got)
+	}
+	if got := q.Get("redirect_uri"); got != oauthCallbackURL("google") {
+		t.Fatalf("redirect_uri = %q, want %q", got, oauthCallbackURL("google"))
+	}
+	if got := q.Get("response_type"); got != "code" {
+		t.Fatalf("response_type = %q, want code", got)
+	}
+	if got := q.Get("access_type"); got != "offline" {
+		t.Fatalf("access_type = %q, want offline (Google offline-access param)", got)
+	}
+
+	uid, typeKey, err := verifyState("oauth-start-test-secret", q.Get("state"), stateMaxAgeSeconds*time.Second)
+	if err != nil {
+		t.Fatalf("verifyState on minted state: %v", err)
+	}
+	if uid != ownerID.String() || typeKey != "google_sheets" {
+		t.Fatalf("verifyState = (%q, %q), want (%q, google_sheets)", uid, typeKey, ownerID.String())
+	}
+}
+
+// TestOAuthStart_RejectsMismatchedProvider mirrors Django's
+// OAuthStartView 400 when type_key's registered provider != the URL's
+// provider segment (e.g. POST .../oauth/facebook/start with type_key
+// "google_sheets").
+func TestOAuthStart_RejectsMismatchedProvider(t *testing.T) {
+	t.Setenv("DJANGO_SECRET_KEY", "unused-for-this-test")
+	repo := newFakeRepo()
+	cipher, _ := crypto.New([]byte("test-key-for-credential-usecase"))
+	uc := NewUsecase(repo, cipher, OAuthConfig{GoogleClientID: "id"})
+
+	if _, err := uc.OAuthStart(context.Background(), uuid.New(), "facebook", "google_sheets"); status(err) != 400 {
+		t.Fatalf("expected 400 for provider mismatch, got %v", err)
+	}
+}
+
+// TestOAuthStart_RejectsNonOAuthType mirrors Django's 400 for a type_key
+// whose mode isn't oauth2 (e.g. "telegram", a plain-field type).
+func TestOAuthStart_RejectsNonOAuthType(t *testing.T) {
+	t.Setenv("DJANGO_SECRET_KEY", "unused-for-this-test")
+	repo := newFakeRepo()
+	cipher, _ := crypto.New([]byte("test-key-for-credential-usecase"))
+	uc := NewUsecase(repo, cipher, OAuthConfig{GoogleClientID: "id"})
+
+	if _, err := uc.OAuthStart(context.Background(), uuid.New(), "google", "telegram"); status(err) != 400 {
+		t.Fatalf("expected 400 for non-oauth2 type, got %v", err)
 	}
 }

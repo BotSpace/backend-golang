@@ -134,3 +134,39 @@ func TestSlugify(t *testing.T) {
 		t.Fatalf("unexpected slug: %s", got)
 	}
 }
+
+// TestNormalizeFlow mirrors _serialize_template's flow normalisation in
+// core/apps/template/views/internal.py: a dict flow passes through, a bare
+// list (older flat-node-array format) gets wrapped into {nodes, edges: []},
+// and nil/empty falls back to an empty graph — the RAG feed must never send
+// the agent a raw array or a missing field where it expects an object.
+func TestNormalizeFlow(t *testing.T) {
+	cases := []struct {
+		name string
+		in   json.RawMessage
+		want string
+	}{
+		{"nil", nil, `{"nodes":[],"edges":[]}`},
+		{"empty", json.RawMessage(``), `{"nodes":[],"edges":[]}`},
+		{"dict passthrough", json.RawMessage(`{"nodes":[{"id":"1"}],"edges":[]}`), `{"nodes":[{"id":"1"}],"edges":[]}`},
+		{"bare list wrapped", json.RawMessage(`[{"id":"1"},{"id":"2"}]`), `{"edges":[],"nodes":[{"id":"1"},{"id":"2"}]}`},
+		{"whitespace-padded dict", json.RawMessage("  \n{\"nodes\":[]}"), "  \n{\"nodes\":[]}"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := normalizeFlow(c.in)
+			var gotVal, wantVal any
+			if err := json.Unmarshal(got, &gotVal); err != nil {
+				t.Fatalf("normalizeFlow returned invalid JSON %q: %v", got, err)
+			}
+			if err := json.Unmarshal([]byte(c.want), &wantVal); err != nil {
+				t.Fatalf("bad test fixture: %v", err)
+			}
+			gotJSON, _ := json.Marshal(gotVal)
+			wantJSON, _ := json.Marshal(wantVal)
+			if string(gotJSON) != string(wantJSON) {
+				t.Fatalf("normalizeFlow(%s) = %s, want %s", c.in, got, c.want)
+			}
+		})
+	}
+}

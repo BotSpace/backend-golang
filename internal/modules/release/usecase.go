@@ -19,10 +19,18 @@ type Usecase interface {
 	ListReleases(ctx context.Context, projectID, ownerID uuid.UUID) ([]Release, error)
 	GetRelease(ctx context.Context, id, ownerID uuid.UUID) (*Release, error)
 	StopRelease(ctx context.Context, id, ownerID uuid.UUID) (*Release, error)
+	// GetReleaseLogs ports ReleaseView.logs (core/apps/api/views/project.py):
+	// a non-streaming tail of the release's live pod log. tailLines/
+	// sinceSeconds <= 0 fall back to the orchestrator's defaults (200 lines,
+	// no time restriction).
+	GetReleaseLogs(ctx context.Context, id, ownerID uuid.UUID, tailLines, sinceSeconds int) (engine.LogSnapshot, error)
 
 	StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*Debug, error)
 	StopDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*Debug, error)
 	GetDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*Debug, error)
+	// GetDebugLogs ports ProjectView.debug_logs — same snapshot shape as
+	// GetReleaseLogs, for the project's single debug container.
+	GetDebugLogs(ctx context.Context, projectID, ownerID uuid.UUID, tailLines, sinceSeconds int) (engine.LogSnapshot, error)
 
 	UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error)
 	ListEnvironments(ctx context.Context, projectID, ownerID uuid.UUID) ([]Environment, error)
@@ -174,6 +182,25 @@ func (u *usecase) StopRelease(ctx context.Context, id, ownerID uuid.UUID) (*Rele
 	return updated, nil
 }
 
+// GetReleaseLogs ports ReleaseView.logs (core/apps/api/views/project.py): a
+// release that was never deployed (no service_id) returns a zero-value
+// snapshot rather than an error — mirrors Django returning 200 with
+// pod_name=null instead of 404/503 in that case.
+func (u *usecase) GetReleaseLogs(ctx context.Context, id, ownerID uuid.UUID, tailLines, sinceSeconds int) (engine.LogSnapshot, error) {
+	rel, err := u.repo.GetReleaseForOwner(ctx, id, ownerID)
+	if err != nil {
+		return engine.LogSnapshot{}, mapReleaseErr(err)
+	}
+	if rel.ServiceID == "" {
+		return engine.LogSnapshot{}, nil
+	}
+	snap, err := u.orch.Logs(ctx, rel.ServiceID, tailLines, sinceSeconds)
+	if err != nil {
+		return engine.LogSnapshot{}, httpx.Internal(err)
+	}
+	return snap, nil
+}
+
 // StartDebug ports ProjectView._start_debug_container / .debug: get-or-create
 // the project's single debug row and (re)deploy it with the current draft
 // flow (unlike a release, debug always tracks the live draft, not a frozen
@@ -237,6 +264,28 @@ func (u *usecase) GetDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*
 	}
 	reconciled := u.reconcileDebug(ctx, *dbg)
 	return &reconciled, nil
+}
+
+// GetDebugLogs ports ProjectView.debug_logs: a project with no debug row yet
+// (never ran Debug Run) or a debug row with no service_id returns a
+// zero-value snapshot rather than a 404 — mirrors Django's soft
+// {"pod_name": null, "lines": [], "detail": "Debug is not running"} response.
+func (u *usecase) GetDebugLogs(ctx context.Context, projectID, ownerID uuid.UUID, tailLines, sinceSeconds int) (engine.LogSnapshot, error) {
+	dbg, err := u.repo.GetDebugForOwner(ctx, projectID, ownerID)
+	if errors.Is(err, database.ErrNotFound) {
+		return engine.LogSnapshot{}, nil
+	}
+	if err != nil {
+		return engine.LogSnapshot{}, mapDebugErr(err)
+	}
+	if dbg.ServiceID == "" {
+		return engine.LogSnapshot{}, nil
+	}
+	snap, err := u.orch.Logs(ctx, dbg.ServiceID, tailLines, sinceSeconds)
+	if err != nil {
+		return engine.LogSnapshot{}, httpx.Internal(err)
+	}
+	return snap, nil
 }
 
 // reconcileDebug is GetDebug's counterpart to reconcileRelease — see its doc

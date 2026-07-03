@@ -11,6 +11,7 @@ import (
 	"github.com/botspace/backend/internal/modules/auth"
 	"github.com/botspace/backend/internal/modules/authbot"
 	"github.com/botspace/backend/internal/modules/blog"
+	"github.com/botspace/backend/internal/modules/chat"
 	"github.com/botspace/backend/internal/modules/cms"
 	adminconfig "github.com/botspace/backend/internal/modules/config"
 	"github.com/botspace/backend/internal/modules/credential"
@@ -141,8 +142,18 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	} else {
 		s.log.Warn("APP_GOOGLE_CLIENT_ID not set — /auth/google will reject every request")
 	}
-	authUC := auth.NewUsecase(userUC, tokens, otpService, refreshStore, googleVerifier)
-	auth.RegisterRoutes(v1, auth.NewHandler(authUC))
+	patStore := auth.NewPATStore(s.pool)
+	authUC := auth.NewUsecase(userUC, tokens, otpService, refreshStore, googleVerifier, patStore)
+	authHandler := auth.NewHandler(authUC)
+	auth.RegisterRoutes(v1, authHandler, tokens)
+	// Root-mounted POST /auth/token/exchange only (not the whole auth
+	// group): agent/src/agent/mcp/auth.py's _exchange_bsp() calls
+	// backend_base_url + "/auth/token/exchange/" with no /api/v1 or /api/v2
+	// prefix — same "trusted caller bypasses the gateway" rationale as
+	// authbot's dual mount below, but narrower (register/login/etc. are NOT
+	// re-exposed at root, only this one public, credential-is-the-auth
+	// endpoint).
+	s.router.POST("/auth/token/exchange", authHandler.TokenExchange)
 
 	// user routes need the verifier from auth
 	user.RegisterRoutes(v1, user.NewHandler(userUC), tokens)
@@ -162,7 +173,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	message.RegisterRoutes(v1, message.NewHandler(messageUC), tokens)
 
 	// credential — owner-scoped encrypted credentials + internal resolve.
-	credentialUC := credential.NewUsecase(credential.NewPostgresRepository(s.pool), cipher)
+	credentialUC := credential.NewUsecase(credential.NewPostgresRepository(s.pool), cipher, credential.OAuthConfig{
+		GoogleClientID:     s.cfg.Google.OAuthClientID,
+		GoogleClientSecret: s.cfg.Google.OAuthClientSecret,
+	})
 	credential.RegisterRoutes(v1, credential.NewHandler(credentialUC), tokens)
 
 	// webhook endpoints + managed bots.
@@ -240,6 +254,19 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	} else {
 		cmsUC := cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient), s.cfg.Engine.MongoDBName)
 		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
+	}
+
+	// chat — read-only CRM views (bot end-users + message history) over the
+	// same shared Mongo botspace_cms database, "users"/"chat" collections
+	// engine-golang writes directly (see internal/modules/chat's package doc
+	// for why this has its own small Mongo client instead of importing cms).
+	// Same degrade-gracefully-without-Mongo pattern as cms above.
+	chatMongo, err := chat.NewMongoDB(ctx, s.cfg.Engine.MongoDBName)
+	if err != nil {
+		s.log.Warn("mongo unavailable — chat routes disabled", logger.Err(err))
+	} else {
+		chatUC := chat.NewUsecase(chat.NewPostgresRepository(s.pool), chatMongo)
+		chat.RegisterRoutes(v1, chat.NewHandler(chatUC), tokens)
 	}
 
 	// debug — persisted flow/node error events (see internal/modules/debug).

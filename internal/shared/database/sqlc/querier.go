@@ -35,6 +35,17 @@ type Querier interface {
 	// Redeploy: refresh service_id/endpoint/status for every project currently
 	// using this shared module.
 	BulkMarkProjectModulesRunning(ctx context.Context, arg BulkMarkProjectModulesRunningParams) (int64, error)
+	// Chat CRM read endpoints (GET /api/v1/chat/users/{project_id}/, GET
+	// /api/v1/chat/messages/{project_id}/{chat_id}/) port core/apps/api/views/chat.py.
+	// Documents themselves live in the shared Mongo botspace_cms database (see
+	// internal/modules/chat/mongo.go); these two queries only resolve+verify the
+	// owner-scoped project ref (int legacy pk or projects.uuid — mirrors
+	// cms/views/_common.py resolve_project()) into the Mongo tenant key,
+	// duplicated from internal/modules/cms/repository.go's ProjectMongoTenant
+	// per the porting guide's no-cross-module-import rule (scope in SQL, don't
+	// import a sibling module).
+	ChatResolveProjectByLegacyIDForOwner(ctx context.Context, arg ChatResolveProjectByLegacyIDForOwnerParams) (ChatResolveProjectByLegacyIDForOwnerRow, error)
+	ChatResolveProjectByUUIDForOwner(ctx context.Context, arg ChatResolveProjectByUUIDForOwnerParams) (ChatResolveProjectByUUIDForOwnerRow, error)
 	// Frees a finalized (paid/cancelled/refunded) order's key so a new order can reuse it.
 	ClearPaymentOrderIdempotencyKey(ctx context.Context, id uuid.UUID) (int64, error)
 	CmsBumpCollectionSchemaVersion(ctx context.Context, id uuid.UUID) (Collection, error)
@@ -91,6 +102,7 @@ type Querier interface {
 	CountPaymentTransactionsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountPaymentWithdrawalsAdmin(ctx context.Context, status *string) (int64, error)
 	CountPaymentWithdrawalsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountPersonalAccessTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountProjectsAdmin(ctx context.Context, search *string) (int64, error)
 	CountProjectsForOwner(ctx context.Context, arg CountProjectsForOwnerParams) (int64, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -135,6 +147,7 @@ type Querier interface {
 	CreatePaymentTransaction(ctx context.Context, arg CreatePaymentTransactionParams) (Transaction, error)
 	// ===================== payment_withdrawal_request =====================
 	CreatePaymentWithdrawal(ctx context.Context, arg CreatePaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
+	CreatePersonalAccessToken(ctx context.Context, arg CreatePersonalAccessTokenParams) (PersonalAccessToken, error)
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
@@ -189,6 +202,7 @@ type Querier interface {
 	DeleteMessageForOwner(ctx context.Context, arg DeleteMessageForOwnerParams) (int64, error)
 	DeleteModule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePendingPaymentWithdrawal(ctx context.Context, arg DeletePendingPaymentWithdrawalParams) (int64, error)
+	DeletePersonalAccessTokenForUser(ctx context.Context, arg DeletePersonalAccessTokenForUserParams) (int64, error)
 	DeletePlan(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSmsConfirm(ctx context.Context, phone string) error
 	DeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
@@ -253,6 +267,7 @@ type Querier interface {
 	GetPaymentWithdrawalByID(ctx context.Context, id uuid.UUID) (PaymentWithdrawalRequest, error)
 	GetPaymentWithdrawalByIDAdmin(ctx context.Context, id uuid.UUID) (GetPaymentWithdrawalByIDAdminRow, error)
 	GetPaymentWithdrawalForUser(ctx context.Context, arg GetPaymentWithdrawalForUserParams) (PaymentWithdrawalRequest, error)
+	GetPersonalAccessTokenByHash(ctx context.Context, tokenHash string) (PersonalAccessToken, error)
 	GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error)
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
 	GetProject(ctx context.Context, id uuid.UUID) (Project, error)
@@ -344,6 +359,7 @@ type Querier interface {
 	ListPaymentTransactionsForUser(ctx context.Context, arg ListPaymentTransactionsForUserParams) ([]Transaction, error)
 	ListPaymentWithdrawalsAdmin(ctx context.Context, arg ListPaymentWithdrawalsAdminParams) ([]ListPaymentWithdrawalsAdminRow, error)
 	ListPaymentWithdrawalsForUser(ctx context.Context, arg ListPaymentWithdrawalsForUserParams) ([]PaymentWithdrawalRequest, error)
+	ListPersonalAccessTokensForUser(ctx context.Context, userID uuid.UUID) ([]PersonalAccessToken, error)
 	ListProjectModulesForOwner(ctx context.Context, arg ListProjectModulesForOwnerParams) ([]ProjectModule, error)
 	// ===================== admin-wide (cross-owner) =====================
 	ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]ListProjectsAdminRow, error)
@@ -371,6 +387,15 @@ type Querier interface {
 	MintWebhookEndpoint(ctx context.Context, arg MintWebhookEndpointParams) (WebhookEndpoint, error)
 	// Bot-by-bot income breakdown for the earnings dashboard (by_bot payload).
 	PaymentEarningsByProject(ctx context.Context, ownerID uuid.UUID) ([]PaymentEarningsByProjectRow, error)
+	// ===================== one-shot Fernet->AES re-encryption migration =====
+	// (cmd/reencrypt-credentials) — unscoped by owner AND includes soft-deleted
+	// rows (deleted_at IS NOT NULL): a soft-deleted credential can still be
+	// restored/inspected by an admin later, so it needs the same at-rest cipher
+	// as everything else, not a stale Fernet blob nobody can ever decrypt again.
+	ReencryptListAllCredentials(ctx context.Context) ([]ReencryptListAllCredentialsRow, error)
+	// Deliberately does NOT touch updated_at — re-encryption is a storage-format
+	// change, not a user-visible edit.
+	ReencryptUpdateCredentialData(ctx context.Context, arg ReencryptUpdateCredentialDataParams) (int64, error)
 	RejectPaymentWithdrawal(ctx context.Context, arg RejectPaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
 	RejectVerification(ctx context.Context, arg RejectVerificationParams) (UserVerification, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
@@ -468,9 +493,16 @@ type Querier interface {
 	TemplateGetByID(ctx context.Context, id uuid.UUID) (Template, error)
 	// ===================== template catalog (public) =====================
 	TemplateGetBySlug(ctx context.Context, slug string) (Template, error)
+	// Unlike TemplateGetBySlug, no is_verify filter — used by the agent's
+	// internal RAG feed (core/apps/template/views/internal.py's
+	// get_template_with_flow, whose Django queryset has no verify restriction).
+	TemplateGetBySlugAny(ctx context.Context, slug string) (Template, error)
 	TemplateGetOrderForOwner(ctx context.Context, arg TemplateGetOrderForOwnerParams) (TemplateOrder, error)
 	// ===================== orders / purchase =====================
 	TemplateGetOrderForUserAndTemplate(ctx context.Context, arg TemplateGetOrderForUserAndTemplateParams) (TemplateOrder, error)
+	// Internal-only (X-Internal-Token gated), unscoped by owner: the RAG feed
+	// needs a template's source flow regardless of who owns the linked project.
+	TemplateGetProjectFlow(ctx context.Context, projectID uuid.UUID) ([]byte, error)
 	TemplateGetSubmission(ctx context.Context, id uuid.UUID) (TemplateSubmissionRequest, error)
 	TemplateGetSubmissionForOwner(ctx context.Context, arg TemplateGetSubmissionForOwnerParams) (TemplateSubmissionRequest, error)
 	TemplateGetWithdrawal(ctx context.Context, id uuid.UUID) (TemplateWithdrawalRequest, error)
@@ -519,6 +551,7 @@ type Querier interface {
 	TemplateSubmissionFeaturesFor(ctx context.Context, submissionIds []uuid.UUID) ([]TemplateSubmissionFeaturesForRow, error)
 	// Only mutable while status = 'pending' (checked by the caller/usecase too).
 	TemplateUpdateSubmission(ctx context.Context, arg TemplateUpdateSubmissionParams) (TemplateSubmissionRequest, error)
+	TouchPersonalAccessToken(ctx context.Context, id uuid.UUID) error
 	// published_at is stamped the first time is_published flips to true; it is
 	// never cleared afterwards, matching the Django model.
 	UpdateBlogPost(ctx context.Context, arg UpdateBlogPostParams) (BlogPost, error)

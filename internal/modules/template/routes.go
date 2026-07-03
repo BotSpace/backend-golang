@@ -20,6 +20,15 @@ const (
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVerifier) {
 	g := rg.Group("/template")
 
+	// Internal RAG feed — X-Internal-Token gated, not JWT auth. Mounted
+	// before the public group so its static "/internal/..." segments never
+	// have to compete with "/list/:slug"-style param routes.
+	internal := g.Group("/internal", internalTokenAuth())
+	{
+		internal.GET("/list", h.InternalList)
+		internal.GET("/:identifier", h.InternalGet)
+	}
+
 	// Public catalog - optionalAuth resolves is_liked/is_ordered when a valid
 	// token is present, but never rejects an anonymous request.
 	public := g.Group("", optionalAuth(verifier))

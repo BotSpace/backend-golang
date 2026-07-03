@@ -3,7 +3,32 @@ package release
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/botspace/backend/internal/shared/engine"
 )
+
+// LogSnapshotResponse is the wire shape for GET /relase/{id}/logs and
+// GET /projects/{id}/debug/logs — matches Django's deployment_logs_snapshot()
+// dict exactly (pod_name/lines/truncated) so agentv3's backend.py
+// get_release_logs/get_debug_logs (both call _unwrap_item, which accepts a
+// flat object with no envelope) parse it unchanged.
+type LogSnapshotResponse struct {
+	PodName   *string  `json:"pod_name"`
+	Lines     []string `json:"lines"`
+	Truncated bool     `json:"truncated"`
+}
+
+func toLogSnapshotResponse(s engine.LogSnapshot) LogSnapshotResponse {
+	lines := s.Lines
+	if lines == nil {
+		lines = []string{}
+	}
+	var podName *string
+	if s.PodName != "" {
+		podName = &s.PodName
+	}
+	return LogSnapshotResponse{PodName: podName, Lines: lines, Truncated: s.Truncated}
+}
 
 // maskedValue mirrors Django's ListEnviromentSerializer.MASKED_VALUE — secret
 // environment values are never sent back to the client as plaintext.

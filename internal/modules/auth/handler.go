@@ -4,8 +4,10 @@ import (
 	"net/http"
 
 	"github.com/botspace/backend/internal/shared/httpx"
+	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/validator"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -14,6 +16,18 @@ type Handler struct {
 
 func NewHandler(uc *Usecase) *Handler {
 	return &Handler{uc: uc}
+}
+
+// authUserID extracts the authenticated user id, writing a 401 on failure —
+// same helper other modules define locally (e.g. credential.owner) since
+// modules don't import each other for this (PORTING_GUIDE.md rule #4).
+func authUserID(c *gin.Context) (uuid.UUID, bool) {
+	id, err := uuid.Parse(middleware.UserID(c))
+	if err != nil {
+		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token"))
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 // bind decodes and validates a JSON body, writing the error response itself.
@@ -244,4 +258,102 @@ func (h *Handler) ResetSet(c *gin.Context) {
 		return
 	}
 	httpx.NoContent(c)
+}
+
+// ---- Personal access tokens (MCP clients) --------------------------------
+
+// CreateAPIToken godoc
+// @Summary      Create a personal access token ("bsp_...", shown once)
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      CreateAPITokenRequest  true  "Token name"
+// @Success      201   {object}  CreateAPITokenResponse
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Router       /auth/api-tokens [post]
+func (h *Handler) CreateAPIToken(c *gin.Context) {
+	userID, ok := authUserID(c)
+	if !ok {
+		return
+	}
+	var req CreateAPITokenRequest
+	if !bind(c, &req) {
+		return
+	}
+	pat, raw, err := h.uc.CreateAPIToken(c.Request.Context(), userID, req.Name)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusCreated, CreateAPITokenResponse{
+		ID: pat.ID.String(), Name: pat.Name, Token: raw, Prefix: pat.Prefix,
+	})
+}
+
+// ListAPITokens godoc
+// @Summary      List my personal access tokens (never the raw token)
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}  APITokenResponse
+// @Router       /auth/api-tokens [get]
+func (h *Handler) ListAPITokens(c *gin.Context) {
+	userID, ok := authUserID(c)
+	if !ok {
+		return
+	}
+	items, err := h.uc.ListAPITokens(c.Request.Context(), userID)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, toAPITokenListResponse(items))
+}
+
+// DeleteAPIToken godoc
+// @Summary      Revoke a personal access token
+// @Tags         auth
+// @Security     BearerAuth
+// @Param        id   path  string  true  "Token id"
+// @Success      204
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Router       /auth/api-tokens/{id} [delete]
+func (h *Handler) DeleteAPIToken(c *gin.Context) {
+	userID, ok := authUserID(c)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Error(c, httpx.BadRequest("auth.invalid_token_id", "invalid token id"))
+		return
+	}
+	if err := h.uc.DeleteAPIToken(c.Request.Context(), id, userID); err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.NoContent(c)
+}
+
+// TokenExchange godoc
+// @Summary      Exchange a "bsp_..." personal access token for a JWT pair
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      TokenExchangeRequest  true  "Personal access token"
+// @Success      200   {object}  ExchangeResponse
+// @Failure      401   {object}  httpx.ErrorResponse
+// @Router       /auth/token/exchange [post]
+func (h *Handler) TokenExchange(c *gin.Context) {
+	var req TokenExchangeRequest
+	if !bind(c, &req) {
+		return
+	}
+	tokens, err := h.uc.ExchangeToken(c.Request.Context(), req.Token)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, toExchangeResponse(tokens))
 }

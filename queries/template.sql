@@ -20,6 +20,17 @@ SELECT * FROM template WHERE slug = sqlc.arg('slug') AND is_verify = TRUE;
 -- name: TemplateGetByID :one
 SELECT * FROM template WHERE id = sqlc.arg('id');
 
+-- name: TemplateGetBySlugAny :one
+-- Unlike TemplateGetBySlug, no is_verify filter — used by the agent's
+-- internal RAG feed (core/apps/template/views/internal.py's
+-- get_template_with_flow, whose Django queryset has no verify restriction).
+SELECT * FROM template WHERE slug = sqlc.arg('slug');
+
+-- name: TemplateGetProjectFlow :one
+-- Internal-only (X-Internal-Token gated), unscoped by owner: the RAG feed
+-- needs a template's source flow regardless of who owns the linked project.
+SELECT flow FROM projects WHERE id = sqlc.arg('project_id');
+
 -- name: TemplateSlugExists :one
 SELECT EXISTS(SELECT 1 FROM template WHERE slug = sqlc.arg('slug'));
 

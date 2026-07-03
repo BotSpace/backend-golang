@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
 
 	"github.com/botspace/backend/internal/shared/crypto"
@@ -56,17 +58,27 @@ type Usecase interface {
 	// InternalGetByName resolves a credential by its owner-unique name, with
 	// the owner derived from projectID — mirrors credential_by_name.
 	InternalGetByName(ctx context.Context, name string, projectID uuid.UUID) (*Detail, error)
+
+	// OAuthStart begins a browser OAuth2 consent flow for an oauth2-mode
+	// credential type — mirrors OAuthStartView.post. Returns the Google
+	// consent URL to redirect the user's browser to; the actual token
+	// exchange + Credential row creation happens in Django's (unported)
+	// OAuthCallbackView once Google redirects back — see oauth_state.go's
+	// package doc for why the state token must stay Django-signing-compatible.
+	OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, typeKey string) (authorizeURL string, err error)
 }
 
 type usecase struct {
 	repo   Repository
 	cipher *crypto.Cipher
+	oauth  OAuthConfig
 }
 
 // NewUsecase wires the credential usecase. cipher encrypts data at rest and
-// decrypts it on every read (owner-masked or internal-raw).
-func NewUsecase(repo Repository, cipher *crypto.Cipher) Usecase {
-	return &usecase{repo: repo, cipher: cipher}
+// decrypts it on every read (owner-masked or internal-raw). oauth carries the
+// provider app credentials OAuthStart needs (see OAuthConfig doc comment).
+func NewUsecase(repo Repository, cipher *crypto.Cipher, oauth OAuthConfig) Usecase {
+	return &usecase{repo: repo, cipher: cipher, oauth: oauth}
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateData) (*Detail, error) {
@@ -243,6 +255,58 @@ func (u *usecase) InternalGetByName(ctx context.Context, name string, projectID 
 		return nil, mapNotFound(err)
 	}
 	return u.decryptDetail(c)
+}
+
+// oauthStateSecret is read per-call (not cached at construction) so the
+// secret can be rotated without a redeploy — same rationale as
+// routes.go's internalTokenAuth() reading APP_INTERNAL_TOKEN per-request.
+// It MUST be Django's settings.SECRET_KEY (env DJANGO_SECRET_KEY): the state
+// token this mints is verified by Django's still-live OAuthCallbackView, not
+// by this backend — see oauth_state.go's package doc comment.
+func oauthStateSecret() string { return os.Getenv("DJANGO_SECRET_KEY") }
+
+func (u *usecase) OAuthStart(ctx context.Context, ownerID uuid.UUID, provider, typeKey string) (string, error) {
+	if typeKey == "" {
+		return "", httpx.BadRequest("credential.type_key_required", "type_key is required")
+	}
+	typ, ok := GetType(typeKey)
+	if !ok {
+		return "", httpx.BadRequest("credential.unknown_type", fmt.Sprintf("unknown type_key %q", typeKey))
+	}
+	if typ.Mode != ModeOAuth2 {
+		return "", httpx.BadRequest("credential.not_oauth2", fmt.Sprintf("type_key %q is not an OAuth2 type", typeKey))
+	}
+	if typ.Provider != provider {
+		return "", httpx.BadRequest("credential.provider_mismatch",
+			fmt.Sprintf("type_key %q does not belong to provider %q", typeKey, provider))
+	}
+	prov, ok := getOAuthProvider(provider, u.oauth)
+	if !ok {
+		return "", httpx.NotFound("credential.unknown_provider", fmt.Sprintf("unknown provider %q", provider))
+	}
+	if prov.ClientID == "" {
+		return "", httpx.Internal(fmt.Errorf("oauth provider %q: client id not configured", provider))
+	}
+	secret := oauthStateSecret()
+	if secret == "" {
+		return "", httpx.Internal(fmt.Errorf("oauth state signing: DJANGO_SECRET_KEY not set"))
+	}
+	nonce, err := newNonce()
+	if err != nil {
+		return "", httpx.Internal(err)
+	}
+	state := signState(secret, ownerID.String(), typeKey, nonce)
+
+	q := url.Values{}
+	q.Set("client_id", prov.ClientID)
+	q.Set("redirect_uri", oauthCallbackURL(provider))
+	q.Set("response_type", "code")
+	q.Set("scope", strings.Join(typ.Scopes, " "))
+	q.Set("state", state)
+	for k, v := range prov.ExtraParams {
+		q.Set(k, v)
+	}
+	return prov.AuthorizeURL + "?" + q.Encode(), nil
 }
 
 func (u *usecase) decryptDetail(c *Credential) (*Detail, error) {
