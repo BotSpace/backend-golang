@@ -214,6 +214,10 @@ type Repository interface {
 	// see queries/payment.sql's SetPaymentTransactionExternalRef doc.
 	SetTransactionExternalRef(ctx context.Context, id uuid.UUID, ref string) error
 	GetTransactionByExternalRef(ctx context.Context, ref string) (*Transaction, error)
+	// ListTransactionsByExternalRefDateRange backs Payme's GetStatement RPC
+	// (payme/views/base.py::get_statement): every transaction the Payme
+	// gateway itself created (has an external ref) within [from, to].
+	ListTransactionsByExternalRefDateRange(ctx context.Context, from, to time.Time) ([]Transaction, error)
 
 	// Orders.
 	CreateOrder(ctx context.Context, in CreateOrderParams) (*Order, error)

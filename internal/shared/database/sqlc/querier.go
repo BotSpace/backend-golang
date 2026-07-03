@@ -337,6 +337,10 @@ type Querier interface {
 	ListPaymentOrdersAdmin(ctx context.Context, arg ListPaymentOrdersAdminParams) ([]ListPaymentOrdersAdminRow, error)
 	// ===================== admin-wide listings =====================
 	ListPaymentTransactionsAdmin(ctx context.Context, arg ListPaymentTransactionsAdminParams) ([]ListPaymentTransactionsAdminRow, error)
+	// Backs Payme's GetStatement RPC: transactions the Payme gateway itself
+	// created (idempotency_key holds Payme's opaque transaction id — see
+	// SetPaymentTransactionExternalRef's doc above) within a created_at window.
+	ListPaymentTransactionsByExternalRefDateRange(ctx context.Context, arg ListPaymentTransactionsByExternalRefDateRangeParams) ([]Transaction, error)
 	ListPaymentTransactionsForUser(ctx context.Context, arg ListPaymentTransactionsForUserParams) ([]Transaction, error)
 	ListPaymentWithdrawalsAdmin(ctx context.Context, arg ListPaymentWithdrawalsAdminParams) ([]ListPaymentWithdrawalsAdminRow, error)
 	ListPaymentWithdrawalsForUser(ctx context.Context, arg ListPaymentWithdrawalsForUserParams) ([]PaymentWithdrawalRequest, error)

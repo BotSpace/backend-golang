@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -101,6 +102,8 @@ type Usecase interface {
 	// Perform/Cancel/Check calls (see domain.go's Repository doc).
 	SetTransactionExternalRef(ctx context.Context, id uuid.UUID, ref string) error
 	GetTransactionByExternalRef(ctx context.Context, ref string) (*Transaction, error)
+	// ListTransactionsByExternalRefDateRange backs Payme's GetStatement RPC.
+	ListTransactionsByExternalRefDateRange(ctx context.Context, from, to time.Time) ([]Transaction, error)
 
 	// CreatePaymentLink is the legacy simple "top up my balance" endpoint
 	// (Django views/payment.py::payment_link).
@@ -407,6 +410,14 @@ func (u *usecase) GetTransactionByExternalRef(ctx context.Context, ref string) (
 	return t, nil
 }
 
+func (u *usecase) ListTransactionsByExternalRefDateRange(ctx context.Context, from, to time.Time) ([]Transaction, error) {
+	items, err := u.repo.ListTransactionsByExternalRefDateRange(ctx, from, to)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	return items, nil
+}
+
 // ===================== history =====================
 
 func (u *usecase) ListHistoryForUser(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]History, int64, error) {
@@ -662,6 +673,17 @@ func (u *usecase) SettlePaidTransaction(ctx context.Context, transactionID uuid.
 				IdempotencyKey: fmt.Sprintf("payorder:fee:%s", updated.ID),
 			})
 		}
+	}
+
+	// Keep transaction.status in sync even on the order-linked path — Payme's
+	// CheckTransaction/PerformTransaction (gateway_payme.go) read this field
+	// directly to report state 1 (created) vs 2 (performed); without this the
+	// transaction stayed "not performed" forever from Payme's point of view
+	// even after the order was fully paid and the owner credited. Best-effort:
+	// a guard failure (already true, e.g. a concurrent/retried settle) is not
+	// an error.
+	if err := u.repo.SetTransactionStatus(ctx, transactionID, false, true); err != nil && !errors.Is(err, database.ErrNotFound) {
+		return nil, httpx.Internal(err)
 	}
 
 	_ = u.notifier.NotifyOrderPaid(ctx, updated) // best-effort; must never block the webhook response

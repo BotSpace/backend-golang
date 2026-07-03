@@ -150,6 +150,8 @@ func (h *Handler) PaymeWebhook(c *gin.Context) {
 		h.paymeCancelTransaction(c, req, p)
 	case "CheckTransaction":
 		h.paymeCheckTransaction(c, req, p)
+	case "GetStatement":
+		h.paymeGetStatement(c, req)
 	default:
 		c.JSON(http.StatusOK, paymeRPCResponse{ID: req.ID, Error: &paymeError{Code: paymeMethodNotFound, Message: "Method not found"}})
 	}
@@ -260,6 +262,58 @@ func (h *Handler) paymeCheckTransaction(c *gin.Context, req paymeRPCRequest, p p
 		"perform_time": 0,
 		"cancel_time":  0,
 	}})
+}
+
+// paymeStatementParams is GetStatement's params shape: a millisecond Unix
+// timestamp window (payme/views/base.py::get_statement's params['from']/['to']).
+type paymeStatementParams struct {
+	From int64 `json:"from"`
+	To   int64 `json:"to"`
+}
+
+// paymeGetStatement ports payme/views/base.py::get_statement: a reconciliation
+// listing of every transaction Payme itself created in a date window. Our
+// Transaction row tracks only created_at/status (no perform_time/cancel_time/
+// cancel_reason columns — those never existed in the Django TransactionModel
+// this ported from either), so state/perform_time/cancel_time are the closest
+// honest approximation from what we persist, not byte-for-byte payme parity.
+func (h *Handler) paymeGetStatement(c *gin.Context, req paymeRPCRequest) {
+	var sp paymeStatementParams
+	if err := json.Unmarshal(req.Params, &sp); err != nil {
+		c.JSON(http.StatusOK, paymeRPCResponse{ID: req.ID, Error: &paymeError{Code: paymeParseError, Message: "Parse error"}})
+		return
+	}
+	from := time.UnixMilli(sp.From)
+	to := time.UnixMilli(sp.To)
+
+	txns, err := h.uc.ListTransactionsByExternalRefDateRange(c.Request.Context(), from, to)
+	if err != nil {
+		c.JSON(http.StatusOK, paymeRPCResponse{ID: req.ID, Error: &paymeError{Code: paymeUnableToPerform, Message: "Unable to load statement"}})
+		return
+	}
+
+	out := make([]gin.H, len(txns))
+	for i, t := range txns {
+		amountTiyin, _ := paymeAmountTiyin(t.Amount)
+		state := 1
+		performTime := int64(0)
+		if t.Status {
+			state = 2
+			performTime = t.UpdatedAt.UnixMilli()
+		}
+		out[i] = gin.H{
+			"transaction":  t.ID.String(),
+			"amount":       amountTiyin,
+			"account":      gin.H{"order_id": t.ID.String()},
+			"reason":       nil,
+			"state":        state,
+			"create_time":  t.CreatedAt.UnixMilli(),
+			"perform_time": performTime,
+			"cancel_time":  0,
+			"time":         t.CreatedAt.UnixMilli(),
+		}
+	}
+	c.JSON(http.StatusOK, paymeRPCResponse{ID: req.ID, Result: gin.H{"transactions": out}})
 }
 
 func (h *Handler) paymeResolveByAccount(c *gin.Context, p paymeParams) (*Transaction, *paymeError) {

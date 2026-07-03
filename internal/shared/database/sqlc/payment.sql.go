@@ -7,6 +7,7 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -932,6 +933,52 @@ func (q *Queries) ListPaymentTransactionsAdmin(ctx context.Context, arg ListPaym
 			&i.Transaction.UpdatedAt,
 			&i.Transaction.DeletedAt,
 			&i.UserPhone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentTransactionsByExternalRefDateRange = `-- name: ListPaymentTransactionsByExternalRefDateRange :many
+SELECT id, user_id, amount, status, idempotency_key, created_at, updated_at, deleted_at FROM transaction
+WHERE idempotency_key IS NOT NULL
+  AND deleted_at IS NULL
+  AND created_at >= $1
+  AND created_at <= $2
+ORDER BY created_at DESC
+`
+
+type ListPaymentTransactionsByExternalRefDateRangeParams struct {
+	FromTime time.Time `json:"from_time"`
+	ToTime   time.Time `json:"to_time"`
+}
+
+// Backs Payme's GetStatement RPC: transactions the Payme gateway itself
+// created (idempotency_key holds Payme's opaque transaction id — see
+// SetPaymentTransactionExternalRef's doc above) within a created_at window.
+func (q *Queries) ListPaymentTransactionsByExternalRefDateRange(ctx context.Context, arg ListPaymentTransactionsByExternalRefDateRangeParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listPaymentTransactionsByExternalRefDateRange, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transaction{}
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Amount,
+			&i.Status,
+			&i.IdempotencyKey,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
