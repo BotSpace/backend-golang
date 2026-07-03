@@ -21,8 +21,15 @@ import bcrypt
 import psycopg2
 import psycopg2.extras
 
-SRC_DSN = "postgresql://postgres:postgres@localhost:5435/django"
-DST_DSN = "postgresql://postgres:23092005@localhost:5433/botspace"
+import os
+
+SRC_DSN = os.environ.get("ETL_SRC_DSN", "postgresql://postgres:postgres@localhost:5435/django")
+DST_DSN = os.environ.get("ETL_DST_DSN", "postgresql://postgres:23092005@localhost:5433/botspace")
+
+# SAFETY: the TARGET is TRUNCATEd+reimported. Refuse to run unless it is the
+# new Go backend DB (botspace_go) — never let a mis-set DSN wipe Django's DB.
+if "botspace_go" not in DST_DSN:
+    raise SystemExit(f"REFUSING: ETL target must be botspace_go, got: {DST_DSN!r}")
 
 NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
@@ -207,7 +214,12 @@ def main():
         lambda r: (
             uid("accounts_user", r["id"]), nz_txt(r["phone"]), txt(r["first_name"]),
             txt(r["last_name"]), r["username"] or None, r["email"] or None,
-            txt(r["password"]), txt(r["role"], "user"), r["balance"] or 0,
+            txt(r["password"]),
+            # Django gates admin on is_superuser (bool); the Go backend gates on
+            # the `role` string (RequireRole "admin"/"superuser"). Map so Django
+            # superusers keep admin access after import.
+            ("superuser" if r["is_superuser"] else txt(r["role"], "user")),
+            r["balance"] or 0,
             dec(r["template_balance"]), bool(r["is_active"]), bool(r["is_staff"]),
             bool(r["is_superuser"]), r["validated_at"], r["kyc_verified_at"],
             r["created_at"] or r["date_joined"], r["updated_at"] or r["date_joined"],
