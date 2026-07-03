@@ -596,8 +596,20 @@ func moduleDeploySpec(m Module) engine.DeploySpec {
 	}
 	// Modules are shared pods, not project releases: there is no ProjectID to
 	// give the generic Orchestrator contract, so ReleaseUUID carries the
-	// module's own id and Env carries what the pod needs to boot.
-	return engine.DeploySpec{ReleaseUUID: m.ID, Env: env}
+	// module's own id and Env carries what the pod needs to boot. Name pins
+	// the k8s object name to deploymentName(slug) (matches sharedEndpoint's
+	// DNS name + the Stop(deploymentName(...)) calls elsewhere in this file).
+	// Image is the module's own image (not the bot-engine image); modules only
+	// expose /health (no separate /ready), unlike bot engines.
+	return engine.DeploySpec{
+		ReleaseUUID:   m.ID,
+		Env:           env,
+		Name:          deploymentName(m.Slug),
+		Image:         m.Image,
+		ContainerPort: int(m.Port),
+		ReadinessPath: "/health",
+		LivenessPath:  "/health",
+	}
 }
 
 func mapOrchStatus(s engine.Status) string {

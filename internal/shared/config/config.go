@@ -12,12 +12,57 @@ import (
 )
 
 type Config struct {
-	Env  string     `mapstructure:"env"`
-	HTTP HTTPConfig `mapstructure:"http"`
-	DB   DBConfig   `mapstructure:"db"`
-	JWT  JWTConfig  `mapstructure:"jwt"`
-	OTP  OTPConfig  `mapstructure:"otp"`
-	Log  LogConfig  `mapstructure:"log"`
+	Env    string       `mapstructure:"env"`
+	HTTP   HTTPConfig   `mapstructure:"http"`
+	DB     DBConfig     `mapstructure:"db"`
+	JWT    JWTConfig    `mapstructure:"jwt"`
+	OTP    OTPConfig    `mapstructure:"otp"`
+	Log    LogConfig    `mapstructure:"log"`
+	Engine EngineConfig `mapstructure:"engine"`
+}
+
+// EngineConfig controls how bot engines (release/debug containers + shared
+// module pods) are orchestrated. Mirrors the env vars the Django
+// kubernetes_service.py/module_service.py used to read directly.
+type EngineConfig struct {
+	// Mode selects the Orchestrator: "k8s" (real cluster client), "stub"
+	// (no-op). Empty ("auto") picks k8s when Config.Env == "production",
+	// stub otherwise — set explicitly to override.
+	Mode string `mapstructure:"mode"`
+
+	Namespace          string `mapstructure:"namespace"`            // K8S_NAMESPACE in Django
+	ImageRepository    string `mapstructure:"image_repository"`     // golang-engine image repo
+	ImageTag           string `mapstructure:"image_tag"`            // engine_version() in Django
+	RegistrySecretName string `mapstructure:"registry_secret_name"` // imagePullSecrets
+
+	APIURL        string `mapstructure:"api_url"`        // API_URL env injected into every engine pod
+	InternalToken string `mapstructure:"internal_token"` // INTERNAL_API_TOKEN — PaymentNode + debug events
+	TestBotToken  string `mapstructure:"test_bot_token"` // TEST_BOT_TOKEN fallback (debug containers)
+
+	RedisHost     string `mapstructure:"redis_host"`
+	RedisPort     string `mapstructure:"redis_port"`
+	RedisPassword string `mapstructure:"redis_password"`
+
+	MongoAddr   string `mapstructure:"mongo_addr"`    // MONGO_SHARED_URL fallback MONGO_URL
+	MongoDBName string `mapstructure:"mongo_db_name"` // CMS_SHARED_DB
+}
+
+// Image is the full "repo:tag" reference deployed for release/debug engines.
+func (e EngineConfig) Image() string {
+	return e.ImageRepository + ":" + e.ImageTag
+}
+
+// RedisAddr is "host:port", or "" when RedisHost is unset (Redis wiring
+// skipped in the pod spec).
+func (e EngineConfig) RedisAddr() string {
+	if e.RedisHost == "" {
+		return ""
+	}
+	port := e.RedisPort
+	if port == "" {
+		port = "6379"
+	}
+	return e.RedisHost + ":" + port
 }
 
 // OTPConfig controls phone confirmation codes. In non-prod, Default is used
@@ -186,4 +231,18 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otp.resend_after", "60s")
 
 	v.SetDefault("log.level", "info")
+
+	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
+	v.SetDefault("engine.namespace", "botmother")
+	v.SetDefault("engine.image_repository", "registry.iprogrammer.uz/botspace/golang-engine")
+	// The live cluster's engine tag moves independently of this backend (it
+	// was e.g. "3.5.87-prod" at the time of writing — Django tracked it in an
+	// admin-editable DB setting, engine_version()). "latest" here is only a
+	// safe fallback; set APP_ENGINE_IMAGE_TAG in the deploy env to whatever
+	// tag is currently promoted so releases don't pin to a stale/missing one.
+	v.SetDefault("engine.image_tag", "latest")
+	v.SetDefault("engine.registry_secret_name", "registry-secret")
+	v.SetDefault("engine.redis_host", "redis")
+	v.SetDefault("engine.redis_port", "6379")
+	v.SetDefault("engine.mongo_db_name", "botspace_cms")
 }

@@ -110,4 +110,8 @@ type Repository interface {
 	// Internal reads used while assembling an engine.DeploySpec.
 	ListEnvironmentsByProject(ctx context.Context, projectID uuid.UUID) ([]Environment, error)
 	GetProjectFlowForOwner(ctx context.Context, projectID, ownerID uuid.UUID) (json.RawMessage, error)
+	// GetProjectWebhookUUIDs returns the project's stable release/debug webhook
+	// UUIDs, used to name the orchestrator's "bot-<uuid>" Service so Telegram
+	// webhook routing survives redeploys.
+	GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (releaseUUID, debugUUID uuid.UUID, err error)
 }

@@ -114,9 +114,12 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	if err != nil {
 		s.log.Warn("crypto key not set — credential/webhook secrets disabled", logger.Err(err))
 	}
-	// Engine orchestrator: no-op stub until a real Docker/K8s client (or an
-	// engine-golang HTTP client) is wired in. CRUD works; deploys stay pending.
-	orch := engine.NewStub()
+	// Engine orchestrator: real KubernetesOrchestrator when engine.mode=k8s
+	// (or, if unset, whenever cfg.Env=="production" — this backend now runs
+	// as a pod in ns botmother and can reach the cluster API directly).
+	// Falls back to the no-op Stub if the cluster is unreachable (local dev
+	// without a kubeconfig) so CRUD keeps working with deploys left pending.
+	orch := s.buildOrchestrator()
 
 	// user module
 	userRepo := user.NewPostgresRepository(s.pool)
@@ -216,6 +219,42 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	hub := ws.NewHub()
 	go hub.Run(ctx)
 	ws.RegisterRoutes(v1, ws.NewHandler(hub, tokens, s.cfg.HTTP.CORSOrigins))
+}
+
+// buildOrchestrator picks the engine.Orchestrator implementation: the real
+// Kubernetes client when cfg.Engine.Mode says so (explicitly, or implicitly
+// via cfg.Env=="production"), falling back to the no-op Stub whenever the
+// cluster isn't reachable (e.g. local dev without a kubeconfig) so the API
+// still serves CRUD — deploys just report as pending instead of erroring.
+func (s *Server) buildOrchestrator() engine.Orchestrator {
+	wantK8s := s.cfg.Engine.Mode == "k8s" || (s.cfg.Engine.Mode == "" && s.cfg.Env == "production")
+	if !wantK8s {
+		s.log.Info("engine orchestrator: stub", logger.String("engine_mode", s.cfg.Engine.Mode))
+		return engine.NewStub()
+	}
+
+	orch, err := engine.NewKubernetesOrchestrator(engine.KubernetesConfig{
+		Namespace:          s.cfg.Engine.Namespace,
+		ImageRepository:    s.cfg.Engine.ImageRepository,
+		ImageTag:           s.cfg.Engine.ImageTag,
+		RegistrySecretName: s.cfg.Engine.RegistrySecretName,
+		APIURL:             s.cfg.Engine.APIURL,
+		InternalToken:      s.cfg.Engine.InternalToken,
+		TestBotToken:       s.cfg.Engine.TestBotToken,
+		RedisAddr:          s.cfg.Engine.RedisAddr(),
+		RedisPassword:      s.cfg.Engine.RedisPassword,
+		MongoAddr:          s.cfg.Engine.MongoAddr,
+		MongoDBName:        s.cfg.Engine.MongoDBName,
+	})
+	if err != nil {
+		s.log.Warn("engine orchestrator: kubernetes unavailable — falling back to stub", logger.Err(err))
+		return engine.NewStub()
+	}
+	s.log.Info("engine orchestrator: kubernetes",
+		logger.String("namespace", s.cfg.Engine.Namespace),
+		logger.String("image", s.cfg.Engine.Image()),
+	)
+	return orch
 }
 
 // authbotTokenAdapter adapts the auth TokenIssuer + refresh store to the

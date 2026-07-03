@@ -240,6 +240,15 @@ func (r *fakeRepo) GetProjectFlowForOwner(_ context.Context, projectID, ownerID 
 	return r.projectFlow[projectID], nil
 }
 
+func (r *fakeRepo) GetProjectWebhookUUIDs(_ context.Context, projectID, ownerID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	if !r.owns(projectID, ownerID) {
+		return uuid.Nil, uuid.Nil, database.ErrNotFound
+	}
+	// Deterministic per-project UUIDs derived from the project id — good
+	// enough for tests that only assert a WebhookUUID was passed through.
+	return uuid.NewSHA1(projectID, []byte("release")), uuid.NewSHA1(projectID, []byte("debug")), nil
+}
+
 func envKey(projectID uuid.UUID, key string) string { return projectID.String() + "|" + key }
 
 // fakeOrchestrator records every Deploy/Stop call so tests can assert on the

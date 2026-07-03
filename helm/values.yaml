@@ -2,4 +2,24 @@
 # CI har push'da tag'ni yangilaydi (worker-golang/engine-golang pattern).
 image:
   repository: registry.iprogrammer.uz/botspace/backend-golang
-  tag: "9a98fed"
+  tag: "latest"
+
+# engine.KubernetesOrchestrator (internal/shared/engine/kubernetes.go) now
+# talks to the botmother namespace directly (create/update/delete Deployment
+# + Service + ConfigMap + Secret for every release/debug/module deploy), so
+# this pod needs the SAME RBAC the old Django `web` deployment already runs
+# under. `backend-sa` + the `backend-role` Role (full CRUD on
+# deployments/replicasets/jobs/pods/services/configmaps/secrets/events/HPA in
+# ns botmother) + the `backend-binding` RoleBinding already exist in the
+# cluster (created by the separate botmother-infra ArgoCD app, pre-dating
+# this repo) — reuse them, do NOT create a new ServiceAccount/Role.
+#
+# This key is read from the backend-golang Application's `$values` source
+# (this file) and is NOT overridden by the Application's inline `values:`
+# block (which has no serviceAccount key), so it takes effect on next sync —
+# no manual ArgoCD Application edit needed. If backend-sa/backend-role is
+# ever renamed or removed, verify with:
+#   kubectl get sa,role,rolebinding -n botmother | grep backend
+serviceAccount:
+  create: false
+  name: backend-sa
