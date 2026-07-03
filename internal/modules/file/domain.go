@@ -152,6 +152,11 @@ type Repository interface {
 	ListFiles(ctx context.Context, f ListFileFilter) ([]File, error)
 	CountFiles(ctx context.Context, f ListFileFilter) (int64, error)
 
+	// DeleteExpiredFiles deletes every row whose expires_at has passed and
+	// returns them so the caller can unlink their blobs from disk — the
+	// scheduler's port of Django's cleanup_expired_files beat task.
+	DeleteExpiredFiles(ctx context.Context) ([]File, error)
+
 	CreateResource(ctx context.Context, in CreateResourceInput) (*Resource, error)
 	GetResourceForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Resource, error)
 	ListResources(ctx context.Context, f ListResourceFilter) ([]Resource, error)

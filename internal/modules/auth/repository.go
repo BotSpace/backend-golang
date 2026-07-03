@@ -19,6 +19,12 @@ type RefreshStore interface {
 	IsActive(ctx context.Context, jti uuid.UUID) (bool, error)
 	Revoke(ctx context.Context, jti uuid.UUID) error
 	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
+	// DeleteExpired purges rows whose expires_at has passed (revoked or not —
+	// a revoked-but-not-yet-expired row is left alone, it's still evidence a
+	// token was rotated/logged-out). Wires the previously-generated but
+	// never-called sqlcdb.DeleteExpiredRefreshTokens query into the
+	// scheduler; called periodically, not from any HTTP handler.
+	DeleteExpired(ctx context.Context) error
 }
 
 type pgRefreshStore struct {
@@ -66,6 +72,13 @@ func (s *pgRefreshStore) Revoke(ctx context.Context, jti uuid.UUID) error {
 func (s *pgRefreshStore) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	if err := s.queries.RevokeAllUserRefreshTokens(ctx, userID); err != nil {
 		return fmt.Errorf("revoke user refresh tokens: %w", err)
+	}
+	return nil
+}
+
+func (s *pgRefreshStore) DeleteExpired(ctx context.Context) error {
+	if err := s.queries.DeleteExpiredRefreshTokens(ctx); err != nil {
+		return fmt.Errorf("delete expired refresh tokens: %w", err)
 	}
 	return nil
 }

@@ -135,4 +135,7 @@ type Repository interface {
 	GetCodeWithBotUser(ctx context.Context, value string) (*Code, *BotUser, error)
 	// DeleteCode consumes (deletes) a code so it cannot be replayed.
 	DeleteCode(ctx context.Context, codeID uuid.UUID) error
+	// DeleteExpiredCodes purges codes nobody ever redeemed — see
+	// Usecase.CleanupExpiredCodes.
+	DeleteExpiredCodes(ctx context.Context) (int64, error)
 }

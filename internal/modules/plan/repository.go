@@ -74,6 +74,30 @@ func (r *pgRepo) UpdateSubscriptionPlan(
 	}))
 }
 
+func (r *pgRepo) ExpireActiveSubscriptions(ctx context.Context) ([]Subscription, error) {
+	rows, err := r.queries.ExpireActiveSubscriptions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("expire active subscriptions: %w", err)
+	}
+	out := make([]Subscription, len(rows))
+	for i, row := range rows {
+		out[i] = subscriptionFromSQLC(row)
+	}
+	return out, nil
+}
+
+func (r *pgRepo) SuspendGracePeriodSubscriptions(ctx context.Context) ([]Subscription, error) {
+	rows, err := r.queries.SuspendGracePeriodSubscriptions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("suspend grace-period subscriptions: %w", err)
+	}
+	out := make([]Subscription, len(rows))
+	for i, row := range rows {
+		out[i] = subscriptionFromSQLC(row)
+	}
+	return out, nil
+}
+
 func (r *pgRepo) IncrementUsage(ctx context.Context, id uuid.UUID, inputDelta, outputDelta int64) error {
 	rows, err := r.queries.IncrementSubscriptionUsage(ctx, sqlcdb.IncrementSubscriptionUsageParams{
 		ID:          id,

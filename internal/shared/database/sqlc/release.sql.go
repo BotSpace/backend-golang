@@ -326,6 +326,74 @@ func (q *Queries) ListEnviromentsForOwner(ctx context.Context, arg ListEnviromen
 	return items, nil
 }
 
+const listNonTerminalDebugs = `-- name: ListNonTerminalDebugs :many
+SELECT id, project_id, flow_hash, service_id, status, created_at, updated_at FROM debug WHERE status IN ('pending', 'initializing') AND service_id IS NOT NULL
+`
+
+func (q *Queries) ListNonTerminalDebugs(ctx context.Context) ([]Debug, error) {
+	rows, err := q.db.Query(ctx, listNonTerminalDebugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Debug{}
+	for rows.Next() {
+		var i Debug
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.FlowHash,
+			&i.ServiceID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNonTerminalReleases = `-- name: ListNonTerminalReleases :many
+SELECT id, project_id, version, flow, service_id, status, created_at, updated_at FROM relase WHERE status IN ('pending', 'initializing') AND service_id IS NOT NULL
+`
+
+// Unscoped (system-wide) on purpose: the scheduler's reconcile tick isn't a
+// per-owner request, it's the janitor that ports Django's
+// cleanup_failed_releases beat task — see release.Usecase.ReconcileAll.
+func (q *Queries) ListNonTerminalReleases(ctx context.Context) ([]Relase, error) {
+	rows, err := q.db.Query(ctx, listNonTerminalReleases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Relase{}
+	for rows.Next() {
+		var i Relase
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Version,
+			&i.Flow,
+			&i.ServiceID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleasesForProject = `-- name: ListReleasesForProject :many
 SELECT r.id, r.project_id, r.version, r.flow, r.service_id, r.status, r.created_at, r.updated_at
 FROM relase r

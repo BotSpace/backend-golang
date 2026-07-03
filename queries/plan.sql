@@ -74,3 +74,26 @@ SET tokens_used_input  = tokens_used_input + sqlc.arg('input_delta'),
     tokens_used_output = tokens_used_output + sqlc.arg('output_delta'),
     updated_at         = NOW()
 WHERE id = sqlc.arg('id');
+
+-- ===================== expiry scheduler =====================
+-- Django never actually implemented an expiry transition for
+-- UserSubscription (checked core/apps/api/models/plan.py + tasks/ + beat
+-- schedule — status/expires_at exist but nothing ever moved a subscription
+-- out of "active"). These two queries are net-new Go-side logic, not a port:
+-- active -> grace_period once expires_at passes, grace_period -> suspended
+-- after a further 3 days (matches PlanStatus.GRACE_PERIOD's "3 kun" comment,
+-- enums/plan.py). Nothing currently enforces "suspended" against
+-- can_create_bot/token checks — this only keeps the status column truthful
+-- for the dashboard/admin to read.
+
+-- name: ExpireActiveSubscriptions :many
+UPDATE user_subscription
+SET status = 'grace_period', updated_at = NOW()
+WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()
+RETURNING *;
+
+-- name: SuspendGracePeriodSubscriptions :many
+UPDATE user_subscription
+SET status = 'suspended', updated_at = NOW()
+WHERE status = 'grace_period' AND expires_at IS NOT NULL AND expires_at < NOW() - INTERVAL '3 days'
+RETURNING *;

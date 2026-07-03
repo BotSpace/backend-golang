@@ -51,6 +51,15 @@ WHERE project_id = sqlc.arg('project_id')
   AND status IN ('initializing', 'running')
 RETURNING *;
 
+-- name: ListNonTerminalReleases :many
+-- Unscoped (system-wide) on purpose: the scheduler's reconcile tick isn't a
+-- per-owner request, it's the janitor that ports Django's
+-- cleanup_failed_releases beat task — see release.Usecase.ReconcileAll.
+SELECT * FROM relase WHERE status IN ('pending', 'initializing') AND service_id IS NOT NULL;
+
+-- name: ListNonTerminalDebugs :many
+SELECT * FROM debug WHERE status IN ('pending', 'initializing') AND service_id IS NOT NULL;
+
 -- Debug (one row per project). Upsert mirrors Django's get_or_create.
 -- name: GetDebugForOwner :one
 SELECT d.*
