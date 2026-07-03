@@ -158,10 +158,26 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// user routes need the verifier from auth
 	user.RegisterRoutes(v1, user.NewHandler(userUC), tokens)
 
+	// cms — collection/field schema in Postgres, documents in Mongo. If Mongo is
+	// unreachable we skip the routes rather than fail the whole server, so the
+	// rest of the API still serves. Built ahead of the project module below so
+	// project.Usecase.Create can provision each new project's default system
+	// collections through it (nil cmsUC just means that provisioning is
+	// skipped, same degrade-gracefully-without-Mongo pattern as the routes).
+	var cmsUC cms.Usecase
+	mongoClient, err := cms.NewMongoClient(ctx)
+	if err != nil {
+		s.log.Warn("mongo unavailable — cms routes disabled", logger.Err(err))
+	} else {
+		cmsUC = cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient), s.cfg.Engine.MongoDBName)
+		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
+	}
+
 	// project module — owner-scoped CRUD, requires auth. orch is passed so
 	// Get can live-reconcile the nested debug status (see project.usecase.Get
-	// / release status parity fix).
-	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch)
+	// / release status parity fix) and Delete can stop running containers;
+	// cmsUC lets Create provision default system CMS collections.
+	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch, cmsUC)
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
@@ -246,17 +262,6 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	authbotHandler := authbot.NewHandler(authbotUC)
 	authbot.RegisterRoutes(&s.router.RouterGroup, authbotHandler)
 	authbot.RegisterRoutes(v1, authbotHandler)
-
-	// cms — collection/field schema in Postgres, documents in Mongo. If Mongo is
-	// unreachable we skip the routes rather than fail the whole server, so the
-	// rest of the API still serves.
-	mongoClient, err := cms.NewMongoClient(ctx)
-	if err != nil {
-		s.log.Warn("mongo unavailable — cms routes disabled", logger.Err(err))
-	} else {
-		cmsUC := cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient), s.cfg.Engine.MongoDBName)
-		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
-	}
 
 	// chat — read-only CRM views (bot end-users + message history) over the
 	// same shared Mongo botspace_cms database, "users"/"chat" collections

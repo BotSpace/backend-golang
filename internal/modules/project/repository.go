@@ -122,6 +122,26 @@ func (r *pgRepo) UpdateDebugStatus(ctx context.Context, id uuid.UUID, serviceID,
 	}, nil
 }
 
+// ActiveReleaseServiceIDsForOwner reuses the release module's generated
+// query — see the Repository interface doc comment for why this reaches
+// across modules via raw SQL instead of a Go import.
+func (r *pgRepo) ActiveReleaseServiceIDsForOwner(ctx context.Context, projectID, ownerID uuid.UUID) ([]string, error) {
+	rows, err := r.queries.ListReleaseServiceIDsForOwner(ctx, sqlcdb.ListReleaseServiceIDsForOwnerParams{
+		ProjectID: projectID,
+		OwnerID:   ownerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active release service ids: %w", err)
+	}
+	out := make([]string, 0, len(rows))
+	for _, sid := range rows {
+		if sid != nil && *sid != "" {
+			out = append(out, *sid)
+		}
+	}
+	return out, nil
+}
+
 func strVal(s *string) string {
 	if s == nil {
 		return ""

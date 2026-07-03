@@ -349,6 +349,14 @@ type Querier interface {
 	ListProjectsForUserBrief(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserBriefRow, error)
 	// Public list — lightweight, no author info (mirrors BlogPostListSerializer).
 	ListPublishedBlogPosts(ctx context.Context, arg ListPublishedBlogPostsParams) ([]BlogPost, error)
+	// Owner-scoped list of every release's service_id that still has a live k8s
+	// deployment (any status — Stop is idempotent so an already-stopped/failed
+	// row's stale service_id is harmless to also pass through) for a project.
+	// Used by project.Usecase.Delete to tear down every release's Deployment
+	// (+ its -env Secret/-flow ConfigMap/bot-<uuid> Service) BEFORE the project
+	// disappears behind deleted_at — after that point GetDebugForOwner/
+	// ListReleasesForProject can no longer see the project's rows at all.
+	ListReleaseServiceIDsForOwner(ctx context.Context, arg ListReleaseServiceIDsForOwnerParams) ([]*string, error)
 	ListReleasesForProject(ctx context.Context, arg ListReleasesForProjectParams) ([]Relase, error)
 	ListReleasesForProjectAdmin(ctx context.Context, projectID uuid.UUID) ([]Relase, error)
 	ListResources(ctx context.Context, arg ListResourcesParams) ([]Resource, error)

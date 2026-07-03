@@ -128,6 +128,12 @@ type CreateCollectionInput struct {
 	Slug         string
 	Description  string
 	PrimaryField string
+	// System marks an undeletable, engine-managed schema (Django's
+	// Collection.system, set by core/apps/cms/services/system_collections.py
+	// for the `users`/`chat` collections). The public HTTP create handler
+	// never sets this — only internal provisioning (project.Usecase.Create)
+	// does, via the cms.Usecase — so it can never be forged by a caller.
+	System bool
 }
 
 // UpdateCollectionInput carries optional fields; nil pointers are unchanged.
