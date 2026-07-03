@@ -92,6 +92,17 @@ func (u *Usecase) SetMessageID(ctx context.Context, codeID uuid.UUID, messageID 
 	return nil
 }
 
+// CleanupExpiredCodes purges authbot_codes rows nobody ever redeemed. Called
+// by the scheduler (internal/shared/scheduler), not an HTTP route. Returns
+// the number of rows removed.
+func (u *Usecase) CleanupExpiredCodes(ctx context.Context) (int64, error) {
+	n, err := u.repo.DeleteExpiredCodes(ctx)
+	if err != nil {
+		return 0, httpx.Internal(err)
+	}
+	return n, nil
+}
+
 // Login exchanges a one-time code for app JWT tokens (Django: LoginView).
 // The code is consumed (deleted) on success so it cannot be replayed.
 func (u *Usecase) Login(ctx context.Context, code string) (LoginResult, error) {

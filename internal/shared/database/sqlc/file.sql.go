@@ -154,6 +154,47 @@ func (q *Queries) CreateResource(ctx context.Context, arg CreateResourceParams) 
 	return i, err
 }
 
+const deleteExpiredFiles = `-- name: DeleteExpiredFiles :many
+DELETE FROM file
+WHERE expires_at IS NOT NULL AND expires_at < NOW()
+RETURNING id, uuid, project_id, user_id, file_path, original_name, filesize, filetype, expires_at, created_at, updated_at
+`
+
+// Ports Django's cleanup_expired_files beat task: a single DELETE...RETURNING
+// so the caller can unlink each blob from disk without a separate
+// select-then-delete race window.
+func (q *Queries) DeleteExpiredFiles(ctx context.Context) ([]File, error) {
+	rows, err := q.db.Query(ctx, deleteExpiredFiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []File{}
+	for rows.Next() {
+		var i File
+		if err := rows.Scan(
+			&i.ID,
+			&i.Uuid,
+			&i.ProjectID,
+			&i.UserID,
+			&i.FilePath,
+			&i.OriginalName,
+			&i.Filesize,
+			&i.Filetype,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteFileByUUIDForOwner = `-- name: DeleteFileByUUIDForOwner :one
 DELETE FROM file
 WHERE file.uuid = $1

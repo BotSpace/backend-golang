@@ -130,6 +130,26 @@ func (r *fakeRepo) StopActiveReleasesExcept(_ context.Context, projectID, exclud
 	return stopped, nil
 }
 
+func (r *fakeRepo) ListNonTerminalReleases(_ context.Context) ([]Release, error) {
+	var out []Release
+	for _, rel := range r.releases {
+		if rel.ServiceID != "" && (rel.Status == StatusPending || rel.Status == StatusInitializing) {
+			out = append(out, *rel)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ListNonTerminalDebugs(_ context.Context) ([]Debug, error) {
+	var out []Debug
+	for _, dbg := range r.debugs {
+		if dbg.ServiceID != "" && (dbg.Status == StatusPending || dbg.Status == StatusInitializing) {
+			out = append(out, *dbg)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeRepo) GetDebugForOwner(_ context.Context, projectID, ownerID uuid.UUID) (*Debug, error) {
 	dbg, ok := r.debugs[projectID]
 	if !ok || !r.owns(projectID, ownerID) {
@@ -257,6 +277,10 @@ type fakeOrchestrator struct {
 	deployed []engine.DeploySpec
 	stopped  []string
 	status   engine.Status
+	// byService overrides status for a specific serviceID — lets a single
+	// test give different live services different outcomes (e.g. one
+	// running, one vanished/failed) without a second orchestrator instance.
+	byService map[string]engine.Status
 }
 
 func newFakeOrchestrator() *fakeOrchestrator {
@@ -273,7 +297,10 @@ func (f *fakeOrchestrator) Stop(_ context.Context, serviceID string) error {
 	return nil
 }
 
-func (f *fakeOrchestrator) Status(context.Context, string) (engine.Status, error) {
+func (f *fakeOrchestrator) Status(_ context.Context, serviceID string) (engine.Status, error) {
+	if s, ok := f.byService[serviceID]; ok {
+		return s, nil
+	}
 	return f.status, nil
 }
 
@@ -380,6 +407,76 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 	}
 	if got2.Status != StatusFailed {
 		t.Fatalf("expected vanished deployment to resolve to failed, got %s", got2.Status)
+	}
+}
+
+// TestReconcileAll ports Django's cleanup_failed_releases beat task: the
+// scheduler tick must sweep every non-terminal release/debug system-wide
+// (not just ones a user happens to poll), persist reconciled statuses, and
+// stop the orchestrator resources of anything that turns out failed.
+func TestReconcileAll(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	orch.status = engine.StatusInitializing // Deploy() reports this at create time
+	uc := NewUsecase(repo, orch)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectA := repo.addProject(ownerID, json.RawMessage(`[]`))
+	projectB := repo.addProject(ownerID, json.RawMessage(`[]`))
+
+	relRunning, err := uc.CreateRelease(ctx, projectA, ownerID)
+	if err != nil {
+		t.Fatalf("create release A: %v", err)
+	}
+	relCrashed, err := uc.CreateRelease(ctx, projectB, ownerID)
+	if err != nil {
+		t.Fatalf("create release B: %v", err)
+	}
+
+	// The two releases now resolve differently: A's pod came up, B's never did.
+	orch.byService = map[string]engine.Status{
+		relRunning.ServiceID: engine.StatusRunning,
+		relCrashed.ServiceID: engine.StatusStopped, // vanished -> failed
+	}
+
+	reconciled, failedAndStopped, err := uc.ReconcileAll(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileAll: %v", err)
+	}
+	if reconciled != 2 {
+		t.Fatalf("expected 2 rows reconciled, got %d", reconciled)
+	}
+	if failedAndStopped != 1 {
+		t.Fatalf("expected 1 row resolved to failed+stopped, got %d", failedAndStopped)
+	}
+
+	gotRunning, err := uc.GetRelease(ctx, relRunning.ID, ownerID)
+	if err != nil || gotRunning.Status != StatusRunning {
+		t.Fatalf("expected release A running, got %v (err=%v)", gotRunning, err)
+	}
+	gotCrashed, err := uc.GetRelease(ctx, relCrashed.ID, ownerID)
+	if err != nil || gotCrashed.Status != StatusFailed {
+		t.Fatalf("expected release B failed, got %v (err=%v)", gotCrashed, err)
+	}
+
+	found := false
+	for _, sid := range orch.stopped {
+		if sid == relCrashed.ServiceID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected orchestrator.Stop called for the failed release, got %v", orch.stopped)
+	}
+
+	// A second tick is a no-op: both rows are now terminal.
+	reconciled2, failedAndStopped2, err := uc.ReconcileAll(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileAll (2nd tick): %v", err)
+	}
+	if reconciled2 != 0 || failedAndStopped2 != 0 {
+		t.Fatalf("expected second tick to be a no-op, got reconciled=%d failed=%d", reconciled2, failedAndStopped2)
 	}
 }
 
