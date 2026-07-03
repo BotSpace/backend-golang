@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -56,6 +57,11 @@ type Usecase interface {
 
 	// Orders / purchase.
 	CreateOrder(ctx context.Context, userID, templateID uuid.UUID) (*Order, error)
+	// ResolveForProjectCreate is the project module's entry point for
+	// "create a project from a template" (project.Usecase.CreateFromTemplate
+	// depends on this via project.TemplateResolver) — see its doc comment in
+	// usecase_order.go for the full purchase-check/flow-fallback semantics.
+	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error)
 	GetOrder(ctx context.Context, id, ownerID uuid.UUID) (*Order, error)
 	ListOrders(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]Order, int64, error)
 	PayOrder(ctx context.Context, id, buyerID uuid.UUID) (*Order, error)

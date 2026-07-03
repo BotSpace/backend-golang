@@ -173,11 +173,28 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
 	}
 
+	// release / environment / debug — deploys via the engine orchestrator.
+	// Built ahead of the project module below so
+	// project.Usecase.CreateFromTemplate can apply envs + deploy the first
+	// release/debug container through it (nil would just mean
+	// CreateFromTemplate skips that deploy step, same degrade-gracefully
+	// convention as cmsUC above).
+	releaseUC := release.NewUsecase(release.NewPostgresRepository(s.pool), orch)
+	release.RegisterRoutes(v1, release.NewHandler(releaseUC), tokens)
+
+	// template marketplace. Built ahead of the project module below so
+	// project.Usecase.CreateFromTemplate can resolve+purchase-check a
+	// template's flow through it.
+	templateUC := template.NewUsecase(template.NewPostgresRepository(s.pool))
+	template.RegisterRoutes(v1, template.NewHandler(templateUC), tokens)
+
 	// project module — owner-scoped CRUD, requires auth. orch is passed so
 	// Get can live-reconcile the nested debug status (see project.usecase.Get
 	// / release status parity fix) and Delete can stop running containers;
-	// cmsUC lets Create provision default system CMS collections.
-	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch, cmsUC)
+	// cmsUC lets Create provision default system CMS collections; templateUC/
+	// releaseUC let CreateFromTemplate resolve a template and deploy the
+	// resulting project.
+	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC)
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
@@ -205,17 +222,9 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	fileUC := file.NewUsecase(file.NewPostgresRepository(s.pool))
 	file.RegisterRoutes(v1, file.NewHandler(fileUC), tokens)
 
-	// release / environment / debug — deploys via the engine orchestrator.
-	releaseUC := release.NewUsecase(release.NewPostgresRepository(s.pool), orch)
-	release.RegisterRoutes(v1, release.NewHandler(releaseUC), tokens)
-
 	// module/plugin catalog + per-project modules.
 	pluginUC := plugin.NewUsecase(plugin.NewPostgresRepository(s.pool), orch, plugin.NewHTTPManifestFetcher(), nil)
 	plugin.RegisterRoutes(v1, plugin.NewHandler(pluginUC), tokens)
-
-	// template marketplace.
-	templateUC := template.NewUsecase(template.NewPostgresRepository(s.pool))
-	template.RegisterRoutes(v1, template.NewHandler(templateUC), tokens)
 
 	// payment — orders, transactions, withdrawals, Click/Payme webhooks.
 	paymentUC := payment.NewUsecase(payment.NewPostgresRepository(s.pool), payment.NewNoopNotifier())

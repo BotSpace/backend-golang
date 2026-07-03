@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -31,6 +32,81 @@ func (u *usecase) CreateOrder(ctx context.Context, userID, templateID uuid.UUID)
 		return nil, httpx.Internal(err)
 	}
 	return o, nil
+}
+
+// ResolveForProjectCreate ports the template/purchase resolution half of
+// ProjectView.create_from_template (core/apps/api/views/project.py:446-470):
+// load a verified template by id (UUID) or slug, require the buyer to
+// already hold a PAID order for it, and return the flow JSON to seed a new
+// project with.
+//
+// The purchase check is unconditional — Django requires an existing
+// TemplateOrderModel row with payment_status=True for EVERY template,
+// including free ones (price 0). A free template's order is auto-created and
+// immediately confirmed by CreateOrder (mirrors TemplateOrderView.create),
+// which the dashboard's OrderButton already calls before it shows the
+// "create project" action — so this never blocks a legitimate free-template
+// flow, it only rejects a create-from-template call that skipped ordering
+// entirely (or a paid template that was never actually paid for).
+//
+// Flow resolution mirrors Django's fallback: spec.flow when the template has
+// a spec snapshot, else the linked project's legacy flow (empty/missing
+// either way normalizes to the empty-graph default via normalizeFlow, same
+// as the internal RAG feed).
+func (u *usecase) ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error) {
+	var t *Template
+	var err error
+	if id, perr := uuid.Parse(idOrSlug); perr == nil {
+		t, err = u.repo.GetByID(ctx, id)
+	} else {
+		t, err = u.repo.GetBySlug(ctx, idOrSlug)
+	}
+	if err != nil {
+		return nil, mapNoRowsHTTP(err)
+	}
+	if !t.IsVerify {
+		return nil, httpx.NotFound("template.not_found", "template not found")
+	}
+
+	order, err := u.repo.GetOrderForUserAndTemplate(ctx, buyerID, t.ID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.BadRequest("template.not_purchased", "template not purchased")
+		}
+		return nil, httpx.Internal(err)
+	}
+	if !order.PaymentStatus {
+		return nil, httpx.BadRequest("template.not_purchased", "template not purchased")
+	}
+
+	flow := extractSpecFlow(t.Spec)
+	if len(flow) == 0 && t.ProjectID != nil {
+		if raw, ferr := u.repo.GetProjectFlow(ctx, *t.ProjectID); ferr == nil {
+			flow = raw
+		}
+	}
+	return normalizeFlow(flow), nil
+}
+
+// extractSpecFlow pulls the "flow" key out of a template's spec JSONB
+// snapshot (see template_spec.py::build_spec_from_project), returning nil
+// when the spec is empty/has no flow — the caller falls back to the linked
+// project's legacy flow in that case.
+func extractSpecFlow(spec json.RawMessage) json.RawMessage {
+	if len(spec) == 0 {
+		return nil
+	}
+	var wrapper struct {
+		Flow json.RawMessage `json:"flow"`
+	}
+	if err := json.Unmarshal(spec, &wrapper); err != nil {
+		return nil
+	}
+	trimmed := skipJSONWhitespace(wrapper.Flow)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil
+	}
+	return wrapper.Flow
 }
 
 func (u *usecase) GetOrder(ctx context.Context, id, ownerID uuid.UUID) (*Order, error) {

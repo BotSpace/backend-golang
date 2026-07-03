@@ -432,6 +432,13 @@ type Repository interface {
 
 	// Orders / purchase.
 	GetOrCreateOrder(ctx context.Context, userID, templateID uuid.UUID) (*Order, error)
+	// GetOrderForUserAndTemplate is a side-effect-free lookup (unlike
+	// GetOrCreateOrder) — returns database.ErrNotFound when the buyer has
+	// never ordered this template. Used by ResolveForProjectCreate to
+	// replicate Django's `TemplateOrderModel.objects.filter(...).first()`
+	// purchase check without accidentally creating a pending order for a
+	// template the buyer never actually ordered.
+	GetOrderForUserAndTemplate(ctx context.Context, userID, templateID uuid.UUID) (*Order, error)
 	GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Order, error)
 	ListOrdersForOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]Order, error)
 	CountOrdersForOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)

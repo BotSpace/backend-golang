@@ -77,6 +77,26 @@ type CreateRequest struct {
 	Token string `json:"token" validate:"omitempty,max=255"`
 }
 
+// CreateFromTemplateRequest is the body for
+// POST /projects/create-from-template — mirrors Django's
+// CreateProjectFromTemplate serializer (core/apps/api/serializers/project/
+// project.py) and the dashboard's ProjectsAPI.createFromTemplate payload
+// shape (services.ts). ManagedBotID and Credentials are accepted (so a
+// client sending the full dashboard body doesn't get a 400 for unknown
+// fields) but not wired yet — see project.Usecase.CreateFromTemplate's doc
+// comment for why, and Handler.CreateFromTemplate for the explicit error a
+// non-empty ManagedBotID gets instead of being silently ignored.
+type CreateFromTemplateRequest struct {
+	// Template is the template's id (UUID) or slug.
+	Template     string            `json:"template" validate:"required"`
+	Name         string            `json:"name" validate:"required,min=1,max=255"`
+	Token        string            `json:"token" validate:"omitempty,max=255"`
+	ManagedBotID string            `json:"managed_bot_id" validate:"omitempty"`
+	Mode         string            `json:"mode" validate:"omitempty,oneof=release debug"`
+	Envs         map[string]string `json:"envs"`
+	Credentials  map[string]any    `json:"credentials"`
+}
+
 type UpdateRequest struct {
 	Name        *string         `json:"name" validate:"omitempty,min=1,max=255"`
 	Description *string         `json:"description" validate:"omitempty,max=5000"`
