@@ -18,5 +18,13 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler) {
 		g.POST("/code", h.IssueCode)
 		g.PATCH("/codes/:id/message-id", h.SetMessageID)
 		g.POST("/login", h.Login)
+		// Telegram calls this directly (Django: authbot.urls "webhook/",
+		// path("webhook/", ...)). Registered both with and without the
+		// trailing slash instead of relying on gin's RedirectTrailingSlash
+		// (308) — Telegram's webhook caller is not guaranteed to follow
+		// redirects. setWebhook must point at the root-mounted
+		// /authbot/webhook/ (see server.go's dual RegisterRoutes call).
+		g.POST("/webhook", h.Webhook)
+		g.POST("/webhook/", h.Webhook)
 	}
 }

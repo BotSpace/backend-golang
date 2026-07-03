@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/botspace/backend/internal/modules/administration"
@@ -268,7 +269,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		userUC,
 		authbotTokenAdapter{tokens: tokens, store: refreshStore},
 	)
-	authbotHandler := authbot.NewHandler(authbotUC)
+	// The Telegram Bot API client backing POST /authbot/webhook/ (Django:
+	// management.commands.base.bot, built from env BOT_TOKEN — this backend
+	// now runs the botmother_authbot bot logic itself instead of Django).
+	authbotHandler := authbot.NewHandler(authbotUC, authbot.NewHTTPBotAPI(os.Getenv("BOT_TOKEN")))
 	authbot.RegisterRoutes(&s.router.RouterGroup, authbotHandler)
 	authbot.RegisterRoutes(v1, authbotHandler)
 

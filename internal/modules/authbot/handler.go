@@ -10,11 +10,16 @@ import (
 )
 
 type Handler struct {
-	uc *Usecase
+	uc  *Usecase
+	bot BotAPI
 }
 
-func NewHandler(uc *Usecase) *Handler {
-	return &Handler{uc: uc}
+// NewHandler wires the authbot HTTP handlers. bot is the Telegram Bot API
+// client used only by Webhook (IssueCode/SetMessageID/Login don't need it);
+// pass NewHTTPBotAPI(os.Getenv("BOT_TOKEN")) in production, a fake BotAPI in
+// tests.
+func NewHandler(uc *Usecase, bot BotAPI) *Handler {
+	return &Handler{uc: uc, bot: bot}
 }
 
 // bind decodes and validates a JSON body, writing the error response itself.
@@ -108,4 +113,22 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, http.StatusOK, toLoginResponse(result))
+}
+
+// Webhook godoc
+// @Summary      Telegram webhook for the botmother_authbot login bot
+// @Description  Called by Telegram itself (not a client of this API). Unauthenticated, matching Django's TelegramWebhookView (AllowAny, no secret token check). Always acks 200 so Telegram doesn't retry-storm a transient failure; errors are logged and, where Django did the same, echoed back to the chat.
+// @Tags         authbot
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Router       /authbot/webhook [post]
+func (h *Handler) Webhook(c *gin.Context) {
+	var update TelegramUpdate
+	if err := c.ShouldBindJSON(&update); err != nil {
+		httpx.Error(c, httpx.BadRequest("authbot.malformed_update", "invalid telegram update"))
+		return
+	}
+	h.processUpdate(c.Request.Context(), update)
+	httpx.OK(c, http.StatusOK, gin.H{"status": "ok"})
 }
