@@ -302,8 +302,11 @@ func TestOAuthStart_HappyPath(t *testing.T) {
 	if got := q.Get("client_id"); got != "test-client-id" {
 		t.Fatalf("client_id = %q, want test-client-id", got)
 	}
-	if got := q.Get("redirect_uri"); got != oauthCallbackURL("google") {
-		t.Fatalf("redirect_uri = %q, want %q", got, oauthCallbackURL("google"))
+	if got := q.Get("redirect_uri"); got != oauthCallbackURL("", "google") {
+		t.Fatalf("redirect_uri = %q, want %q", got, oauthCallbackURL("", "google"))
+	}
+	if got := q.Get("redirect_uri"); got != "https://api.botspace.uz/api/v2/credentials/oauth/google/callback/" {
+		t.Fatalf("redirect_uri = %q, want the /api/v2/.../callback/ form", got)
 	}
 	if got := q.Get("response_type"); got != "code" {
 		t.Fatalf("response_type = %q, want code", got)

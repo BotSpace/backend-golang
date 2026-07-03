@@ -44,6 +44,24 @@ type GoogleConfig struct {
 	// disables the "google" OAuth provider (start returns a config error).
 	OAuthClientID     string `mapstructure:"oauth_client_id"`
 	OAuthClientSecret string `mapstructure:"oauth_client_secret"`
+
+	// OAuthCallbackBase is the public API origin used to build the OAuth2
+	// redirect_uri (both the one sent to Google's authorize endpoint in
+	// OAuthStart and the one resent to Google's token endpoint in the
+	// callback's code exchange — they must match byte-for-byte). The path
+	// is always "/api/v2/credentials/oauth/{provider}/callback/" (NOT
+	// /api/v1) so a browser hitting it round-trips through the prod
+	// gateway's /api/v2 -> /api/v1 rewrite and lands back on this backend.
+	// Set via APP_GOOGLE_OAUTH_CALLBACK_BASE; defaults to
+	// "https://api.botspace.uz" (prod) if empty.
+	OAuthCallbackBase string `mapstructure:"oauth_callback_base"`
+
+	// OAuthPanelURL is the dashboard/admin panel origin the callback's tiny
+	// HTML response links back to and postMessages to (window.opener) —
+	// mirrors Django's OAuthCallbackView _PANEL_URL constant. Set via
+	// APP_GOOGLE_OAUTH_PANEL_URL; defaults to "https://admin.botspace.uz" if
+	// empty.
+	OAuthPanelURL string `mapstructure:"oauth_panel_url"`
 }
 
 // EngineConfig controls how bot engines (release/debug containers + shared
@@ -190,6 +208,7 @@ func Load() (*Config, error) {
 	// lost. Bind them explicitly. (viper gotcha: nested struct + AutomaticEnv.)
 	for _, key := range []string{
 		"google.client_id", "google.oauth_client_id", "google.oauth_client_secret",
+		"google.oauth_callback_base", "google.oauth_panel_url",
 		"crypto.key", "internal.token",
 		"engine.mode", "engine.image_repository", "engine.image_tag",
 		"engine.redis_host", "engine.redis_port", "engine.redis_password",
@@ -270,9 +289,11 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("log.level", "info")
 
-	v.SetDefault("google.client_id", "")           // APP_GOOGLE_CLIENT_ID — unset disables /auth/google
-	v.SetDefault("google.oauth_client_id", "")     // APP_GOOGLE_OAUTH_CLIENT_ID — unset disables credential oauth "google" provider
-	v.SetDefault("google.oauth_client_secret", "") // APP_GOOGLE_OAUTH_CLIENT_SECRET
+	v.SetDefault("google.client_id", "")                                  // APP_GOOGLE_CLIENT_ID — unset disables /auth/google
+	v.SetDefault("google.oauth_client_id", "")                            // APP_GOOGLE_OAUTH_CLIENT_ID — unset disables credential oauth "google" provider
+	v.SetDefault("google.oauth_client_secret", "")                        // APP_GOOGLE_OAUTH_CLIENT_SECRET
+	v.SetDefault("google.oauth_callback_base", "https://api.botspace.uz") // APP_GOOGLE_OAUTH_CALLBACK_BASE
+	v.SetDefault("google.oauth_panel_url", "https://admin.botspace.uz")   // APP_GOOGLE_OAUTH_PANEL_URL
 
 	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
 	v.SetDefault("engine.namespace", "botmother")

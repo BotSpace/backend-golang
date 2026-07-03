@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// This file ports django.core.signing's TimestampSigner byte-for-byte so a
-// state token this backend mints in OAuthStart can be verified by Django's
-// UNPORTED OAuthCallbackView (core/apps/credentials/views/oauth.py) —
-// Google's registered redirect_uri is the hardcoded
-// "https://api.botspace.uz/api/v1/credentials/oauth/{provider}/callback/"
-// (apps/credentials/services/oauth.py CALLBACK_URL), which is NOT under
-// /api/v2, so it always lands on Django regardless of which backend served
-// /start. Both sides therefore MUST agree on the exact signing algorithm.
+// This file ports django.core.signing's TimestampSigner byte-for-byte. Both
+// OAuthStart (mints the state) and OAuthCallback (verifies it) now live on
+// this backend, but the algorithm stays Django-signing-compatible on
+// purpose: the signing key is DJANGO_SECRET_KEY (see usecase.go's
+// oauthStateSecret), shared with the still-live Django deployment, and a
+// state token minted moments before this endpoint's redirect_uri changed
+// (or by any other caller still assuming Django's callback) must still
+// verify correctly here.
 //
 // Verified against a known-answer vector generated with Django 5.2.9's
 // django.core.signing.TimestampSigner (see oauth_state_test.go) — do not
@@ -44,9 +44,9 @@ func signState(secretKey, userID, typeKey, nonce string) string {
 	return timestamped + stateSep + djangoSignature(secretKey, timestamped)
 }
 
-// verifyState ports verify_state — used only by tests here (the actual
-// callback stays on Django), kept so the signing round-trips and drifts get
-// caught by CI rather than discovered live against Google's redirect.
+// verifyState ports verify_state — called by OAuthCallback (usecase.go) on
+// every Google redirect, and directly by tests so signing round-trips and
+// drifts get caught by CI rather than discovered live against Google.
 func verifyState(secretKey, state string, maxAge time.Duration) (userID, typeKey string, err error) {
 	lastSep := strings.LastIndex(state, stateSep)
 	if lastSep < 0 {
