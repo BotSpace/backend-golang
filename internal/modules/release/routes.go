@@ -21,6 +21,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		relase.POST("", h.CreateRelease)
 		relase.GET("/:id", h.GetRelease)
 		relase.GET("/:id/stop", h.StopRelease)
+		relase.GET("/:id/logs", h.GetReleaseLogs)
 
 		env := g.Group("/enviroment")
 		env.GET("", h.ListEnvironments)
@@ -31,5 +32,6 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		debug.GET("/debug", h.StartDebug)
 		debug.GET("/debug/stop", h.StopDebug)
 		debug.GET("/info", h.GetDebug)
+		debug.GET("/debug/logs", h.GetDebugLogs)
 	}
 }
