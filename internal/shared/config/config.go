@@ -177,6 +177,7 @@ func Load() (*Config, error) {
 		"google.client_id",
 		"crypto.key", "internal.token",
 		"engine.mode", "engine.image_repository", "engine.image_tag",
+		"engine.redis_host", "engine.redis_port", "engine.redis_password",
 	} {
 		_ = v.BindEnv(key)
 	}
