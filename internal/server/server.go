@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/botspace/backend/internal/modules/administration"
 	"github.com/botspace/backend/internal/modules/auth"
@@ -12,6 +14,7 @@ import (
 	"github.com/botspace/backend/internal/modules/cms"
 	adminconfig "github.com/botspace/backend/internal/modules/config"
 	"github.com/botspace/backend/internal/modules/credential"
+	debugmod "github.com/botspace/backend/internal/modules/debug"
 	"github.com/botspace/backend/internal/modules/file"
 	"github.com/botspace/backend/internal/modules/kyc"
 	"github.com/botspace/backend/internal/modules/message"
@@ -31,6 +34,7 @@ import (
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/logger"
 	"github.com/botspace/backend/internal/shared/middleware"
+	"github.com/botspace/backend/internal/shared/redisq"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -234,14 +238,94 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	if err != nil {
 		s.log.Warn("mongo unavailable — cms routes disabled", logger.Err(err))
 	} else {
-		cmsUC := cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient))
+		cmsUC := cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient), s.cfg.Engine.MongoDBName)
 		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
 	}
+
+	// debug — persisted flow/node error events (see internal/modules/debug).
+	// Read side (GET /api/v1/debug/errors) is owner-scoped HTTP; the write
+	// side is the redisq consumer wired below, not an HTTP endpoint (engine
+	// -> backend writes are Redis Stream events, not internal HTTP POSTs —
+	// see docs/redis-stream-events.md).
+	debugUC := debugmod.NewUsecase(debugmod.NewPostgresRepository(s.pool))
+	debugmod.RegisterRoutes(v1, debugmod.NewHandler(debugUC), tokens)
 
 	// websocket module — hub runs until ctx is cancelled.
 	hub := ws.NewHub()
 	go hub.Run(ctx)
 	ws.RegisterRoutes(v1, ws.NewHandler(hub, tokens, s.cfg.HTTP.CORSOrigins))
+
+	// Redis Stream consumer — engine-golang -> backend WRITE path (bot-user
+	// upsert, flow/debug errors, token usage, ...). Reuses the same
+	// engine.redis_host/port/password config already used to inject
+	// REDIS_ADDR into release/debug engine pods, since it's the exact same
+	// Redis. Skipped (not fatal) when Redis isn't reachable, same defensive
+	// pattern as the Mongo/Kubernetes wiring above — see
+	// docs/redis-stream-events.md for the full contract.
+	s.startEventConsumer(ctx, debugUC)
+}
+
+const (
+	eventsStreamName = "backend:events"
+	eventsGroupName  = "backend-golang"
+)
+
+// startEventConsumer runs the redisq consumer in a background goroutine
+// until ctx is cancelled. See docs/redis-stream-events.md for the event
+// contract (XADD shape, registered "task" names, JSON args per task).
+func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase) {
+	addr := s.cfg.Engine.RedisAddr()
+	if addr == "" {
+		s.log.Warn("redisq: engine.redis_host not configured — engine event consumer disabled")
+		return
+	}
+	consumer := redisq.NewConsumer(addr, s.cfg.Engine.RedisPassword, eventsStreamName, eventsGroupName, "backend-1", s.log)
+
+	consumer.Register("debug.error_event", func(ctx context.Context, args json.RawMessage) error {
+		var payload debugErrorEventPayload
+		if err := json.Unmarshal(args, &payload); err != nil {
+			return fmt.Errorf("decode debug.error_event: %w", err)
+		}
+		var eventTS *time.Time
+		if payload.TS != 0 {
+			t := time.Unix(payload.TS, 0).UTC()
+			eventTS = &t
+		}
+		return debugUC.RecordError(ctx, debugmod.RecordErrorInput{
+			ProjectRef: payload.ProjectID,
+			ChatID:     payload.ChatID,
+			NodeID:     payload.NodeID,
+			NodeType:   payload.NodeType,
+			Level:      payload.Level,
+			Message:    payload.Message,
+			Detail:     payload.Detail,
+			EventTS:    eventTS,
+		})
+	})
+
+	go func() {
+		s.log.Info("redisq: engine event consumer starting",
+			logger.String("stream", eventsStreamName), logger.String("group", eventsGroupName))
+		if err := consumer.Run(ctx); err != nil && ctx.Err() == nil {
+			s.log.Error("redisq: consumer stopped", logger.Err(err))
+		}
+		_ = consumer.Close()
+	}()
+}
+
+// debugErrorEventPayload is the "args" shape for the "debug.error_event"
+// redis stream task — see docs/redis-stream-events.md. project_id is the
+// engine's raw project reference (Django legacy int pk as a string, or
+// Django project.uuid), resolved server-side by debug.Usecase.ResolveProjectRef.
+type debugErrorEventPayload struct {
+	ProjectID string `json:"project_id"`
+	ChatID    int64  `json:"chat_id"`
+	NodeID    string `json:"node_id"`
+	NodeType  string `json:"node_type"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+	Detail    string `json:"detail"`
+	TS        int64  `json:"ts"`
 }
 
 // buildOrchestrator picks the engine.Orchestrator implementation: the real

@@ -73,6 +73,16 @@ type Usecase interface {
 	CountDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, filter map[string]any) (int64, error)
 	UpdateDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string, patch map[string]any) (map[string]any, error)
 	DeleteDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string) error
+	// RestoreDocument undoes a soft-delete (Django's restore()).
+	RestoreDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string) error
+	// InsertDocuments bulk-inserts, each validated against the schema
+	// independently; the whole batch is rejected (no partial insert) if any
+	// document fails validation, since Mongo's insertMany has no
+	// transactional rollback across a shared collection here.
+	InsertDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, docs []map[string]any) ([]map[string]any, error)
+	// AggregateDocuments runs a caller-supplied pipeline, mandatorily scoped
+	// to this project's tenant + alive documents (see mongo.go Aggregate).
+	AggregateDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, pipeline []map[string]any, limit int64) ([]map[string]any, error)
 
 	CreateExportTask(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string) (*ExportTask, error)
 	GetExportTask(ctx context.Context, ownerID, taskID uuid.UUID) (*ExportTask, error)
@@ -81,12 +91,19 @@ type Usecase interface {
 type usecase struct {
 	repo Repository
 	docs DocumentRepository
+	// sharedDBName is the single Mongo database every project's documents
+	// live in (Django's CMS_SHARED_DB / botspace_cms). Empty falls back to
+	// "botspace_cms" — see resolveMongoTenant.
+	sharedDBName string
 }
 
 // NewUsecase wires the Postgres schema repository and the Mongo document
-// repository behind a single owner-scoped API.
-func NewUsecase(repo Repository, docs DocumentRepository) Usecase {
-	return &usecase{repo: repo, docs: docs}
+// repository behind a single owner-scoped API. sharedDBName is the shared
+// CMS Mongo database name (config: engine.mongo_db_name / APP_ENGINE_MONGO_DB_NAME,
+// default "botspace_cms") — the same database Django and the deployed engine
+// pods use, so dashboard reads/writes see the exact same documents.
+func NewUsecase(repo Repository, docs DocumentRepository, sharedDBName string) Usecase {
+	return &usecase{repo: repo, docs: docs, sharedDBName: sharedDBName}
 }
 
 // ── Collection ───────────────────────────────────────────────────────────
@@ -158,14 +175,15 @@ func (u *usecase) DeleteCollection(ctx context.Context, ownerID, projectID uuid.
 	if err := u.repo.DeleteCollection(ctx, ownerID, coll.ID); err != nil {
 		return mapNotFound(err, "cms.collection_not_found", "collection not found")
 	}
-	// Best-effort: drop the Mongo collection so no orphaned documents linger.
-	// The schema row is already gone at this point, so a Mongo hiccup here
-	// does not leave Postgres/Mongo inconsistent from the caller's view.
-	dbName, err := u.resolveMongoDB(ctx, ownerID, projectID)
+	// Best-effort: drop this project's documents from the shared Mongo
+	// collection so no orphaned documents linger. The schema row is already
+	// gone at this point, so a Mongo hiccup here does not leave
+	// Postgres/Mongo inconsistent from the caller's view.
+	dbName, tenant, err := u.resolveMongoTenant(ctx, ownerID, projectID)
 	if err != nil {
 		return nil
 	}
-	_ = u.docs.DropCollection(ctx, dbName, coll.Slug)
+	_ = u.docs.DropCollection(ctx, dbName, coll.Slug, tenant)
 	return nil
 }
 
@@ -280,7 +298,7 @@ func (u *usecase) RemoveField(ctx context.Context, ownerID, projectID uuid.UUID,
 // ── Document ─────────────────────────────────────────────────────────────
 
 func (u *usecase) InsertDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, doc map[string]any) (map[string]any, error) {
-	coll, fields, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, fields, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -288,10 +306,10 @@ func (u *usecase) InsertDocument(ctx context.Context, ownerID, projectID uuid.UU
 	if verrs != nil {
 		return nil, &DocValidationError{Fields: verrs}
 	}
-	if err := u.checkRelations(ctx, ownerID, dbName, fields, clean); err != nil {
+	if err := u.checkRelations(ctx, ownerID, dbName, tenant, fields, clean); err != nil {
 		return nil, err
 	}
-	id, err := u.docs.InsertOne(ctx, dbName, coll.Slug, clean)
+	id, err := u.docs.InsertOne(ctx, dbName, coll.Slug, tenant, clean)
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
@@ -300,11 +318,11 @@ func (u *usecase) InsertDocument(ctx context.Context, ownerID, projectID uuid.UU
 }
 
 func (u *usecase) FindDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, q DocumentQuery) (DocumentList, error) {
-	coll, _, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return DocumentList{}, err
 	}
-	list, err := u.docs.Find(ctx, dbName, coll.Slug, q)
+	list, err := u.docs.Find(ctx, dbName, coll.Slug, tenant, q)
 	if err != nil {
 		return DocumentList{}, httpx.Internal(err)
 	}
@@ -312,11 +330,11 @@ func (u *usecase) FindDocuments(ctx context.Context, ownerID, projectID uuid.UUI
 }
 
 func (u *usecase) FindOneDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string) (map[string]any, error) {
-	coll, _, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := u.docs.FindOne(ctx, dbName, coll.Slug, docID, false)
+	doc, err := u.docs.FindOne(ctx, dbName, coll.Slug, tenant, docID, false)
 	if errors.Is(err, database.ErrNotFound) {
 		return nil, httpx.NotFound("cms.document_not_found", "document not found")
 	}
@@ -327,11 +345,11 @@ func (u *usecase) FindOneDocument(ctx context.Context, ownerID, projectID uuid.U
 }
 
 func (u *usecase) CountDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, filter map[string]any) (int64, error) {
-	coll, _, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return 0, err
 	}
-	n, err := u.docs.Count(ctx, dbName, coll.Slug, filter, false)
+	n, err := u.docs.Count(ctx, dbName, coll.Slug, tenant, filter, false)
 	if err != nil {
 		return 0, httpx.Internal(err)
 	}
@@ -339,7 +357,7 @@ func (u *usecase) CountDocuments(ctx context.Context, ownerID, projectID uuid.UU
 }
 
 func (u *usecase) UpdateDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string, patch map[string]any) (map[string]any, error) {
-	coll, fields, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, fields, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -347,10 +365,10 @@ func (u *usecase) UpdateDocument(ctx context.Context, ownerID, projectID uuid.UU
 	if verrs != nil {
 		return nil, &DocValidationError{Fields: verrs}
 	}
-	if err := u.checkRelations(ctx, ownerID, dbName, fields, clean); err != nil {
+	if err := u.checkRelations(ctx, ownerID, dbName, tenant, fields, clean); err != nil {
 		return nil, err
 	}
-	doc, err := u.docs.UpdateOne(ctx, dbName, coll.Slug, docID, clean)
+	doc, err := u.docs.UpdateOne(ctx, dbName, coll.Slug, tenant, docID, clean)
 	if errors.Is(err, database.ErrNotFound) {
 		return nil, httpx.NotFound("cms.document_not_found", "document not found")
 	}
@@ -361,11 +379,11 @@ func (u *usecase) UpdateDocument(ctx context.Context, ownerID, projectID uuid.UU
 }
 
 func (u *usecase) DeleteDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string) error {
-	coll, _, dbName, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
 	if err != nil {
 		return err
 	}
-	ok, err := u.docs.SoftDeleteOne(ctx, dbName, coll.Slug, docID)
+	ok, err := u.docs.SoftDeleteOne(ctx, dbName, coll.Slug, tenant, docID)
 	if err != nil {
 		return httpx.Internal(err)
 	}
@@ -373,6 +391,61 @@ func (u *usecase) DeleteDocument(ctx context.Context, ownerID, projectID uuid.UU
 		return httpx.NotFound("cms.document_not_found", "document not found")
 	}
 	return nil
+}
+
+func (u *usecase) RestoreDocument(ctx context.Context, ownerID, projectID uuid.UUID, collSlug, docID string) error {
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	if err != nil {
+		return err
+	}
+	ok, err := u.docs.RestoreOne(ctx, dbName, coll.Slug, tenant, docID)
+	if err != nil {
+		return httpx.Internal(err)
+	}
+	if !ok {
+		return httpx.NotFound("cms.document_not_found", "document not found or not deleted")
+	}
+	return nil
+}
+
+func (u *usecase) InsertDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, docs []map[string]any) ([]map[string]any, error) {
+	coll, fields, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	if err != nil {
+		return nil, err
+	}
+	clean := make([]map[string]any, len(docs))
+	for i, doc := range docs {
+		c, verrs := validateDocument(fields, doc, false)
+		if verrs != nil {
+			return nil, &DocValidationError{Fields: verrs}
+		}
+		if err := u.checkRelations(ctx, ownerID, dbName, tenant, fields, c); err != nil {
+			return nil, err
+		}
+		clean[i] = c
+	}
+	ids, err := u.docs.InsertMany(ctx, dbName, coll.Slug, tenant, clean)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	for i, id := range ids {
+		clean[i]["_id"] = id
+	}
+	return clean, nil
+}
+
+func (u *usecase) AggregateDocuments(
+	ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, pipeline []map[string]any, limit int64,
+) ([]map[string]any, error) {
+	coll, _, dbName, tenant, err := u.loadContext(ctx, ownerID, projectID, collSlug)
+	if err != nil {
+		return nil, err
+	}
+	out, err := u.docs.Aggregate(ctx, dbName, coll.Slug, tenant, pipeline, limit)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	return out, nil
 }
 
 // ── Export task ──────────────────────────────────────────────────────────
@@ -400,38 +473,49 @@ func (u *usecase) GetExportTask(ctx context.Context, ownerID, taskID uuid.UUID) 
 // ── shared helpers ───────────────────────────────────────────────────────
 
 // loadContext resolves a collection + its field schema + its project's Mongo
-// database name in one place — every document operation needs all three.
+// tenant coordinates (shared db name + `_project_id` scoping value) in one
+// place — every document operation needs all four.
 func (u *usecase) loadContext(
 	ctx context.Context, ownerID, projectID uuid.UUID, slug string,
-) (*Collection, []Field, string, error) {
+) (*Collection, []Field, string, any, error) {
 	coll, err := u.repo.GetCollectionBySlug(ctx, ownerID, projectID, slug)
 	if err != nil {
-		return nil, nil, "", mapNotFound(err, "cms.collection_not_found", "collection not found")
+		return nil, nil, "", nil, mapNotFound(err, "cms.collection_not_found", "collection not found")
 	}
 	fields, err := u.repo.ListFields(ctx, coll.ID)
 	if err != nil {
-		return nil, nil, "", httpx.Internal(err)
+		return nil, nil, "", nil, httpx.Internal(err)
 	}
-	dbName, err := u.resolveMongoDB(ctx, ownerID, projectID)
+	dbName, tenant, err := u.resolveMongoTenant(ctx, ownerID, projectID)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", nil, err
 	}
-	return coll, fields, dbName, nil
+	return coll, fields, dbName, tenant, nil
 }
 
-// resolveMongoDB reads the project's dedicated Mongo database name. If the
-// project has not been provisioned one yet (mongo_database is NULL — an
-// async job normally backfills it), a deterministic name is derived so CMS
-// keeps working instead of hard-failing.
-func (u *usecase) resolveMongoDB(ctx context.Context, ownerID, projectID uuid.UUID) (string, error) {
-	name, err := u.repo.ProjectMongoDatabase(ctx, ownerID, projectID)
+// resolveMongoTenant resolves the shared Mongo database name (see
+// mongo.go/domain.go) and the `_project_id` scoping value for a project:
+//   - if the project was imported from Django (projects.legacy_id set —
+//     backfilled by scripts/backfill_legacy_project_id from the ETL's
+//     uuid5(NS,"project:<pk>") mapping), the value is that legacy int, since
+//     that's what the real production documents already carry;
+//   - otherwise (a project created after the Go cutover, never existed in
+//     Django) the value is the project's own UUID string — self-consistent
+//     because it's both stamped and filtered by this same code path, even
+//     though it differs in *type* from legacy int-tagged documents.
+func (u *usecase) resolveMongoTenant(ctx context.Context, ownerID, projectID uuid.UUID) (string, any, error) {
+	legacyID, err := u.repo.ProjectMongoTenant(ctx, ownerID, projectID)
 	if err != nil {
-		return "", mapNotFound(err, "project.not_found", "project not found")
+		return "", nil, mapNotFound(err, "project.not_found", "project not found")
 	}
-	if name == "" {
-		name = "cms_" + strings.ReplaceAll(projectID.String(), "-", "")
+	dbName := u.sharedDBName
+	if dbName == "" {
+		dbName = "botspace_cms"
 	}
-	return name, nil
+	if legacyID != nil {
+		return dbName, int64(*legacyID), nil
+	}
+	return dbName, projectID.String(), nil
 }
 
 // checkRelations verifies every RELATION field's value(s) point at an
@@ -439,7 +523,7 @@ func (u *usecase) resolveMongoDB(ctx context.Context, ownerID, projectID uuid.UU
 // *configuration* (the target collection itself was deleted) does not block
 // writes — only a missing *document* does.
 func (u *usecase) checkRelations(
-	ctx context.Context, ownerID uuid.UUID, dbName string, fields []Field, clean map[string]any,
+	ctx context.Context, ownerID uuid.UUID, dbName string, tenant any, fields []Field, clean map[string]any,
 ) error {
 	verrs := ValidationErrors{}
 	for _, f := range fields {
@@ -458,7 +542,7 @@ func (u *usecase) checkRelations(
 			if id == "" {
 				continue
 			}
-			if _, err := u.docs.FindOne(ctx, dbName, target.Slug, id, false); errors.Is(err, database.ErrNotFound) {
+			if _, err := u.docs.FindOne(ctx, dbName, target.Slug, tenant, id, false); errors.Is(err, database.ErrNotFound) {
 				verrs[f.Name] = fmt.Sprintf("related document %q not found in %q", id, target.Slug)
 			}
 		}

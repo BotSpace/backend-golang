@@ -367,6 +367,32 @@ func (q *Queries) CmsGetProjectMongoDatabaseForOwner(ctx context.Context, arg Cm
 	return mongo_database, err
 }
 
+const cmsGetProjectTenantForOwner = `-- name: CmsGetProjectTenantForOwner :one
+SELECT id, legacy_id FROM projects
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+`
+
+type CmsGetProjectTenantForOwnerParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+}
+
+type CmsGetProjectTenantForOwnerRow struct {
+	ID       uuid.UUID `json:"id"`
+	LegacyID *int32    `json:"legacy_id"`
+}
+
+// Resolves the CMS Mongo tenant key for a project, verifying ownership.
+// legacy_id (nullable) is the Django project pk that existing imported Mongo
+// documents were tagged with (`_project_id`); see migration 000033 and
+// internal/modules/cms/usecase.go resolveMongoTenant for how NULL is handled.
+func (q *Queries) CmsGetProjectTenantForOwner(ctx context.Context, arg CmsGetProjectTenantForOwnerParams) (CmsGetProjectTenantForOwnerRow, error) {
+	row := q.db.QueryRow(ctx, cmsGetProjectTenantForOwner, arg.ProjectID, arg.OwnerID)
+	var i CmsGetProjectTenantForOwnerRow
+	err := row.Scan(&i.ID, &i.LegacyID)
+	return i, err
+}
+
 const cmsListCollectionsForProject = `-- name: CmsListCollectionsForProject :many
 SELECT c.id, c.project_id, c.name, c.slug, c.description, c.primary_field, c.system, c.schema_version, c.created_at, c.updated_at, c.deleted_at FROM collection c
 JOIN projects p ON p.id = c.project_id
@@ -500,6 +526,50 @@ func (q *Queries) CmsListFieldsForCollectionForOwner(ctx context.Context, arg Cm
 		return nil, err
 	}
 	return items, nil
+}
+
+const cmsListProjectIDsWithoutLegacyID = `-- name: CmsListProjectIDsWithoutLegacyID :many
+SELECT id FROM projects WHERE legacy_id IS NULL AND deleted_at IS NULL
+`
+
+// Used only by scripts/backfill_legacy_project_id to enumerate candidates.
+func (q *Queries) CmsListProjectIDsWithoutLegacyID(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, cmsListProjectIDsWithoutLegacyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cmsSetProjectLegacyID = `-- name: CmsSetProjectLegacyID :execrows
+UPDATE projects SET legacy_id = $1
+WHERE id = $2 AND legacy_id IS NULL
+`
+
+type CmsSetProjectLegacyIDParams struct {
+	LegacyID *int32    `json:"legacy_id"`
+	ID       uuid.UUID `json:"id"`
+}
+
+// Used only by scripts/backfill_legacy_project_id (one-shot data migration).
+func (q *Queries) CmsSetProjectLegacyID(ctx context.Context, arg CmsSetProjectLegacyIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cmsSetProjectLegacyID, arg.LegacyID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const cmsSoftDeleteCollection = `-- name: CmsSoftDeleteCollection :execrows

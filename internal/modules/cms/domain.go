@@ -184,7 +184,19 @@ type Repository interface {
 	// ProjectMongoDatabase resolves the Mongo database name for a project,
 	// verifying ownership. Empty string means the project has not been
 	// provisioned a dedicated Mongo database yet.
+	//
+	// Deprecated: documents now live in one shared Mongo database (see
+	// ProjectMongoTenant / migration 000033) matching Django's
+	// CMS_SHARED_DB, not a per-project database. Kept only because the
+	// mongo_database column may still be read by other code paths; CMS
+	// itself no longer calls this.
 	ProjectMongoDatabase(ctx context.Context, ownerID, projectID uuid.UUID) (string, error)
+	// ProjectMongoTenant resolves the CMS Mongo tenant key for a project,
+	// verifying ownership: legacy_id (the Django project pk) when the
+	// project was imported from Django, else nil (the caller then falls
+	// back to the project's own UUID string — see usecase.go
+	// resolveMongoTenant).
+	ProjectMongoTenant(ctx context.Context, ownerID, projectID uuid.UUID) (legacyID *int32, err error)
 
 	CreateField(ctx context.Context, in CreateFieldInput) (*Field, error)
 	GetFieldByName(ctx context.Context, ownerID, collectionID uuid.UUID, name string) (*Field, error)
@@ -219,19 +231,25 @@ type DocumentList struct {
 }
 
 // DocumentRepository is the MongoDB persistence port for document data.
-// dbName/collName are resolved by the usecase from the Collection's owning
-// project (mongo_database) and its Slug before every call — this port never
-// sees a project/collection id, only the already-resolved Mongo coordinates.
+// dbName is now always the shared CMS database (see usecase.go
+// resolveMongoTenant); collName is the Collection's Slug. tenant is the
+// mandatory `_project_id` scoping value — every method stamps/filters by it
+// so one project can never see another's documents in the shared collection
+// (mirrors Django's services/mongo.py `_scoped()`/`_tenant()`).
 type DocumentRepository interface {
-	InsertOne(ctx context.Context, dbName, collName string, doc map[string]any) (string, error)
-	InsertMany(ctx context.Context, dbName, collName string, docs []map[string]any) ([]string, error)
-	Find(ctx context.Context, dbName, collName string, q DocumentQuery) (DocumentList, error)
-	FindOne(ctx context.Context, dbName, collName, id string, includeDeleted bool) (map[string]any, error)
-	Count(ctx context.Context, dbName, collName string, filter map[string]any, includeDeleted bool) (int64, error)
-	UpdateOne(ctx context.Context, dbName, collName, id string, patch map[string]any) (map[string]any, error)
-	SoftDeleteOne(ctx context.Context, dbName, collName, id string) (bool, error)
-	Aggregate(ctx context.Context, dbName, collName string, pipeline []map[string]any, limit int64) ([]map[string]any, error)
-	// DropCollection removes the Mongo collection entirely — called when a
-	// Collection (schema) is deleted.
-	DropCollection(ctx context.Context, dbName, collName string) error
+	InsertOne(ctx context.Context, dbName, collName string, tenant any, doc map[string]any) (string, error)
+	InsertMany(ctx context.Context, dbName, collName string, tenant any, docs []map[string]any) ([]string, error)
+	Find(ctx context.Context, dbName, collName string, tenant any, q DocumentQuery) (DocumentList, error)
+	FindOne(ctx context.Context, dbName, collName string, tenant any, id string, includeDeleted bool) (map[string]any, error)
+	Count(ctx context.Context, dbName, collName string, tenant any, filter map[string]any, includeDeleted bool) (int64, error)
+	UpdateOne(ctx context.Context, dbName, collName string, tenant any, id string, patch map[string]any) (map[string]any, error)
+	SoftDeleteOne(ctx context.Context, dbName, collName string, tenant any, id string) (bool, error)
+	// RestoreOne un-deletes a soft-deleted document.
+	RestoreOne(ctx context.Context, dbName, collName string, tenant any, id string) (bool, error)
+	Aggregate(ctx context.Context, dbName, collName string, tenant any, pipeline []map[string]any, limit int64) ([]map[string]any, error)
+	// DropCollection removes this tenant's documents from the shared Mongo
+	// collection — called when a Collection (schema) is deleted. It cannot
+	// drop the collection outright since other projects' documents live in
+	// the same collection.
+	DropCollection(ctx context.Context, dbName, collName string, tenant any) error
 }

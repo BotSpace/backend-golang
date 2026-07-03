@@ -56,9 +56,18 @@ type Querier interface {
 	// Resolves the Mongo database name for a project, verifying ownership in the
 	// same query so the caller can never probe another owner's project.
 	CmsGetProjectMongoDatabaseForOwner(ctx context.Context, arg CmsGetProjectMongoDatabaseForOwnerParams) (*string, error)
+	// Resolves the CMS Mongo tenant key for a project, verifying ownership.
+	// legacy_id (nullable) is the Django project pk that existing imported Mongo
+	// documents were tagged with (`_project_id`); see migration 000033 and
+	// internal/modules/cms/usecase.go resolveMongoTenant for how NULL is handled.
+	CmsGetProjectTenantForOwner(ctx context.Context, arg CmsGetProjectTenantForOwnerParams) (CmsGetProjectTenantForOwnerRow, error)
 	CmsListCollectionsForProject(ctx context.Context, arg CmsListCollectionsForProjectParams) ([]Collection, error)
 	CmsListFieldsForCollection(ctx context.Context, collectionID uuid.UUID) ([]Field, error)
 	CmsListFieldsForCollectionForOwner(ctx context.Context, arg CmsListFieldsForCollectionForOwnerParams) ([]Field, error)
+	// Used only by scripts/backfill_legacy_project_id to enumerate candidates.
+	CmsListProjectIDsWithoutLegacyID(ctx context.Context) ([]uuid.UUID, error)
+	// Used only by scripts/backfill_legacy_project_id (one-shot data migration).
+	CmsSetProjectLegacyID(ctx context.Context, arg CmsSetProjectLegacyIDParams) (int64, error)
 	CmsSoftDeleteCollection(ctx context.Context, arg CmsSoftDeleteCollectionParams) (int64, error)
 	CmsUpdateCollection(ctx context.Context, arg CmsUpdateCollectionParams) (Collection, error)
 	CmsUpdateExportTaskStatus(ctx context.Context, arg CmsUpdateExportTaskStatusParams) (CmsExportTask, error)
@@ -149,12 +158,30 @@ type Querier interface {
 	// Growth chart: one row per calendar day (UTC) since `since`, newest last.
 	// Cast to text (not DATE) to keep the sqlc-generated column a plain string.
 	DailyUserSignups(ctx context.Context, since time.Time) ([]DailyUserSignupsRow, error)
+	DebugInsertErrorEvent(ctx context.Context, arg DebugInsertErrorEventParams) (DebugErrorEvent, error)
+	// Owner-scoped (rule #4): a caller can only read errors for a project they
+	// own, joined the same way every other module in this codebase does.
+	DebugListErrorEventsForOwner(ctx context.Context, arg DebugListErrorEventsForOwnerParams) ([]DebugErrorEvent, error)
+	// Debug flow-error events: written by the Redis Stream consumer
+	// (internal/shared/redisq + cmd/api's wiring of the "debug.error_event"
+	// task), read by the owner-scoped GET /api/v1/debug/errors/ endpoint.
+	// Mirrors Django's cms/views/_common.py resolve_project()'s integer-pk
+	// branch: the engine's raw project ref is the Django legacy int pk.
+	DebugResolveProjectByLegacyID(ctx context.Context, legacyID *int32) (uuid.UUID, error)
+	// Mirrors resolve_project()'s UUID branch: Django's `project.uuid` field —
+	// copied verbatim into this table's `uuid` column by the ETL — NOT this
+	// table's `id` (which is a uuid5 hash of the legacy pk, not the same value).
+	DebugResolveProjectByUUID(ctx context.Context, argUuid uuid.UUID) (uuid.UUID, error)
 	// Consumes a code so it cannot be replayed (Django: code.delete() after login).
 	DeleteAuthbotCode(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteBlogPost(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEnviromentForOwner(ctx context.Context, arg DeleteEnviromentForOwnerParams) (int64, error)
 	// Best-effort janitor for codes nobody ever redeemed; safe to run periodically.
 	DeleteExpiredAuthbotCodes(ctx context.Context) (int64, error)
+	// Ports Django's cleanup_expired_files beat task: a single DELETE...RETURNING
+	// so the caller can unlink each blob from disk without a separate
+	// select-then-delete race window.
+	DeleteExpiredFiles(ctx context.Context) ([]File, error)
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	// Returns the deleted row (not :execrows) so the caller can unlink the blob
 	// on disk using its file_path.
@@ -172,6 +199,17 @@ type Querier interface {
 	EnsureProjectModuleForOwner(ctx context.Context, arg EnsureProjectModuleForOwnerParams) (ProjectModule, error)
 	// excludeID = uuid.Nil (never a real post id) when checking for a brand new post.
 	ExistsBlogPostSlug(ctx context.Context, arg ExistsBlogPostSlugParams) (bool, error)
+	// ===================== expiry scheduler =====================
+	// Django never actually implemented an expiry transition for
+	// UserSubscription (checked core/apps/api/models/plan.py + tasks/ + beat
+	// schedule — status/expires_at exist but nothing ever moved a subscription
+	// out of "active"). These two queries are net-new Go-side logic, not a port:
+	// active -> grace_period once expires_at passes, grace_period -> suspended
+	// after a further 3 days (matches PlanStatus.GRACE_PERIOD's "3 kun" comment,
+	// enums/plan.py). Nothing currently enforces "suspended" against
+	// can_create_bot/token checks — this only keeps the status column truthful
+	// for the dashboard/admin to read.
+	ExpireActiveSubscriptions(ctx context.Context) ([]UserSubscription, error)
 	// Lets the "used" usecase 404 on a project the caller does not own instead
 	// of silently returning zeroed totals.
 	FileProjectOwnedByOwner(ctx context.Context, arg FileProjectOwnedByOwnerParams) (bool, error)
@@ -289,6 +327,11 @@ type Querier interface {
 	// Small, admin-curated catalog — loaded whole and matched in Go (github
 	// webhook -> module lookup by normalized repo URL).
 	ListModulesWithGithubURL(ctx context.Context) ([]Module, error)
+	ListNonTerminalDebugs(ctx context.Context) ([]Debug, error)
+	// Unscoped (system-wide) on purpose: the scheduler's reconcile tick isn't a
+	// per-owner request, it's the janitor that ports Django's
+	// cleanup_failed_releases beat task — see release.Usecase.ReconcileAll.
+	ListNonTerminalReleases(ctx context.Context) ([]Relase, error)
 	ListPaidPaymentOrdersForOwner(ctx context.Context, arg ListPaidPaymentOrdersForOwnerParams) ([]PaymentOrder, error)
 	ListPaymentHistoryForUser(ctx context.Context, arg ListPaymentHistoryForUserParams) ([]History, error)
 	ListPaymentOrdersAdmin(ctx context.Context, arg ListPaymentOrdersAdminParams) ([]ListPaymentOrdersAdminRow, error)
@@ -375,6 +418,7 @@ type Querier interface {
 	// Botspace's 20% cut of confirmed template marketplace sales (author keeps
 	// template.AuthorCommissionPercent = 80%, see internal/modules/template).
 	SumTemplateCommissionSince(ctx context.Context, since time.Time) (pgtype.Numeric, error)
+	SuspendGracePeriodSubscriptions(ctx context.Context) ([]UserSubscription, error)
 	TemplateAdminCreate(ctx context.Context, arg TemplateAdminCreateParams) (Template, error)
 	TemplateAdminDelete(ctx context.Context, id uuid.UUID) (int64, error)
 	TemplateAdminUpdate(ctx context.Context, arg TemplateAdminUpdateParams) (Template, error)

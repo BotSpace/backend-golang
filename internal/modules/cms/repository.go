@@ -121,6 +121,20 @@ func (r *pgRepo) ProjectMongoDatabase(ctx context.Context, ownerID, projectID uu
 	return deref(db), nil
 }
 
+func (r *pgRepo) ProjectMongoTenant(ctx context.Context, ownerID, projectID uuid.UUID) (*int32, error) {
+	row, err := r.queries.CmsGetProjectTenantForOwner(ctx, sqlcdb.CmsGetProjectTenantForOwnerParams{
+		ProjectID: projectID,
+		OwnerID:   ownerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project mongo tenant: %w", err)
+	}
+	return row.LegacyID, nil
+}
+
 // ── Field ─────────────────────────────────────────────────────────────────
 
 func (r *pgRepo) CreateField(ctx context.Context, in CreateFieldInput) (*Field, error) {

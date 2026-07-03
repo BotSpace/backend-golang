@@ -515,6 +515,96 @@ func (h *Handler) DeleteDocument(c *gin.Context) {
 	httpx.NoContent(c)
 }
 
+// RestoreDocument godoc
+// @Summary  Undo a document soft-delete
+// @Tags     cms
+// @Security BearerAuth
+// @Router   /cms/projects/{project_id}/collections/{slug}/documents/{doc_id}/restore [post]
+func (h *Handler) RestoreDocument(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	projectID, ok := pathProjectID(c)
+	if !ok {
+		return
+	}
+	if err := h.uc.RestoreDocument(c.Request.Context(), ownerID, projectID, c.Param("slug"), c.Param("doc_id")); err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.NoContent(c)
+}
+
+// BulkInsertDocuments godoc
+// @Summary  Insert many documents in one call, each validated against the schema
+// @Tags     cms
+// @Security BearerAuth
+// @Router   /cms/projects/{project_id}/collections/{slug}/documents/bulk [post]
+func (h *Handler) BulkInsertDocuments(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	projectID, ok := pathProjectID(c)
+	if !ok {
+		return
+	}
+	var docs []map[string]any
+	if err := c.ShouldBindJSON(&docs); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body — expected a JSON array of documents"))
+		return
+	}
+	for _, d := range docs {
+		if bad := findForbiddenOperator(d, 0); bad != "" {
+			httpx.Error(c, httpx.BadRequest("cms.forbidden_operator", "operator "+bad+" is not allowed"))
+			return
+		}
+	}
+	res, err := h.uc.InsertDocuments(c.Request.Context(), ownerID, projectID, c.Param("slug"), docs)
+	if err != nil {
+		writeUcErr(c, err)
+		return
+	}
+	httpx.OK(c, 201, gin.H{"items": res})
+}
+
+// AggregateDocuments godoc
+// @Summary  Run an aggregation pipeline scoped to this project's documents
+// @Tags     cms
+// @Security BearerAuth
+// @Router   /cms/projects/{project_id}/collections/{slug}/documents/aggregate [post]
+func (h *Handler) AggregateDocuments(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	projectID, ok := pathProjectID(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Pipeline []map[string]any `json:"pipeline"`
+		Limit    int64            `json:"limit"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	for _, stage := range req.Pipeline {
+		if bad := findForbiddenOperator(stage, 0); bad != "" {
+			httpx.Error(c, httpx.BadRequest("cms.forbidden_operator", "operator "+bad+" is not allowed"))
+			return
+		}
+	}
+	res, err := h.uc.AggregateDocuments(c.Request.Context(), ownerID, projectID, c.Param("slug"), req.Pipeline, req.Limit)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, gin.H{"items": res})
+}
+
 func parseFilterQuery(c *gin.Context) (map[string]any, bool) {
 	raw := c.Query("filter")
 	if raw == "" {

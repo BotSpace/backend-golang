@@ -22,10 +22,13 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 
 		g.GET("/:slug/documents", h.FindDocuments)
 		g.POST("/:slug/documents", h.InsertDocument)
+		g.POST("/:slug/documents/bulk", h.BulkInsertDocuments)
+		g.POST("/:slug/documents/aggregate", h.AggregateDocuments)
 		g.GET("/:slug/documents/count", h.CountDocuments)
 		g.GET("/:slug/documents/:doc_id", h.FindOneDocument)
 		g.PATCH("/:slug/documents/:doc_id", h.UpdateDocument)
 		g.DELETE("/:slug/documents/:doc_id", h.DeleteDocument)
+		g.POST("/:slug/documents/:doc_id/restore", h.RestoreDocument)
 
 		g.POST("/:slug/export", h.CreateExportTask)
 		g.GET("/:slug/export/:task_id", h.GetExportTaskStatus)
