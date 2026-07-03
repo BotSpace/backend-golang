@@ -4,11 +4,16 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
 )
+
+// contextEventTTL matches Django's DebugContextEventView cache TTL — a
+// "latest snapshot" cache, not a history log.
+const contextEventTTL = 10 * time.Minute
 
 // Usecase exposes the write side (called by the redisq consumer) and the
 // owner-scoped read side (called by the HTTP handler).
@@ -18,6 +23,15 @@ type Usecase interface {
 	// redisq handler acks on that (a stale/bogus ref will never resolve on
 	// retry either) but logs it.
 	RecordError(ctx context.Context, in RecordErrorInput) error
+	// RecordNodeEvent resolves in.ProjectRef and persists the per-node
+	// status event ("debug.node_event"). Same not-found semantics as
+	// RecordError.
+	RecordNodeEvent(ctx context.Context, in RecordNodeEventInput) error
+	// RecordContext resolves in.ProjectRef and caches the latest variable
+	// snapshot ("debug.context_event"). No-ops (returns nil) when this
+	// usecase was built without a ContextCache (redis unavailable) — same
+	// degrade-gracefully-without-Redis pattern used elsewhere in this repo.
+	RecordContext(ctx context.Context, in RecordContextEventInput) error
 	ListErrors(ctx context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error)
 	// ResolveProjectRef is exported so other redisq event handlers wired in
 	// server.go (bot-user upsert, token usage, …) can resolve the same
@@ -26,10 +40,18 @@ type Usecase interface {
 }
 
 type usecase struct {
-	repo Repository
+	repo  Repository
+	cache ContextCache // nil-able — see RecordContext
 }
 
 func NewUsecase(repo Repository) Usecase { return &usecase{repo: repo} }
+
+// NewUsecaseWithContextCache is NewUsecase plus a ContextCache for
+// "debug.context_event" — pass nil cache to keep the no-Redis degrade
+// behavior of NewUsecase.
+func NewUsecaseWithContextCache(repo Repository, cache ContextCache) Usecase {
+	return &usecase{repo: repo, cache: cache}
+}
 
 func (u *usecase) RecordError(ctx context.Context, in RecordErrorInput) error {
 	projectID, err := u.ResolveProjectRef(ctx, in.ProjectRef)
@@ -51,6 +73,42 @@ func (u *usecase) RecordError(ctx context.Context, in RecordErrorInput) error {
 		EventTS:   in.EventTS,
 	})
 	if err != nil {
+		return httpx.Internal(err)
+	}
+	return nil
+}
+
+func (u *usecase) RecordNodeEvent(ctx context.Context, in RecordNodeEventInput) error {
+	projectID, err := u.ResolveProjectRef(ctx, in.ProjectRef)
+	if err != nil {
+		return err
+	}
+	_, err = u.repo.InsertNodeEvent(ctx, NodeEvent{
+		ProjectID: projectID,
+		ChatID:    in.ChatID,
+		NodeID:    in.NodeID,
+		NodeType:  in.NodeType,
+		Status:    in.Status,
+		Error:     in.Error,
+		RunID:     in.RunID,
+		Seq:       in.Seq,
+		EventTS:   in.EventTS,
+	})
+	if err != nil {
+		return httpx.Internal(err)
+	}
+	return nil
+}
+
+func (u *usecase) RecordContext(ctx context.Context, in RecordContextEventInput) error {
+	if u.cache == nil {
+		return nil
+	}
+	projectID, err := u.ResolveProjectRef(ctx, in.ProjectRef)
+	if err != nil {
+		return err
+	}
+	if err := u.cache.SetContext(ctx, projectID, in.ChatID, in.Variables, contextEventTTL); err != nil {
 		return httpx.Internal(err)
 	}
 	return nil

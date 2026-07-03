@@ -86,12 +86,13 @@ Replaces the old synchronous `POST {API_URL}/api/debug/error-event/` /
 - Read side: `GET /api/v1/debug/errors?project_id=<internal-uuid>&limit=` (JWT,
   owner-scoped) → `{"errors":[{node_id,node_type,message,detail,chat_id,ts}]}`.
 
-### `debug.node_event` — CONTRACT DEFINED, not yet consumed
+### `debug.node_event` — IMPLEMENTED (consumer + persistence live, no read API yet)
 
 Replaces `POST .../api/debug/node-event/` (engine's `nodeEvent`, emitter.go
-line 26). Django only ever WebSocket-published this (no persistence) — same
-scope decision applies here; add a handler + table analogous to
-`debug_error_event` if/when a "node execution history" read API is needed.
+line 26). Django only ever WebSocket-published this (no persistence); this
+backend now persists it to Postgres `debug_node_event` (migration `000036`)
+for a future "node execution history" read API, but does not expose one yet
+— write-only for now (`debug.Usecase.RecordNodeEvent`).
 
 ```json
 {
@@ -110,13 +111,19 @@ scope decision applies here; add a handler + table analogous to
 }
 ```
 
-### `debug.context_event` — CONTRACT DEFINED, not yet consumed
+### `debug.context_event` — IMPLEMENTED (Redis-cache consumer live)
 
 Replaces `POST .../api/debug/context-event/` (engine's `contextEvent`,
 emitter.go line 222). Django cached only the *latest* snapshot per
 `(project, chat_id)` in Redis with a 10-minute TTL, not a Postgres table —
-if this needs a backend consumer, prefer the same approach (SET a
-`debug:ctx:{project_id}:{chat_id}` key) over a growing table.
+this backend's consumer does the same: `debug.Usecase.RecordContext` SETs
+`debug:ctx:{internal-project-id}:{chat_id}` (`debug.RedisContextCache`,
+`internal/modules/debug/context_cache.go`) with a 10-minute TTL, keyed by
+this backend's *resolved* internal project id (not the engine's raw ref).
+No read API yet (nothing consumes the cached key today — add one if/when a
+live variable-inspector view needs it). If the backend can't reach the
+engine's Redis at startup (`Engine.RedisAddr()` empty), `RecordContext`
+silently no-ops rather than failing the event.
 
 ```json
 {
@@ -162,6 +169,32 @@ token/credit usage reporting) and found neither exists as a write path yet
 until the engine side implements the feature — define the `args` shape when
 that work starts, following the same `project_id`-as-raw-ref convention
 above.
+
+### Writes that do NOT belong on this stream
+
+Re-grepped engine-golang's actual outbound HTTP writes (beyond the three
+`debug.*` calls above) to make sure nothing else was silently missed:
+
+- **Payment order creation** (`internal/engine/handlers/payment.go:208`
+  `createOrder`, and the LLM `payment_link` tool,
+  `internal/llm/payment_link_tool.go:215`) — `POST
+  {API_URL}/api/payment/order/create/`. **Not a stream candidate**: the flow
+  node needs the created order's id/payment URL back synchronously to
+  render a payment link/button in the same turn. XADD is fire-and-forget
+  with no reply channel, so this must stay a synchronous HTTP call (or
+  become a request/reply RPC some other way, not this stream).
+- **Generic "Save to Collection" flow-node writes**
+  (`internal/repository/collection.go` Insert/Update/Delete) — same
+  reasoning: `POST /api/collection/{name}/insert|update|delete` is only hit
+  as an HTTP *fallback* when the engine has no direct Mongo connection
+  (dev/simulator, `MONGO_ADDR` unset — see `bot_user.upsert` above for the
+  identical pattern), and the flow can reference the inserted document
+  afterward, so it isn't pure fire-and-forget either. Leave as-is.
+- **Module file upload** (`internal/engine/handlers/download.go:167`
+  `uploadFileToModuleAPI`) — `POST {API_URL}/api/module-file/` (multipart,
+  binary body). Needs the uploaded file's id/URL back synchronously, and
+  Redis Streams isn't a great fit for multipart/binary payloads anyway.
+  Leave as HTTP.
 
 ## Adding a new event type
 

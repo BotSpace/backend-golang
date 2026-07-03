@@ -59,6 +59,61 @@ func (q *Queries) DebugInsertErrorEvent(ctx context.Context, arg DebugInsertErro
 	return i, err
 }
 
+const debugInsertNodeEvent = `-- name: DebugInsertNodeEvent :one
+
+INSERT INTO debug_node_event (id, project_id, chat_id, node_id, node_type, status, error, run_id, seq, event_ts)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10)
+RETURNING id, project_id, chat_id, node_id, node_type, status, error, run_id, seq, event_ts, created_at
+`
+
+type DebugInsertNodeEventParams struct {
+	ID        uuid.UUID  `json:"id"`
+	ProjectID uuid.UUID  `json:"project_id"`
+	ChatID    int64      `json:"chat_id"`
+	NodeID    string     `json:"node_id"`
+	NodeType  string     `json:"node_type"`
+	Status    string     `json:"status"`
+	Error     string     `json:"error"`
+	RunID     int64      `json:"run_id"`
+	Seq       int64      `json:"seq"`
+	EventTs   *time.Time `json:"event_ts"`
+}
+
+// Debug per-node execution status events ("debug.node_event" redis stream
+// task, migration 000036) — write-only for now (no read API yet; add one
+// analogous to DebugListErrorEventsForOwner if a node-history view is
+// needed later).
+func (q *Queries) DebugInsertNodeEvent(ctx context.Context, arg DebugInsertNodeEventParams) (DebugNodeEvent, error) {
+	row := q.db.QueryRow(ctx, debugInsertNodeEvent,
+		arg.ID,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.NodeID,
+		arg.NodeType,
+		arg.Status,
+		arg.Error,
+		arg.RunID,
+		arg.Seq,
+		arg.EventTs,
+	)
+	var i DebugNodeEvent
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ChatID,
+		&i.NodeID,
+		&i.NodeType,
+		&i.Status,
+		&i.Error,
+		&i.RunID,
+		&i.Seq,
+		&i.EventTs,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const debugListErrorEventsForOwner = `-- name: DebugListErrorEventsForOwner :many
 SELECT e.id, e.project_id, e.chat_id, e.node_id, e.node_type, e.level, e.message, e.detail, e.event_ts, e.created_at FROM debug_error_event e
 JOIN projects p ON p.id = e.project_id

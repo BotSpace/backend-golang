@@ -172,6 +172,11 @@ type Querier interface {
 	// Cast to text (not DATE) to keep the sqlc-generated column a plain string.
 	DailyUserSignups(ctx context.Context, since time.Time) ([]DailyUserSignupsRow, error)
 	DebugInsertErrorEvent(ctx context.Context, arg DebugInsertErrorEventParams) (DebugErrorEvent, error)
+	// Debug per-node execution status events ("debug.node_event" redis stream
+	// task, migration 000036) — write-only for now (no read API yet; add one
+	// analogous to DebugListErrorEventsForOwner if a node-history view is
+	// needed later).
+	DebugInsertNodeEvent(ctx context.Context, arg DebugInsertNodeEventParams) (DebugNodeEvent, error)
 	// Owner-scoped (rule #4): a caller can only read errors for a project they
 	// own, joined the same way every other module in this codebase does.
 	DebugListErrorEventsForOwner(ctx context.Context, arg DebugListErrorEventsForOwnerParams) ([]DebugErrorEvent, error)
