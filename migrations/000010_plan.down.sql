@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS user_subscription;
+DROP TABLE IF EXISTS plan;

@@ -1,0 +1,24 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - misspell
+    - unconvert
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        - G104 # unhandled errors are covered by errcheck
+  exclusions:
+    rules:
+      # Test files: allow unchecked errors and noisy security rules.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

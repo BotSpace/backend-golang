@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS template_withdrawal_request;
+DROP TABLE IF EXISTS template_version;
+DROP TABLE IF EXISTS template_submission_feature_map;
+DROP TABLE IF EXISTS template_submission_category_map;
+DROP TABLE IF EXISTS template_submission_request;
+DROP TABLE IF EXISTS template_order;
+DROP TABLE IF EXISTS usertemplate;
+DROP TABLE IF EXISTS template_like;
+DROP TABLE IF EXISTS template_feature_map;
+DROP TABLE IF EXISTS template_category_map;
+DROP TABLE IF EXISTS template;
+DROP TABLE IF EXISTS template_feature;
+DROP TABLE IF EXISTS template_category;

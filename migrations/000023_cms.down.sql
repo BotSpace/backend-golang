@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS cms_export_task;
+DROP TABLE IF EXISTS field;
+DROP TABLE IF EXISTS collection;

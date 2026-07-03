@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-23092005}
+      POSTGRES_DB: botspace
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_HTTP_PORT: 8080
+      APP_DB_HOST: db
+      APP_DB_PORT: 5432
+      APP_DB_USER: postgres
+      APP_DB_PASSWORD: ${DB_PASSWORD:-23092005}
+      APP_DB_NAME: botspace
+      APP_DB_AUTO_MIGRATE: "true"
+      APP_MONGO_URL: mongodb://mongo:27017
+      APP_REDIS_URL: redis://redis:6379
+      # PRODUCTION: set real secrets. Dev generates RS256 keys under /app/keys.
+      APP_CRYPTO_KEY: ${APP_CRYPTO_KEY:-dev-crypto-key-change-me}
+      APP_INTERNAL_TOKEN: ${APP_INTERNAL_TOKEN:-dev-internal-token}
+      APP_OTP_PROD: ${APP_OTP_PROD:-false}
+      APP_HTTP_CORS_ORIGINS: ${APP_HTTP_CORS_ORIGINS:-*}
+    ports:
+      - "8080:8080"
+
+volumes:
+  dbdata:
+  redisdata:
+  mongodata:
