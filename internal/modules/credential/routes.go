@@ -30,10 +30,23 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 	// (see oauth_state.go / usecase.go's OAuthCallback). Mounted directly on
 	// rg (not `g`) so it resolves to /credentials/oauth/:provider/callback
 	// without the Auth middleware. In prod this is reached as
-	// /api/v1/credentials/oauth/:provider/callback, which the gateway
+	// /api/v1/credentials/oauth/:provider/callback(/), which the gateway
 	// exposes publicly as /api/v2/credentials/oauth/:provider/callback/ —
 	// the exact redirect_uri OAuthStart hands to Google (oauth_providers.go).
+	//
+	// Both the trailing-slash and no-slash forms are registered explicitly
+	// (not relying on gin's default RedirectTrailingSlash): gin's own 301
+	// redirect targets the path as registered in ITS router — i.e. the
+	// backend-internal /api/v1/... form — with no way to make it emit the
+	// public /api/v2/... form the browser needs to keep going through the
+	// gateway. A client hitting the trailing-slash-mismatched variant would
+	// otherwise get redirected straight to a bare /api/v1/... URL, which the
+	// gateway does NOT route to this backend (only /api/v2/... is), so it
+	// falls through to the old Django deployment's still-live (and now
+	// stale) OAuthCallbackView instead of here. Register both forms so no
+	// redirect is ever needed.
 	rg.GET("/credentials/oauth/:provider/callback", h.OAuthCallback)
+	rg.GET("/credentials/oauth/:provider/callback/", h.OAuthCallback)
 
 	internal := rg.Group("/internal/credentials", internalTokenAuth())
 	{
