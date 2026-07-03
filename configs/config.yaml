@@ -1,0 +1,53 @@
+env: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  request_timeout: 30s # per-request context deadline (0 disables)
+  max_header_bytes: 1048576 # 1 MiB
+  max_body_bytes: 1048576 # 1 MiB request body cap
+  cors_origins:
+    - "*"
+  rate_limit_rps: 0 # per-IP req/sec; 0 disables
+  rate_limit_burst: 20
+
+db:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: botspace
+  ssl_mode: disable
+  max_conns: 20
+  min_conns: 2
+  max_conn_life: 30m
+  migrations_path: file://migrations
+  auto_migrate: true # run pending migrations on startup (disable in prod, use CLI)
+
+jwt:
+  # RS256 — private key signs, public key verifies. Dev'da fayllar bo'lmasa
+  # avtomatik generatsiya qilinadi; PRODUCTION'da kalit bir marta yaratilib
+  # (make gen-keys) barcha deploylarda qayta ishlatiladi (secret manager).
+  private_key_path: keys/jwt_private.pem
+  public_key_path: keys/jwt_public.pem
+  access_ttl: 15m
+  refresh_ttl: 168h
+  issuer: botspace
+
+# Phone OTP confirmation. In non-prod, `default` is accepted verbatim so testers
+# skip the SMS. Set prod: true (and wire a real SMS sender) for production.
+otp:
+  size: 4 # digits, prod only
+  prod: false
+  default: "1111"
+  ttl: 2m
+  max_tries: 3
+  block_for: 5m
+  resend_after: 60s
+
+log:
+  level: debug

@@ -1,0 +1,29 @@
+/tmp/
+/bin/
+/vendor/
+.playwright-mcp
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# env
+.env
+.env.local
+
+# JWT RS256 keys — never commit; generate per environment (make gen-keys)
+/keys/*.pem
+
+# coverage
+coverage.out
+coverage.html
+
+# build
+*.test
+*.out
+
+# os
+.DS_Store
+media/
+/scratchpad/

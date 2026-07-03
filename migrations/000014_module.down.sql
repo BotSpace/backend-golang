@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS project_module;
+DROP TABLE IF EXISTS module;

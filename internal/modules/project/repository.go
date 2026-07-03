@@ -1,0 +1,221 @@
+package project
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/botspace/backend/internal/shared/database"
+	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type pgRepo struct {
+	queries *sqlcdb.Queries
+}
+
+func NewPostgresRepository(pool *pgxpool.Pool) Repository {
+	return &pgRepo{queries: sqlcdb.New(pool)}
+}
+
+func (r *pgRepo) Create(ctx context.Context, in CreateInput) (*Project, error) {
+	row, err := r.queries.CreateProject(ctx, sqlcdb.CreateProjectParams{
+		ID:          uuid.New(),
+		Name:        in.Name,
+		Description: strPtr(in.Description),
+		Username:    strPtr(in.Username),
+		OwnerID:     in.OwnerID,
+		Flow:        flowOrEmpty(in.Flow),
+		IsTemplate:  in.IsTemplate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create project: %w", err)
+	}
+	p := fromSQLC(row)
+	return &p, nil
+}
+
+func (r *pgRepo) GetForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Project, error) {
+	return mapOne(r.queries.GetProjectForOwner(ctx, sqlcdb.GetProjectForOwnerParams{ID: id, OwnerID: ownerID}))
+}
+
+func (r *pgRepo) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateInput) (*Project, error) {
+	return mapOne(r.queries.UpdateProject(ctx, sqlcdb.UpdateProjectParams{
+		ID:          id,
+		OwnerID:     ownerID,
+		Name:        in.Name,
+		Description: in.Description,
+		Username:    in.Username,
+		Flow:        in.Flow, // nil -> COALESCE keeps existing
+	}))
+}
+
+func (r *pgRepo) SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error {
+	rows, err := r.queries.SoftDeleteProject(ctx, sqlcdb.SoftDeleteProjectParams{ID: id, OwnerID: ownerID})
+	if err != nil {
+		return fmt.Errorf("soft delete project: %w", err)
+	}
+	if rows == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
+func (r *pgRepo) List(ctx context.Context, f ListFilter) ([]Project, error) {
+	rows, err := r.queries.ListProjectsForOwner(ctx, sqlcdb.ListProjectsForOwnerParams{
+		OwnerID: f.OwnerID,
+		Search:  strPtr(f.Search),
+		Limit:   f.Limit,
+		Offset:  f.Offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+	out := make([]Project, len(rows))
+	for i, row := range rows {
+		out[i] = fromSQLC(row)
+	}
+	return out, nil
+}
+
+func (r *pgRepo) Count(ctx context.Context, ownerID uuid.UUID, search string) (int64, error) {
+	n, err := r.queries.CountProjectsForOwner(ctx, sqlcdb.CountProjectsForOwnerParams{
+		OwnerID: ownerID,
+		Search:  strPtr(search),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count projects: %w", err)
+	}
+	return n, nil
+}
+
+func (r *pgRepo) ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, error) {
+	rows, err := r.queries.ListProjectsAdmin(ctx, sqlcdb.ListProjectsAdminParams{
+		Search: strPtr(f.Search),
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list projects admin: %w", err)
+	}
+	out := make([]AdminProjectSummary, len(rows))
+	for i, row := range rows {
+		out[i] = AdminProjectSummary{
+			Project:       fromSQLC(row.Project),
+			OwnerPhone:    deref(row.OwnerPhone),
+			ReleasesCount: row.ReleasesCount,
+			ReleaseStatus: row.ReleaseStatus,
+		}
+	}
+	return out, nil
+}
+
+func (r *pgRepo) CountAdmin(ctx context.Context, search string) (int64, error) {
+	n, err := r.queries.CountProjectsAdmin(ctx, strPtr(search))
+	if err != nil {
+		return 0, fmt.Errorf("count projects admin: %w", err)
+	}
+	return n, nil
+}
+
+func (r *pgRepo) GetAdmin(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error) {
+	row, err := r.queries.GetProjectAdmin(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query project admin: %w", err)
+	}
+	releaseRows, err := r.queries.ListReleasesForProjectAdmin(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list releases for project admin: %w", err)
+	}
+	releases := make([]AdminRelease, len(releaseRows))
+	for i, rr := range releaseRows {
+		releases[i] = AdminRelease{
+			ID: rr.ID, Version: rr.Version, Status: rr.Status,
+			ServiceID: deref(rr.ServiceID), CreatedAt: rr.CreatedAt,
+		}
+	}
+	return &AdminProjectDetail{
+		Project:    fromSQLC(row.Project),
+		OwnerPhone: deref(row.OwnerPhone),
+		OwnerEmail: deref(row.OwnerEmail),
+		Releases:   releases,
+	}, nil
+}
+
+func (r *pgRepo) ListMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, error) {
+	rows, err := r.queries.AdminMonitoringProjects(ctx, sqlcdb.AdminMonitoringProjectsParams{
+		Search: strPtr(f.Search),
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list monitoring projects: %w", err)
+	}
+	out := make([]MonitoringProject, len(rows))
+	for i, row := range rows {
+		out[i] = MonitoringProject{
+			Project:       fromSQLC(row.Project),
+			OwnerPhone:    deref(row.OwnerPhone),
+			ReleaseStatus: row.ReleaseStatus,
+			CPUCores:      row.CpuCores,
+			MemoryBytes:   row.MemoryBytes,
+			DiskBytes:     row.DiskBytes,
+		}
+	}
+	return out, nil
+}
+
+func mapOne(row sqlcdb.Project, err error) (*Project, error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query project: %w", err)
+	}
+	p := fromSQLC(row)
+	return &p, nil
+}
+
+func fromSQLC(r sqlcdb.Project) Project {
+	return Project{
+		ID:                 r.ID,
+		UUID:               r.Uuid,
+		Name:               r.Name,
+		Description:        deref(r.Description),
+		Username:           deref(r.Username),
+		OwnerID:            r.OwnerID,
+		Flow:               json.RawMessage(r.Flow),
+		IsTemplate:         r.IsTemplate,
+		ReleaseWebhookUUID: r.ReleaseWebhookUuid,
+		DebugWebhookUUID:   r.DebugWebhookUuid,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
+	}
+}
+
+func flowOrEmpty(f json.RawMessage) []byte {
+	if len(f) == 0 {
+		return []byte("[]")
+	}
+	return f
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
