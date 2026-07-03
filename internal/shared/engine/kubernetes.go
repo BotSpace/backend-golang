@@ -152,8 +152,17 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 		// TODO(engine): populate real schemas from the project's CMS collections
 		// (Collection→{field:kind}) + enabled modules via release.Usecase, so
 		// CMS bots get exact type coercion instead of the heuristic fallback.
+		// The engine's loader.Schema is an OBJECT ({nodes,edges,...}); a brand-new
+		// project's flow defaults to an empty array `[]` (Django JSONField
+		// default=list parity), which the loader rejects with "cannot unmarshal
+		// array into loader.Schema". Normalize any non-object flow to an empty
+		// schema so tokensiz/debug bots with no flow yet still boot.
+		flowJSON := strings.TrimSpace(string(spec.Flow))
+		if flowJSON == "" || flowJSON[0] == '[' {
+			flowJSON = `{"nodes":[],"edges":[]}`
+		}
 		cmData := map[string]string{
-			"flow.json":    string(spec.Flow),
+			"flow.json":    flowJSON,
 			"schemas.json": "{}",
 			"modules.json": `{"modules":[]}`,
 		}
