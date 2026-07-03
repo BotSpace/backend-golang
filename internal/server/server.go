@@ -273,8 +273,18 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// Read side (GET /api/v1/debug/errors) is owner-scoped HTTP; the write
 	// side is the redisq consumer wired below, not an HTTP endpoint (engine
 	// -> backend writes are Redis Stream events, not internal HTTP POSTs —
-	// see docs/redis-stream-events.md).
-	debugUC := debugmod.NewUsecase(debugmod.NewPostgresRepository(s.pool))
+	// see docs/redis-stream-events.md). "debug.context_event" only caches
+	// (Redis SET, no Postgres table — see the doc), so wire a context cache
+	// off the same engine Redis when configured; without it RecordContext
+	// just no-ops (degrade-gracefully-without-Redis, same pattern as the
+	// Mongo/Kubernetes wiring below).
+	debugRepo := debugmod.NewPostgresRepository(s.pool)
+	var debugUC debugmod.Usecase
+	if addr := s.cfg.Engine.RedisAddr(); addr != "" {
+		debugUC = debugmod.NewUsecaseWithContextCache(debugRepo, debugmod.NewRedisContextCache(addr, s.cfg.Engine.RedisPassword))
+	} else {
+		debugUC = debugmod.NewUsecase(debugRepo)
+	}
 	debugmod.RegisterRoutes(v1, debugmod.NewHandler(debugUC), tokens)
 
 	// websocket module — hub runs until ctx is cancelled.
@@ -336,6 +346,47 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 		})
 	})
 
+	consumer.Register("debug.node_event", func(ctx context.Context, args json.RawMessage) error {
+		var payload debugNodeEventPayload
+		if err := json.Unmarshal(args, &payload); err != nil {
+			return fmt.Errorf("decode debug.node_event: %w", err)
+		}
+		var eventTS *time.Time
+		if payload.TS != 0 {
+			t := time.Unix(payload.TS, 0).UTC()
+			eventTS = &t
+		}
+		return debugUC.RecordNodeEvent(ctx, debugmod.RecordNodeEventInput{
+			ProjectRef: payload.ProjectID,
+			ChatID:     payload.ChatID,
+			NodeID:     payload.NodeID,
+			NodeType:   payload.NodeType,
+			Status:     payload.Status,
+			Error:      payload.Error,
+			RunID:      payload.RunID,
+			Seq:        payload.Seq,
+			EventTS:    eventTS,
+		})
+	})
+
+	consumer.Register("debug.context_event", func(ctx context.Context, args json.RawMessage) error {
+		var payload debugContextEventPayload
+		if err := json.Unmarshal(args, &payload); err != nil {
+			return fmt.Errorf("decode debug.context_event: %w", err)
+		}
+		var eventTS *time.Time
+		if payload.TS != 0 {
+			t := time.Unix(payload.TS, 0).UTC()
+			eventTS = &t
+		}
+		return debugUC.RecordContext(ctx, debugmod.RecordContextEventInput{
+			ProjectRef: payload.ProjectID,
+			ChatID:     payload.ChatID,
+			Variables:  payload.Variables,
+			EventTS:    eventTS,
+		})
+	})
+
 	go func() {
 		s.log.Info("redisq: engine event consumer starting",
 			logger.String("stream", eventsStreamName), logger.String("group", eventsGroupName))
@@ -359,6 +410,31 @@ type debugErrorEventPayload struct {
 	Message   string `json:"message"`
 	Detail    string `json:"detail"`
 	TS        int64  `json:"ts"`
+}
+
+// debugNodeEventPayload is the "args" shape for the "debug.node_event"
+// redis stream task — see docs/redis-stream-events.md.
+type debugNodeEventPayload struct {
+	ProjectID string `json:"project_id"`
+	ChatID    int64  `json:"chat_id"`
+	NodeID    string `json:"node_id"`
+	NodeType  string `json:"node_type"`
+	Status    string `json:"status"`
+	Error     string `json:"error"`
+	TS        int64  `json:"ts"`
+	RunID     int64  `json:"run_id"`
+	Seq       int64  `json:"seq"`
+}
+
+// debugContextEventPayload is the "args" shape for the "debug.context_event"
+// redis stream task — see docs/redis-stream-events.md. Variables is kept as
+// raw JSON: this backend only caches it (Redis SET, no schema), never
+// interprets its shape.
+type debugContextEventPayload struct {
+	ProjectID string          `json:"project_id"`
+	ChatID    int64           `json:"chat_id"`
+	Variables json.RawMessage `json:"variables"`
+	TS        int64           `json:"ts"`
 }
 
 // buildOrchestrator picks the engine.Orchestrator implementation: the real

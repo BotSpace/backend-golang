@@ -123,6 +123,20 @@ type DebugErrorEvent struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
+type DebugNodeEvent struct {
+	ID        uuid.UUID  `json:"id"`
+	ProjectID uuid.UUID  `json:"project_id"`
+	ChatID    int64      `json:"chat_id"`
+	NodeID    string     `json:"node_id"`
+	NodeType  string     `json:"node_type"`
+	Status    string     `json:"status"`
+	Error     string     `json:"error"`
+	RunID     int64      `json:"run_id"`
+	Seq       int64      `json:"seq"`
+	EventTs   *time.Time `json:"event_ts"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
 type DebugRunLog struct {
 	ID        uuid.UUID  `json:"id"`
 	ProjectID uuid.UUID  `json:"project_id"`

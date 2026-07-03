@@ -10,6 +10,7 @@ package debug
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,44 @@ type RecordErrorInput struct {
 	EventTS    *time.Time
 }
 
+// NodeEvent is one recorded per-node execution status ("debug.node_event").
+type NodeEvent struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ChatID    int64
+	NodeID    string
+	NodeType  string
+	Status    string
+	Error     string
+	RunID     int64
+	Seq       int64
+	EventTS   *time.Time
+	CreatedAt time.Time
+}
+
+// RecordNodeEventInput is the write-side payload for "debug.node_event".
+type RecordNodeEventInput struct {
+	ProjectRef string
+	ChatID     int64
+	NodeID     string
+	NodeType   string
+	Status     string
+	Error      string
+	RunID      int64
+	Seq        int64
+	EventTS    *time.Time
+}
+
+// RecordContextEventInput is the write-side payload for
+// "debug.context_event" — cached (not persisted to Postgres), see
+// Usecase.RecordContext.
+type RecordContextEventInput struct {
+	ProjectRef string
+	ChatID     int64
+	Variables  json.RawMessage
+	EventTS    *time.Time
+}
+
 // Repository is the Postgres persistence port.
 type Repository interface {
 	// ResolveProjectByLegacyID/ResolveProjectByUUID mirror Django's
@@ -57,4 +96,16 @@ type Repository interface {
 	// ListErrorEventsForOwner is owner-scoped (rule #4): projectID must
 	// belong to ownerID or the result is empty, never another owner's data.
 	ListErrorEventsForOwner(ctx context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error)
+
+	InsertNodeEvent(ctx context.Context, e NodeEvent) (*NodeEvent, error)
+}
+
+// ContextCache is the (optional) latest-snapshot cache port for
+// "debug.context_event" — mirrors Django's Redis-cache-only behavior (never
+// a growing Postgres table, see docs/redis-stream-events.md). Nil-able: a
+// backend without Redis wired just no-ops the write (see NewUsecase).
+type ContextCache interface {
+	// SetContext caches variables for (projectID, chatID) with a TTL,
+	// overwriting any previous snapshot.
+	SetContext(ctx context.Context, projectID uuid.UUID, chatID int64, variables json.RawMessage, ttl time.Duration) error
 }

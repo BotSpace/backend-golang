@@ -65,6 +65,30 @@ func (r *pgRepo) InsertErrorEvent(ctx context.Context, e ErrorEvent) (*ErrorEven
 	return &out, nil
 }
 
+func (r *pgRepo) InsertNodeEvent(ctx context.Context, e NodeEvent) (*NodeEvent, error) {
+	id := e.ID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	row, err := r.queries.DebugInsertNodeEvent(ctx, sqlcdb.DebugInsertNodeEventParams{
+		ID:        id,
+		ProjectID: e.ProjectID,
+		ChatID:    e.ChatID,
+		NodeID:    e.NodeID,
+		NodeType:  e.NodeType,
+		Status:    e.Status,
+		Error:     e.Error,
+		RunID:     e.RunID,
+		Seq:       e.Seq,
+		EventTs:   e.EventTS,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("insert debug node event: %w", err)
+	}
+	out := nodeEventFromSQLC(row)
+	return &out, nil
+}
+
 func (r *pgRepo) ListErrorEventsForOwner(ctx context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -94,6 +118,22 @@ func fromSQLC(r sqlcdb.DebugErrorEvent) ErrorEvent {
 		Level:     r.Level,
 		Message:   r.Message,
 		Detail:    r.Detail,
+		EventTS:   r.EventTs,
+		CreatedAt: r.CreatedAt,
+	}
+}
+
+func nodeEventFromSQLC(r sqlcdb.DebugNodeEvent) NodeEvent {
+	return NodeEvent{
+		ID:        r.ID,
+		ProjectID: r.ProjectID,
+		ChatID:    r.ChatID,
+		NodeID:    r.NodeID,
+		NodeType:  r.NodeType,
+		Status:    r.Status,
+		Error:     r.Error,
+		RunID:     r.RunID,
+		Seq:       r.Seq,
 		EventTS:   r.EventTs,
 		CreatedAt: r.CreatedAt,
 	}

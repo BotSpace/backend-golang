@@ -27,3 +27,14 @@ JOIN projects p ON p.id = e.project_id
 WHERE e.project_id = sqlc.arg('project_id') AND p.owner_id = sqlc.arg('owner_id') AND p.deleted_at IS NULL
 ORDER BY e.created_at DESC
 LIMIT sqlc.arg('limit_count');
+
+-- Debug per-node execution status events ("debug.node_event" redis stream
+-- task, migration 000036) — write-only for now (no read API yet; add one
+-- analogous to DebugListErrorEventsForOwner if a node-history view is
+-- needed later).
+
+-- name: DebugInsertNodeEvent :one
+INSERT INTO debug_node_event (id, project_id, chat_id, node_id, node_type, status, error, run_id, seq, event_ts)
+VALUES (sqlc.arg('id'), sqlc.arg('project_id'), sqlc.arg('chat_id'), sqlc.arg('node_id'), sqlc.arg('node_type'),
+        sqlc.arg('status'), sqlc.arg('error'), sqlc.arg('run_id'), sqlc.arg('seq'), sqlc.narg('event_ts'))
+RETURNING *;
