@@ -143,14 +143,21 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	// env the golang-engine binary expects.
 	if len(spec.Flow) > 0 {
 		cmName := name + "-flow"
-		// TODO(engine): the old Django deploy also wrote schemas.json (CMS
-		// collection field-kind map) and modules.json (enabled project
-		// modules) into this same ConfigMap so the engine could coerce CMS
-		// values and reach shared module RPC endpoints. DeploySpec does not
-		// carry that data yet — wire it through release.Usecase once the Go
-		// CMS/plugin usecases expose it, then set SCHEMAS_FILE_PATH /
-		// MODULE_CONFIG_PATH below alongside FLOW_FILE_PATH.
-		if err := o.ensureConfigMap(ctx, cmName, map[string]string{"flow.json": string(spec.Flow)}); err != nil {
+		// The engine's flow loader requires schemas.json AND modules.json to
+		// exist under /app/assets and parse as JSON objects — a missing (or
+		// array-shaped) schemas.json is a FATAL "failed to parse schema" at
+		// boot. DeploySpec doesn't carry the CMS field-kind map / enabled-module
+		// list yet, so ship valid EMPTY documents: the engine then falls back to
+		// heuristic coercion instead of crashing.
+		// TODO(engine): populate real schemas from the project's CMS collections
+		// (Collection→{field:kind}) + enabled modules via release.Usecase, so
+		// CMS bots get exact type coercion instead of the heuristic fallback.
+		cmData := map[string]string{
+			"flow.json":    string(spec.Flow),
+			"schemas.json": "{}",
+			"modules.json": `{"modules":[]}`,
+		}
+		if err := o.ensureConfigMap(ctx, cmName, cmData); err != nil {
 			return DeployResult{}, fmt.Errorf("ensure flow configmap: %w", err)
 		}
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: "flow-volume", MountPath: "/app/assets", ReadOnly: true})
@@ -162,6 +169,8 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 		})
 
 		env["FLOW_FILE_PATH"] = "/app/assets/flow.json"
+		env["SCHEMAS_FILE_PATH"] = "/app/assets/schemas.json"
+		env["MODULE_CONFIG_PATH"] = "/app/assets/modules.json"
 		env["WEBHOOK_ENABLED"] = "true"
 		env["WEBHOOK_PORT"] = strconv.Itoa(port)
 		if o.cfg.RedisAddr != "" {
