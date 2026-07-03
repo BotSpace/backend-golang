@@ -128,7 +128,16 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// auth module — depends on user usecase + jwt issuer + OTP + refresh store.
 	refreshStore := auth.NewRefreshStore(s.pool)
 	otpService := auth.NewOTPService(s.pool, auth.NewLogSender(s.log), s.cfg.OTP)
-	authUC := auth.NewUsecase(userUC, tokens, otpService, refreshStore)
+	// Google sign-in is enabled iff APP_GOOGLE_CLIENT_ID is set; a nil
+	// verifier makes /auth/google fail with a clear config error instead of
+	// a 404 or panic (see auth.Usecase.GoogleLogin).
+	var googleVerifier auth.GoogleVerifier
+	if s.cfg.Google.ClientID != "" {
+		googleVerifier = auth.NewGoogleVerifier(s.cfg.Google.ClientID)
+	} else {
+		s.log.Warn("APP_GOOGLE_CLIENT_ID not set — /auth/google will reject every request")
+	}
+	authUC := auth.NewUsecase(userUC, tokens, otpService, refreshStore, googleVerifier)
 	auth.RegisterRoutes(v1, auth.NewHandler(authUC))
 
 	// user routes need the verifier from auth
@@ -194,15 +203,27 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	configUC := adminconfig.NewUsecase(adminconfig.NewPostgresRepository(s.pool))
 	adminconfig.RegisterRoutes(v1, adminconfig.NewHandler(configUC), tokens)
 
-	// authbot — Telegram login flow, mounted at /authbot (not /api/v1).
+	// authbot — Telegram login flow. Dual-mounted:
+	//   - root /authbot/*        — called directly by the trusted Telegram
+	//     bot service (unchanged, bypasses the gateway's /api/v2 rewrite).
+	//   - /api/v1/authbot/*      — called by the dashboard, which only ever
+	//     hits paths starting with /api/v1 (rewritten to /api/v2 -> this
+	//     backend in prod). Without this second mount the dashboard's
+	//     "/authbot/login" call resolved to the OLD Django backend (only
+	//     /api/v2/* is routed to this service in prod), breaking Telegram
+	//     login with a bogus "Method GET not allowed" Django error.
+	// authbot.RegisterRoutes adds its own "/authbot" group under whatever
+	// group it's given, so the root mount uses &s.router.RouterGroup (not a
+	// "/authbot" group) to avoid a doubled prefix, and the v1 mount reuses
+	// the same handler/usecase instance.
 	authbotUC := authbot.NewUsecase(
 		authbot.NewPostgresRepository(s.pool),
 		userUC,
 		authbotTokenAdapter{tokens: tokens, store: refreshStore},
 	)
-	// authbot.RegisterRoutes adds its own "/authbot" group, so mount it on the
-	// root router group (not a "/authbot" group) to avoid a doubled prefix.
-	authbot.RegisterRoutes(&s.router.RouterGroup, authbot.NewHandler(authbotUC))
+	authbotHandler := authbot.NewHandler(authbotUC)
+	authbot.RegisterRoutes(&s.router.RouterGroup, authbotHandler)
+	authbot.RegisterRoutes(v1, authbotHandler)
 
 	// cms — collection/field schema in Postgres, documents in Mongo. If Mongo is
 	// unreachable we skip the routes rather than fail the whole server, so the

@@ -31,6 +31,12 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
+// GoogleLoginRequest carries the ID token a Google Identity Services button
+// hands the frontend (dashboard: POST /api/v1/auth/google -> here).
+type GoogleLoginRequest struct {
+	IDToken string `json:"id_token" validate:"required"`
+}
+
 // ResetSetRequest sets a new password using the reset token from confirm.
 type ResetSetRequest struct {
 	Token    string `json:"token" validate:"required"`

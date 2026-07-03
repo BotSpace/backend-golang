@@ -16,6 +16,12 @@ SELECT * FROM users WHERE id = $1;
 -- name: GetUserByPhone :one
 SELECT * FROM users WHERE phone = $1;
 
+-- name: GetUserByEmail :one
+-- email has no UNIQUE constraint (legacy schema); Google sign-in is the only
+-- caller and only ever looks up its own verified address, so a stray
+-- duplicate elsewhere just resolves to whichever row Postgres returns first.
+SELECT * FROM users WHERE email = $1;
+
 -- name: UpdateUserProfile :one
 UPDATE users
 SET first_name = COALESCE(sqlc.narg('first_name'), first_name),

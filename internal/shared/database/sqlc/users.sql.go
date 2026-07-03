@@ -207,6 +207,38 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, phone, first_name, last_name, username, email, password_hash, role, balance, template_balance, is_active, is_staff, is_superuser, validated_at, kyc_verified_at, created_at, updated_at FROM users WHERE email = $1
+`
+
+// email has no UNIQUE constraint (legacy schema); Google sign-in is the only
+// caller and only ever looks up its own verified address, so a stray
+// duplicate elsewhere just resolves to whichever row Postgres returns first.
+func (q *Queries) GetUserByEmail(ctx context.Context, email *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.FirstName,
+		&i.LastName,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Balance,
+		&i.TemplateBalance,
+		&i.IsActive,
+		&i.IsStaff,
+		&i.IsSuperuser,
+		&i.ValidatedAt,
+		&i.KycVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, phone, first_name, last_name, username, email, password_hash, role, balance, template_balance, is_active, is_staff, is_superuser, validated_at, kyc_verified_at, created_at, updated_at FROM users WHERE id = $1
 `

@@ -238,6 +238,9 @@ func (f *fakeUsers) Authenticate(context.Context, string, string) (*user.User, e
 func (f *fakeUsers) GetByPhone(context.Context, string) (*user.User, error) {
 	return nil, errors.New("not implemented")
 }
+func (f *fakeUsers) GetByEmail(context.Context, string) (*user.User, error) {
+	return nil, errors.New("not implemented")
+}
 func (f *fakeUsers) MarkValidated(context.Context, uuid.UUID) (*user.User, error) {
 	return nil, errors.New("not implemented")
 }

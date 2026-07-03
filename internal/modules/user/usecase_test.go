@@ -47,6 +47,15 @@ func (r *fakeRepo) GetByPhone(_ context.Context, phone string) (*User, error) {
 	}
 	return nil, database.ErrNotFound
 }
+func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*User, error) {
+	for _, u := range r.byID {
+		if u.Email == email {
+			cp := *u
+			return &cp, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
 func (r *fakeRepo) MarkValidated(_ context.Context, id uuid.UUID) (*User, error) {
 	u, ok := r.byID[id]
 	if !ok {

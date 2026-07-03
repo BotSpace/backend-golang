@@ -118,6 +118,29 @@ func (h *Handler) Login(c *gin.Context) {
 	httpx.OK(c, http.StatusOK, tokens)
 }
 
+// GoogleLogin godoc
+// @Summary      Login (or sign up) with a Google ID token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      GoogleLoginRequest  true  "Google ID token"
+// @Success      200   {object}  TokenResponse
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Failure      401   {object}  httpx.ErrorResponse
+// @Router       /auth/google [post]
+func (h *Handler) GoogleLogin(c *gin.Context) {
+	var req GoogleLoginRequest
+	if !bind(c, &req) {
+		return
+	}
+	tokens, err := h.uc.GoogleLogin(c.Request.Context(), req)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, tokens)
+}
+
 // Refresh godoc
 // @Summary      Refresh access token
 // @Tags         auth

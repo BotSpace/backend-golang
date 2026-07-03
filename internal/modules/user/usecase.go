@@ -23,6 +23,9 @@ type Usecase interface {
 	Authenticate(ctx context.Context, phone, password string) (*User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByPhone(ctx context.Context, phone string) (*User, error)
+	// GetByEmail looks up a user by email — used by the Google sign-in flow
+	// (auth.Usecase.GoogleLogin) to get-or-create by verified email.
+	GetByEmail(ctx context.Context, email string) (*User, error)
 	MarkValidated(ctx context.Context, id uuid.UUID) (*User, error)
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfileUpdate) (*User, error)
 	ChangePassword(ctx context.Context, id uuid.UUID, oldPassword, newPassword string) error
@@ -130,6 +133,10 @@ func (u *usecase) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
 
 func (u *usecase) GetByPhone(ctx context.Context, phone string) (*User, error) {
 	return u.get(u.repo.GetByPhone(ctx, phone))
+}
+
+func (u *usecase) GetByEmail(ctx context.Context, email string) (*User, error) {
+	return u.get(u.repo.GetByEmail(ctx, email))
 }
 
 func (u *usecase) MarkValidated(ctx context.Context, id uuid.UUID) (*User, error) {
