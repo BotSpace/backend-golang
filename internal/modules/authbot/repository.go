@@ -117,17 +117,6 @@ func (r *pgRepo) DeleteCode(ctx context.Context, codeID uuid.UUID) error {
 	return nil
 }
 
-// DeleteExpiredCodes purges codes nobody ever redeemed. Wires the
-// previously-generated but never-called sqlcdb.DeleteExpiredAuthbotCodes
-// query into the scheduler.
-func (r *pgRepo) DeleteExpiredCodes(ctx context.Context) (int64, error) {
-	n, err := r.queries.DeleteExpiredAuthbotCodes(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("delete expired authbot codes: %w", err)
-	}
-	return n, nil
-}
-
 func botUserFromSQLC(r sqlcdb.AuthbotBotUser) BotUser {
 	return BotUser{
 		ID:         r.ID,

@@ -129,57 +129,6 @@ func (q *Queries) DeletePlan(ctx context.Context, id uuid.UUID) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-const expireActiveSubscriptions = `-- name: ExpireActiveSubscriptions :many
-
-UPDATE user_subscription
-SET status = 'grace_period', updated_at = NOW()
-WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()
-RETURNING id, user_id, plan_id, status, started_at, expires_at, tokens_used_input, tokens_used_output, token_reset_at, bots_count, created_at, updated_at
-`
-
-// ===================== expiry scheduler =====================
-// Django never actually implemented an expiry transition for
-// UserSubscription (checked core/apps/api/models/plan.py + tasks/ + beat
-// schedule — status/expires_at exist but nothing ever moved a subscription
-// out of "active"). These two queries are net-new Go-side logic, not a port:
-// active -> grace_period once expires_at passes, grace_period -> suspended
-// after a further 3 days (matches PlanStatus.GRACE_PERIOD's "3 kun" comment,
-// enums/plan.py). Nothing currently enforces "suspended" against
-// can_create_bot/token checks — this only keeps the status column truthful
-// for the dashboard/admin to read.
-func (q *Queries) ExpireActiveSubscriptions(ctx context.Context) ([]UserSubscription, error) {
-	rows, err := q.db.Query(ctx, expireActiveSubscriptions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []UserSubscription{}
-	for rows.Next() {
-		var i UserSubscription
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.PlanID,
-			&i.Status,
-			&i.StartedAt,
-			&i.ExpiresAt,
-			&i.TokensUsedInput,
-			&i.TokensUsedOutput,
-			&i.TokenResetAt,
-			&i.BotsCount,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getActivePlanByID = `-- name: GetActivePlanByID :one
 SELECT id, name, price, description, is_top, is_active, sort_order, max_bots, max_tokens, max_output_tokens, max_input_tokens, cached_token_rate, features, created_at, updated_at FROM plan WHERE id = $1 AND is_active = true
 `
@@ -379,46 +328,6 @@ func (q *Queries) ListAllPlans(ctx context.Context) ([]Plan, error) {
 			&i.MaxInputTokens,
 			&i.CachedTokenRate,
 			&i.Features,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const suspendGracePeriodSubscriptions = `-- name: SuspendGracePeriodSubscriptions :many
-UPDATE user_subscription
-SET status = 'suspended', updated_at = NOW()
-WHERE status = 'grace_period' AND expires_at IS NOT NULL AND expires_at < NOW() - INTERVAL '3 days'
-RETURNING id, user_id, plan_id, status, started_at, expires_at, tokens_used_input, tokens_used_output, token_reset_at, bots_count, created_at, updated_at
-`
-
-func (q *Queries) SuspendGracePeriodSubscriptions(ctx context.Context) ([]UserSubscription, error) {
-	rows, err := q.db.Query(ctx, suspendGracePeriodSubscriptions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []UserSubscription{}
-	for rows.Next() {
-		var i UserSubscription
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.PlanID,
-			&i.Status,
-			&i.StartedAt,
-			&i.ExpiresAt,
-			&i.TokensUsedInput,
-			&i.TokensUsedOutput,
-			&i.TokenResetAt,
-			&i.BotsCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

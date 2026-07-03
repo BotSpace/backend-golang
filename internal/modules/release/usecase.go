@@ -35,17 +35,6 @@ type Usecase interface {
 	UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error)
 	ListEnvironments(ctx context.Context, projectID, ownerID uuid.UUID) ([]Environment, error)
 	DeleteEnvironment(ctx context.Context, key string, projectID, ownerID uuid.UUID) error
-
-	// ReconcileAll is the scheduler's janitor tick (see
-	// internal/shared/scheduler): live-checks every release/debug still
-	// pending/initializing, persists the reconciled status, and stops the
-	// orchestrator resources of anything that resolved to failed — ports
-	// Django's cleanup_failed_releases beat task (core/apps/api/tasks/release.py),
-	// which deletes the k8s Deployment/Secret/ConfigMap/Service for
-	// crash-looping releases so they don't sit around consuming cluster
-	// resources. Returns (reconciled, failedAndStopped, error) — best-effort,
-	// a single row's error is logged by the caller and doesn't abort the batch.
-	ReconcileAll(ctx context.Context) (reconciled, failedAndStopped int, err error)
 }
 
 type usecase struct {
@@ -307,46 +296,6 @@ func (u *usecase) reconcileDebug(ctx context.Context, dbg Debug) Debug {
 	}
 	dbg.Status = next
 	return dbg
-}
-
-// ReconcileAll is the scheduler's periodic janitor tick — see the Usecase
-// interface doc comment. It reuses the exact same reconcileRelease/
-// reconcileDebug logic GetRelease/GetDebug use on a single row, just applied
-// to every non-terminal row system-wide instead of waiting for a user to
-// happen to poll one.
-func (u *usecase) ReconcileAll(ctx context.Context) (reconciled, failedAndStopped int, err error) {
-	releases, err := u.repo.ListNonTerminalReleases(ctx)
-	if err != nil {
-		return 0, 0, fmt.Errorf("list non-terminal releases: %w", err)
-	}
-	for _, rel := range releases {
-		after := u.reconcileRelease(ctx, rel)
-		if after.Status == rel.Status {
-			continue
-		}
-		reconciled++
-		if after.Status == StatusFailed && after.ServiceID != "" {
-			_ = u.orch.Stop(ctx, after.ServiceID)
-			failedAndStopped++
-		}
-	}
-
-	debugs, err := u.repo.ListNonTerminalDebugs(ctx)
-	if err != nil {
-		return reconciled, failedAndStopped, fmt.Errorf("list non-terminal debugs: %w", err)
-	}
-	for _, dbg := range debugs {
-		after := u.reconcileDebug(ctx, dbg)
-		if after.Status == dbg.Status {
-			continue
-		}
-		reconciled++
-		if after.Status == StatusFailed && after.ServiceID != "" {
-			_ = u.orch.Stop(ctx, after.ServiceID)
-			failedAndStopped++
-		}
-	}
-	return reconciled, failedAndStopped, nil
 }
 
 func (u *usecase) UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error) {

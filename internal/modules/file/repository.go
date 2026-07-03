@@ -72,18 +72,6 @@ func (r *pgRepo) DeleteFileByUUIDForOwner(ctx context.Context, uid, ownerID uuid
 	}))
 }
 
-func (r *pgRepo) DeleteExpiredFiles(ctx context.Context) ([]File, error) {
-	rows, err := r.queries.DeleteExpiredFiles(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("delete expired files: %w", err)
-	}
-	out := make([]File, len(rows))
-	for i, row := range rows {
-		out[i] = fromSQLCFile(row)
-	}
-	return out, nil
-}
-
 func (r *pgRepo) ListFiles(ctx context.Context, f ListFileFilter) ([]File, error) {
 	rows, err := r.queries.ListFiles(ctx, sqlcdb.ListFilesParams{
 		OwnerID:   f.OwnerID,

@@ -213,14 +213,6 @@ func (u *Usecase) Logout(ctx context.Context, in RefreshRequest) error {
 	return nil
 }
 
-// CleanupExpiredRefreshTokens purges expired refresh_tokens rows. Called by
-// the scheduler (internal/shared/scheduler), not an HTTP route — this is the
-// previously-generated-but-never-wired sqlcdb.DeleteExpiredRefreshTokens
-// query getting an actual caller.
-func (u *Usecase) CleanupExpiredRefreshTokens(ctx context.Context) error {
-	return u.store.DeleteExpired(ctx)
-}
-
 // maxAPITokensPerUser mirrors APITokenViewSet.create's "Maksimum 10 ta token
 // yaratish mumkin" cap.
 const maxAPITokensPerUser = 10

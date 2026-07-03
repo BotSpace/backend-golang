@@ -25,19 +25,6 @@ func (q *Queries) DeleteAuthbotCode(ctx context.Context, id uuid.UUID) (int64, e
 	return result.RowsAffected(), nil
 }
 
-const deleteExpiredAuthbotCodes = `-- name: DeleteExpiredAuthbotCodes :execrows
-DELETE FROM authbot_codes WHERE expires_at < NOW()
-`
-
-// Best-effort janitor for codes nobody ever redeemed; safe to run periodically.
-func (q *Queries) DeleteExpiredAuthbotCodes(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredAuthbotCodes)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getAuthbotCodeWithBotUser = `-- name: GetAuthbotCodeWithBotUser :one
 SELECT
     c.id         AS code_id,

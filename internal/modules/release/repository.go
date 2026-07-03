@@ -93,18 +93,6 @@ func (r *pgRepo) StopActiveReleasesExcept(ctx context.Context, projectID, exclud
 	return out, nil
 }
 
-func (r *pgRepo) ListNonTerminalReleases(ctx context.Context) ([]Release, error) {
-	rows, err := r.queries.ListNonTerminalReleases(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list non-terminal releases: %w", err)
-	}
-	out := make([]Release, len(rows))
-	for i, row := range rows {
-		out[i] = fromSQLCRelease(row)
-	}
-	return out, nil
-}
-
 // ---- Debug --------------------------------------------------------------
 
 func (r *pgRepo) GetDebugForOwner(ctx context.Context, projectID, ownerID uuid.UUID) (*Debug, error) {
@@ -136,18 +124,6 @@ func (r *pgRepo) UpdateDebugStatusForOwner(ctx context.Context, id, ownerID uuid
 		OwnerID: ownerID,
 		Status:  string(status),
 	}))
-}
-
-func (r *pgRepo) ListNonTerminalDebugs(ctx context.Context) ([]Debug, error) {
-	rows, err := r.queries.ListNonTerminalDebugs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list non-terminal debugs: %w", err)
-	}
-	out := make([]Debug, len(rows))
-	for i, row := range rows {
-		out[i] = fromSQLCDebug(row)
-	}
-	return out, nil
 }
 
 // ---- Environment ----------------------------------------------------------

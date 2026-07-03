@@ -58,7 +58,3 @@ WHERE c.code = sqlc.arg('code');
 -- name: DeleteAuthbotCode :execrows
 -- Consumes a code so it cannot be replayed (Django: code.delete() after login).
 DELETE FROM authbot_codes WHERE id = sqlc.arg('id');
-
--- name: DeleteExpiredAuthbotCodes :execrows
--- Best-effort janitor for codes nobody ever redeemed; safe to run periodically.
-DELETE FROM authbot_codes WHERE expires_at < NOW();

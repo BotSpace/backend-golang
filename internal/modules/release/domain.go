@@ -114,11 +114,4 @@ type Repository interface {
 	// UUIDs, used to name the orchestrator's "bot-<uuid>" Service so Telegram
 	// webhook routing survives redeploys.
 	GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (releaseUUID, debugUUID uuid.UUID, err error)
-
-	// ListNonTerminalReleases/ListNonTerminalDebugs are unscoped
-	// (system-wide) reads for the scheduler's reconcile tick — see
-	// Usecase.ReconcileAll, the janitor porting Django's
-	// cleanup_failed_releases beat task.
-	ListNonTerminalReleases(ctx context.Context) ([]Release, error)
-	ListNonTerminalDebugs(ctx context.Context) ([]Debug, error)
 }

@@ -152,9 +152,4 @@ type Repository interface {
 	CreatePlan(ctx context.Context, in CreatePlanInput) (*Plan, error)
 	UpdatePlan(ctx context.Context, id uuid.UUID, in UpdatePlanInput) (*Plan, error)
 	DeletePlan(ctx context.Context, id uuid.UUID) error
-
-	// ExpireActiveSubscriptions/SuspendGracePeriodSubscriptions back
-	// Usecase.ExpireSubscriptions — see its doc comment.
-	ExpireActiveSubscriptions(ctx context.Context) ([]Subscription, error)
-	SuspendGracePeriodSubscriptions(ctx context.Context) ([]Subscription, error)
 }
