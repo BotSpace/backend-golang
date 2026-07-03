@@ -87,6 +87,11 @@ type Repository interface {
 	Create(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByPhone(ctx context.Context, phone string) (*User, error)
+	// GetByEmail is used by the Google sign-in flow (auth module) to find an
+	// existing account by its verified Google email. Only called with a
+	// non-empty email — see GetUserByEmail in queries/users.sql for the
+	// no-unique-constraint caveat.
+	GetByEmail(ctx context.Context, email string) (*User, error)
 	MarkValidated(ctx context.Context, id uuid.UUID) (*User, error)
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfileUpdate) (*User, error)
 	UpdatePassword(ctx context.Context, id uuid.UUID, hash string) error

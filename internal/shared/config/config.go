@@ -19,6 +19,16 @@ type Config struct {
 	OTP    OTPConfig    `mapstructure:"otp"`
 	Log    LogConfig    `mapstructure:"log"`
 	Engine EngineConfig `mapstructure:"engine"`
+	Google GoogleConfig `mapstructure:"google"`
+}
+
+// GoogleConfig configures Google sign-in (POST /api/v1/auth/google).
+type GoogleConfig struct {
+	// ClientID is the expected `aud` claim on the ID token the dashboard
+	// forwards — the same OAuth client ID baked into the dashboard as
+	// NEXT_PUBLIC_GOOGLE_CLIENT_ID. Set via APP_GOOGLE_CLIENT_ID. Empty
+	// disables the endpoint (it returns a config error instead of a panic).
+	ClientID string `mapstructure:"client_id"`
 }
 
 // EngineConfig controls how bot engines (release/debug containers + shared
@@ -231,6 +241,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otp.resend_after", "60s")
 
 	v.SetDefault("log.level", "info")
+
+	v.SetDefault("google.client_id", "") // APP_GOOGLE_CLIENT_ID — unset disables /auth/google
 
 	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
 	v.SetDefault("engine.namespace", "botmother")

@@ -240,6 +240,10 @@ type Querier interface {
 	GetSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (UserSubscription, error)
 	GetTicketByID(ctx context.Context, id uuid.UUID) (GetTicketByIDRow, error)
 	GetTicketForOwner(ctx context.Context, arg GetTicketForOwnerParams) (Ticket, error)
+	// email has no UNIQUE constraint (legacy schema); Google sign-in is the only
+	// caller and only ever looks up its own verified address, so a stray
+	// duplicate elsewhere just resolves to whichever row Postgres returns first.
+	GetUserByEmail(ctx context.Context, email *string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phone *string) (User, error)
 	// ===================== admin detail enrichment (cross-module reads) =====================

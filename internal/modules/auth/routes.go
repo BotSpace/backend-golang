@@ -9,6 +9,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler) {
 		g.POST("/confirm", h.Confirm)
 		g.POST("/resend", h.Resend)
 		g.POST("/login", h.Login)
+		g.POST("/google", h.GoogleLogin)
 		g.POST("/refresh", h.Refresh)
 		g.POST("/logout", h.Logout)
 		g.POST("/reset-password", h.ResetStart)

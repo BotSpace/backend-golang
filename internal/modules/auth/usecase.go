@@ -2,6 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/botspace/backend/internal/modules/user"
@@ -20,10 +24,13 @@ type Usecase struct {
 	tokens *TokenIssuer
 	otp    *OTPService
 	store  RefreshStore
+	// google is nil when APP_GOOGLE_CLIENT_ID is unset — GoogleLogin then
+	// fails with a clear config error instead of a nil-pointer panic.
+	google GoogleVerifier
 }
 
-func NewUsecase(users user.Usecase, tokens *TokenIssuer, otp *OTPService, store RefreshStore) *Usecase {
-	return &Usecase{users: users, tokens: tokens, otp: otp, store: store}
+func NewUsecase(users user.Usecase, tokens *TokenIssuer, otp *OTPService, store RefreshStore, google GoogleVerifier) *Usecase {
+	return &Usecase{users: users, tokens: tokens, otp: otp, store: store, google: google}
 }
 
 // Register creates a pending user and sends the confirmation code. The user
@@ -68,6 +75,67 @@ func (u *Usecase) Login(ctx context.Context, in LoginRequest) (TokenResponse, er
 		return TokenResponse{}, err
 	}
 	return u.issueTokens(ctx, found.ID, found.Role)
+}
+
+// GoogleLogin verifies a Google ID token (from Google Identity Services on
+// the dashboard), gets-or-creates the matching user by verified email, and
+// issues the same token pair as the phone/password Login flow.
+func (u *Usecase) GoogleLogin(ctx context.Context, in GoogleLoginRequest) (TokenResponse, error) {
+	if u.google == nil {
+		return TokenResponse{}, httpx.Internal(fmt.Errorf("google sign-in not configured: APP_GOOGLE_CLIENT_ID unset"))
+	}
+	claims, err := u.google.Verify(ctx, in.IDToken)
+	if err != nil {
+		return TokenResponse{}, httpx.Unauthorized("auth.invalid_google_token", err.Error())
+	}
+	if !claims.EmailVerified {
+		return TokenResponse{}, httpx.Forbidden("auth.google_email_unverified", "google account email is not verified")
+	}
+
+	usr, err := u.users.GetByEmail(ctx, claims.Email)
+	if err != nil {
+		ae, ok := httpx.AsAppError(err)
+		if !ok || ae.Status != http.StatusNotFound {
+			return TokenResponse{}, err
+		}
+		usr, err = u.createGoogleUser(ctx, claims)
+		if err != nil {
+			return TokenResponse{}, err
+		}
+	}
+	return u.issueTokens(ctx, usr.ID, usr.Role)
+}
+
+// createGoogleUser provisions a new account for a first-time Google sign-in.
+// It has no phone and an unusable random password — Google is the only way
+// in until the user sets one up via the profile/password flows — and is
+// marked validated immediately since Google already verified the email.
+func (u *Usecase) createGoogleUser(ctx context.Context, claims GoogleClaims) (*user.User, error) {
+	randPassword := make([]byte, 32)
+	if _, err := rand.Read(randPassword); err != nil {
+		return nil, httpx.Internal(fmt.Errorf("generate random password: %w", err))
+	}
+	firstName := claims.FirstName
+	if firstName == "" {
+		firstName = claims.Email
+	}
+	created, err := u.users.Register(ctx, user.RegisterInput{
+		FirstName: firstName,
+		LastName:  claims.LastName,
+		Password:  hex.EncodeToString(randPassword),
+	})
+	if err != nil {
+		return nil, err
+	}
+	email := claims.Email
+	if _, err := u.users.UpdateProfile(ctx, created.ID, user.ProfileUpdate{Email: &email}); err != nil {
+		return nil, err
+	}
+	validated, err := u.users.MarkValidated(ctx, created.ID)
+	if err != nil {
+		return nil, err
+	}
+	return validated, nil
 }
 
 // ResetStart sends an OTP to a known phone so its owner can reset the password.

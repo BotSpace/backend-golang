@@ -56,6 +56,10 @@ func (r *pgRepo) GetByPhone(ctx context.Context, phone string) (*User, error) {
 	return mapOne(r.queries.GetUserByPhone(ctx, strPtr(phone)))
 }
 
+func (r *pgRepo) GetByEmail(ctx context.Context, email string) (*User, error) {
+	return mapOne(r.queries.GetUserByEmail(ctx, strPtr(email)))
+}
+
 func (r *pgRepo) MarkValidated(ctx context.Context, id uuid.UUID) (*User, error) {
 	return mapOne(r.queries.MarkUserValidated(ctx, id))
 }
