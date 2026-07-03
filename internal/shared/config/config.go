@@ -170,6 +170,17 @@ func Load() (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// AutomaticEnv doesn't reliably bind nested keys during Unmarshal unless the
+	// key is explicitly bound, so env-only secrets (no config.yaml value) get
+	// lost. Bind them explicitly. (viper gotcha: nested struct + AutomaticEnv.)
+	for _, key := range []string{
+		"google.client_id",
+		"crypto.key", "internal.token",
+		"engine.mode", "engine.image_repository", "engine.image_tag",
+	} {
+		_ = v.BindEnv(key)
+	}
+
 	if err := v.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError
 		if !errors.As(err, &notFound) {
