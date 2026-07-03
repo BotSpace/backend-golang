@@ -105,12 +105,44 @@ func (u *usecase) ListReleases(ctx context.Context, projectID, ownerID uuid.UUID
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
+	for i := range items {
+		items[i] = u.reconcileRelease(ctx, items[i])
+	}
 	return items, nil
 }
 
 func (u *usecase) GetRelease(ctx context.Context, id, ownerID uuid.UUID) (*Release, error) {
 	rel, err := u.repo.GetReleaseForOwner(ctx, id, ownerID)
-	return rel, mapReleaseErr(err)
+	if err != nil {
+		return nil, mapReleaseErr(err)
+	}
+	reconciled := u.reconcileRelease(ctx, *rel)
+	return &reconciled, nil
+}
+
+// reconcileRelease is the lazy fix for "status never leaves initializing":
+// there's no k8s-watcher pushing pod events into the DB (see
+// engine.ReconcileStatus doc comment), so every read of a non-terminal
+// release asks the orchestrator live and persists the result. Best-effort —
+// an orchestrator error just returns the DB row unchanged so a transient k8s
+// API hiccup never turns into a request failure.
+func (u *usecase) reconcileRelease(ctx context.Context, rel Release) Release {
+	if rel.ServiceID == "" || (rel.Status != StatusPending && rel.Status != StatusInitializing) {
+		return rel
+	}
+	live, err := u.orch.Status(ctx, rel.ServiceID)
+	if err != nil {
+		return rel
+	}
+	next := Status(engine.ReconcileStatus(engine.Status(rel.Status), live))
+	if next == rel.Status {
+		return rel
+	}
+	if updated, err := u.repo.UpdateReleaseDeployResult(ctx, rel.ID, rel.ServiceID, next); err == nil {
+		return *updated
+	}
+	rel.Status = next
+	return rel
 }
 
 // StopRelease ports ReleaseView.stop: synchronously stop the deployment and
@@ -189,7 +221,32 @@ func (u *usecase) StopDebug(ctx context.Context, projectID, ownerID uuid.UUID) (
 
 func (u *usecase) GetDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*Debug, error) {
 	dbg, err := u.repo.GetDebugForOwner(ctx, projectID, ownerID)
-	return dbg, mapDebugErr(err)
+	if err != nil {
+		return nil, mapDebugErr(err)
+	}
+	reconciled := u.reconcileDebug(ctx, *dbg)
+	return &reconciled, nil
+}
+
+// reconcileDebug is GetDebug's counterpart to reconcileRelease — see its doc
+// comment.
+func (u *usecase) reconcileDebug(ctx context.Context, dbg Debug) Debug {
+	if dbg.ServiceID == "" || (dbg.Status != StatusPending && dbg.Status != StatusInitializing) {
+		return dbg
+	}
+	live, err := u.orch.Status(ctx, dbg.ServiceID)
+	if err != nil {
+		return dbg
+	}
+	next := Status(engine.ReconcileStatus(engine.Status(dbg.Status), live))
+	if next == dbg.Status {
+		return dbg
+	}
+	if updated, err := u.repo.UpdateDebugDeployResult(ctx, dbg.ID, dbg.ServiceID, next); err == nil {
+		return *updated
+	}
+	dbg.Status = next
+	return dbg
 }
 
 func (u *usecase) UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error) {

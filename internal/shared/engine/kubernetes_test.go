@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -348,6 +349,67 @@ func TestStatus_MapsReplicaCountsToStatus(t *testing.T) {
 		if got != want {
 			t.Errorf("Status(%s) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+// TestStatus_CrashLoopingPodReportsFailed mirrors Django's
+// cleanup_failed_releases (core/apps/api/tasks/release.py,
+// CRASH_RESTART_THRESHOLD=5): a deployment with replicas but a
+// crash-looping pod must report failed, not initializing forever.
+func TestStatus_CrashLoopingPodReportsFailed(t *testing.T) {
+	ctx := context.Background()
+	orch, cs := testOrchestrator()
+
+	labels := map[string]string{"app": "botmother-engine", "engine-name": "crash-dep"}
+	_, err := cs.AppsV1().Deployments("botmother").Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "crash-dep", Namespace: "botmother"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: labels}},
+		Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 0},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed deployment: %v", err)
+	}
+	_, err = cs.CoreV1().Pods("botmother").Create(ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "crash-dep-abc", Namespace: "botmother", Labels: labels},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{RestartCount: 7}},
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed pod: %v", err)
+	}
+
+	got, err := orch.Status(ctx, "crash-dep")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got != StatusFailed {
+		t.Fatalf("Status(crash-dep) = %q, want failed", got)
+	}
+}
+
+func TestReconcileStatus(t *testing.T) {
+	cases := []struct {
+		name     string
+		db       Status
+		live     Status
+		expected Status
+	}{
+		{"initializing+running->running", StatusInitializing, StatusRunning, StatusRunning},
+		{"pending+running->running", StatusPending, StatusRunning, StatusRunning},
+		{"initializing+failed->failed", StatusInitializing, StatusFailed, StatusFailed},
+		{"initializing+stopped(vanished)->failed", StatusInitializing, StatusStopped, StatusFailed},
+		{"initializing+still initializing->initializing", StatusInitializing, StatusInitializing, StatusInitializing},
+		{"terminal running is never touched", StatusRunning, StatusFailed, StatusRunning},
+		{"terminal stopped is never touched", StatusStopped, StatusRunning, StatusStopped},
+		{"terminal failed is never touched", StatusFailed, StatusRunning, StatusFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ReconcileStatus(tc.db, tc.live); got != tc.expected {
+				t.Errorf("ReconcileStatus(%s, %s) = %s, want %s", tc.db, tc.live, got, tc.expected)
+			}
+		})
 	}
 }
 

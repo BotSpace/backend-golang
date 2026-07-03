@@ -322,6 +322,67 @@ func TestCreateReleaseStopsPriorActiveReleases(t *testing.T) {
 	}
 }
 
+// TestGetReleaseReconcilesLiveStatus ports the "bots hang on launching" fix:
+// KubernetesOrchestrator.Deploy always reports StatusInitializing (there's no
+// k8s-watcher pushing pod-ready events into the DB), so GetRelease/ListReleases
+// must ask the orchestrator live and persist the result instead of returning
+// a DB row that's frozen at "initializing" forever.
+func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	orch.status = engine.StatusInitializing // Deploy() reports this at create time
+	uc := NewUsecase(repo, orch)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+
+	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	if rel.Status != StatusInitializing {
+		t.Fatalf("expected initializing right after deploy, got %s", rel.Status)
+	}
+
+	// Pod becomes Ready sometime later — GetRelease must pick that up live.
+	orch.status = engine.StatusRunning
+	got, err := uc.GetRelease(ctx, rel.ID, ownerID)
+	if err != nil {
+		t.Fatalf("get release: %v", err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("expected GetRelease to reconcile to running, got %s", got.Status)
+	}
+
+	// The reconciled status must be persisted, not just returned once — a
+	// second read (e.g. via ListReleases) shouldn't need to ask k8s again to
+	// see "running".
+	stored, err := repo.GetReleaseForOwner(ctx, rel.ID, ownerID)
+	if err != nil {
+		t.Fatalf("reload from repo: %v", err)
+	}
+	if stored.Status != StatusRunning {
+		t.Fatalf("expected persisted status running, got %s", stored.Status)
+	}
+
+	// A crashed pod (orchestrator has no record of the deployment) must
+	// resolve to failed, not hang at initializing forever.
+	rel2, err := uc.CreateRelease(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("create second release: %v", err)
+	}
+	repo.releases[rel2.ID].Status = StatusInitializing
+	orch.status = engine.StatusStopped
+	got2, err := uc.GetRelease(ctx, rel2.ID, ownerID)
+	if err != nil {
+		t.Fatalf("get second release: %v", err)
+	}
+	if got2.Status != StatusFailed {
+		t.Fatalf("expected vanished deployment to resolve to failed, got %s", got2.Status)
+	}
+}
+
 // TestUpsertEnvironmentIsIdempotentByKey ports the CreateEnviromentSerializer
 // upsert semantics: re-posting the same key+project overwrites the value
 // instead of erroring, and a project owned by someone else is rejected.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
+	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
 )
@@ -31,10 +32,21 @@ type Usecase interface {
 
 type usecase struct {
 	repo Repository
+	// orch is nil-able: an "" orchestrator (e.g. engine.NewStub()) or nil
+	// simply means Get returns whatever status is in the debug row, no live
+	// reconciliation. Kept optional so existing callers/tests that only care
+	// about project CRUD don't need to wire k8s.
+	orch engine.Orchestrator
 }
 
-func NewUsecase(repo Repository) Usecase {
-	return &usecase{repo: repo}
+// NewUsecase wires the project usecase. orch may be nil — Get then skips
+// live debug-status reconciliation and returns the DB row as-is.
+func NewUsecase(repo Repository, orch ...engine.Orchestrator) Usecase {
+	u := &usecase{repo: repo}
+	if len(orch) > 0 {
+		u.orch = orch[0]
+	}
+	return u
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
@@ -48,9 +60,48 @@ func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) 
 	return p, nil
 }
 
+// Get ports RetrieveProjectSerializer, which nests RetrieveDebugSerializer
+// (core/apps/api/serializers/project/project.py) — the single-project fetch
+// embeds the project's debug-container status. See reconcileDebug for why
+// that status is asked from the orchestrator live rather than trusted as-is.
 func (u *usecase) Get(ctx context.Context, id, ownerID uuid.UUID) (*Project, error) {
 	p, err := u.repo.GetForOwner(ctx, id, ownerID)
-	return mapErr(p, err)
+	if p, err = mapErr(p, err); err != nil {
+		return nil, err
+	}
+	dbg, err := u.repo.GetDebugForOwner(ctx, id, ownerID)
+	if err != nil || dbg == nil {
+		return p, nil
+	}
+	p.Debug = u.reconcileDebug(ctx, dbg)
+	return p, nil
+}
+
+// reconcileDebug is the project-module twin of release.reconcileRelease /
+// release.reconcileDebug — same lazy live-status fix, duplicated instead of
+// imported because this module deliberately never imports the release
+// package (see Repository's GetDebugForOwner doc comment).
+func (u *usecase) reconcileDebug(ctx context.Context, dbg *ProjectDebug) *ProjectDebug {
+	if u.orch == nil || dbg.ServiceID == "" {
+		return dbg
+	}
+	dbStatus := engine.Status(dbg.Status)
+	if dbStatus != engine.StatusPending && dbStatus != engine.StatusInitializing {
+		return dbg
+	}
+	live, err := u.orch.Status(ctx, dbg.ServiceID)
+	if err != nil {
+		return dbg
+	}
+	next := engine.ReconcileStatus(dbStatus, live)
+	if string(next) == dbg.Status {
+		return dbg
+	}
+	if updated, err := u.repo.UpdateDebugStatus(ctx, dbg.ID, dbg.ServiceID, string(next)); err == nil {
+		return updated
+	}
+	dbg.Status = string(next)
+	return dbg
 }
 
 func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateInput) (*Project, error) {
