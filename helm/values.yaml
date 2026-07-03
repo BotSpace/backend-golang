@@ -2,7 +2,7 @@
 # CI har push'da tag'ni yangilaydi (worker-golang/engine-golang pattern).
 image:
   repository: registry.iprogrammer.uz/botspace/backend-golang
-  tag: "e403f97"
+  tag: "760b65d"
 
 # engine.KubernetesOrchestrator (internal/shared/engine/kubernetes.go) now
 # talks to the botmother namespace directly (create/update/delete Deployment
