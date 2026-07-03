@@ -388,6 +388,12 @@ type Repository interface {
 	// Catalog.
 	GetBySlug(ctx context.Context, slug string) (*Template, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Template, error)
+	// GetBySlugAny is GetBySlug without the is_verify=TRUE restriction — used
+	// only by the internal RAG feed (see internal_feed.go).
+	GetBySlugAny(ctx context.Context, slug string) (*Template, error)
+	// GetProjectFlow resolves a template's linked project's raw flow JSON,
+	// unscoped by owner (internal/system-token callers only).
+	GetProjectFlow(ctx context.Context, projectID uuid.UUID) (json.RawMessage, error)
 	IncrementViews(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, f TemplateListFilter) ([]Template, error)
 	Count(ctx context.Context, f TemplateListFilter) (int64, error)

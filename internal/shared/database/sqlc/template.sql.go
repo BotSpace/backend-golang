@@ -959,6 +959,41 @@ func (q *Queries) TemplateGetBySlug(ctx context.Context, slug string) (Template,
 	return i, err
 }
 
+const templateGetBySlugAny = `-- name: TemplateGetBySlugAny :one
+SELECT id, author_id, project_id, name, slug, image, video, spec, short_description, description, original_price, discount, discount_type, views, version, is_verify, demo_url, required_envs, created_at, updated_at FROM template WHERE slug = $1
+`
+
+// Unlike TemplateGetBySlug, no is_verify filter — used by the agent's
+// internal RAG feed (core/apps/template/views/internal.py's
+// get_template_with_flow, whose Django queryset has no verify restriction).
+func (q *Queries) TemplateGetBySlugAny(ctx context.Context, slug string) (Template, error) {
+	row := q.db.QueryRow(ctx, templateGetBySlugAny, slug)
+	var i Template
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Image,
+		&i.Video,
+		&i.Spec,
+		&i.ShortDescription,
+		&i.Description,
+		&i.OriginalPrice,
+		&i.Discount,
+		&i.DiscountType,
+		&i.Views,
+		&i.Version,
+		&i.IsVerify,
+		&i.DemoUrl,
+		&i.RequiredEnvs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const templateGetOrderForOwner = `-- name: TemplateGetOrderForOwner :one
 SELECT id, user_id, template_id, amount, status, payment_status, commission_paid, created_at, updated_at FROM template_order WHERE id = $1 AND user_id = $2
 `
@@ -1013,6 +1048,19 @@ func (q *Queries) TemplateGetOrderForUserAndTemplate(ctx context.Context, arg Te
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const templateGetProjectFlow = `-- name: TemplateGetProjectFlow :one
+SELECT flow FROM projects WHERE id = $1
+`
+
+// Internal-only (X-Internal-Token gated), unscoped by owner: the RAG feed
+// needs a template's source flow regardless of who owns the linked project.
+func (q *Queries) TemplateGetProjectFlow(ctx context.Context, projectID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, templateGetProjectFlow, projectID)
+	var flow []byte
+	err := row.Scan(&flow)
+	return flow, err
 }
 
 const templateGetSubmission = `-- name: TemplateGetSubmission :one

@@ -1,12 +1,29 @@
 package release
 
 import (
+	"strconv"
+
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+// logQueryParams reads the shared tail/since_seconds query params for the
+// two log-snapshot endpoints, matching Django's defaults (tail=200, no
+// since_seconds restriction) and silently falling back on parse errors
+// (mirrors the `except (TypeError, ValueError): tail = 200` in project.py).
+func logQueryParams(c *gin.Context) (tailLines, sinceSeconds int) {
+	tailLines = 200
+	if v, err := strconv.Atoi(c.Query("tail")); err == nil {
+		tailLines = v
+	}
+	if v, err := strconv.Atoi(c.Query("since_seconds")); err == nil {
+		sinceSeconds = v
+	}
+	return tailLines, sinceSeconds
+}
 
 type Handler struct {
 	uc Usecase
@@ -168,6 +185,35 @@ func (h *Handler) StopRelease(c *gin.Context) {
 	httpx.OK(c, 200, toReleaseResponse(rel))
 }
 
+// GetReleaseLogs godoc
+// @Summary      Tail a release's live pod log (non-streaming snapshot)
+// @Tags         relase
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id             path   string  true   "Release id"
+// @Param        tail           query  int     false  "trailing lines, default 200, max 2000"
+// @Param        since_seconds  query  int     false  "only lines newer than N seconds"
+// @Success      200  {object}  LogSnapshotResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Router       /relase/{id}/logs [get]
+func (h *Handler) GetReleaseLogs(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	tail, since := logQueryParams(c)
+	snap, err := h.uc.GetReleaseLogs(c.Request.Context(), id, ownerID, tail, since)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toLogSnapshotResponse(snap))
+}
+
 // ---- Debug --------------------------------------------------------------------
 
 // StartDebug godoc
@@ -246,6 +292,34 @@ func (h *Handler) GetDebug(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toDebugResponse(dbg))
+}
+
+// GetDebugLogs godoc
+// @Summary      Tail a project's debug container pod log (non-streaming snapshot)
+// @Tags         debug
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id             path   string  true   "Project id"
+// @Param        tail           query  int     false  "trailing lines, default 200, max 2000"
+// @Param        since_seconds  query  int     false  "only lines newer than N seconds"
+// @Success      200  {object}  LogSnapshotResponse
+// @Router       /projects/{id}/debug/logs [get]
+func (h *Handler) GetDebugLogs(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	projectID, ok := pathID(c)
+	if !ok {
+		return
+	}
+	tail, since := logQueryParams(c)
+	snap, err := h.uc.GetDebugLogs(c.Request.Context(), projectID, ownerID, tail, since)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toLogSnapshotResponse(snap))
 }
 
 // ---- Environment ----------------------------------------------------------------

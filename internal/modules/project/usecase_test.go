@@ -239,6 +239,9 @@ func (f *fakeOrchestrator) Stop(context.Context, string) error { return nil }
 func (f *fakeOrchestrator) Status(context.Context, string) (engine.Status, error) {
 	return f.status, nil
 }
+func (f *fakeOrchestrator) Logs(context.Context, string, int, int) (engine.LogSnapshot, error) {
+	return engine.LogSnapshot{}, nil
+}
 
 // TestGet_ReconcilesDebugStatus ports the same "hang on launching" fix as
 // release.GetRelease/ListReleases, but for the tokenless debug-mode bot

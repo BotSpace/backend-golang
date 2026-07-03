@@ -227,8 +227,8 @@ func newTestUsecase(t *testing.T, google auth.GoogleVerifier) (*auth.Usecase, *a
 
 	userRepo := newFakeUserRepo()
 	usersUC := user.NewUsecase(userRepo)
-	// otp (nil) is never touched by GoogleLogin.
-	uc := auth.NewUsecase(usersUC, tokens, nil, newFakeRefreshStore(), google)
+	// otp/pat (nil) are never touched by GoogleLogin.
+	uc := auth.NewUsecase(usersUC, tokens, nil, newFakeRefreshStore(), google, nil)
 	return uc, tokens, userRepo
 }
 
@@ -351,3 +351,132 @@ var errFakeInvalidToken = fakeVerifyError("id_token signature invalid")
 type fakeVerifyError string
 
 func (e fakeVerifyError) Error() string { return string(e) }
+
+// ---- fake auth.PATStore (in-memory) — exercises CreateAPIToken/
+// ExchangeToken end to end without a real Postgres. ----
+
+type fakePATStore struct {
+	byID   map[uuid.UUID]*auth.PersonalAccessToken
+	byHash map[string]uuid.UUID
+}
+
+func newFakePATStore() *fakePATStore {
+	return &fakePATStore{byID: map[uuid.UUID]*auth.PersonalAccessToken{}, byHash: map[string]uuid.UUID{}}
+}
+
+func (s *fakePATStore) Create(_ context.Context, userID uuid.UUID, name, tokenHash, prefix string) (*auth.PersonalAccessToken, error) {
+	p := &auth.PersonalAccessToken{
+		ID: uuid.New(), UserID: userID, Name: name, TokenHash: tokenHash, Prefix: prefix,
+		CreatedAt: time.Now().UTC(),
+	}
+	s.byID[p.ID] = p
+	s.byHash[tokenHash] = p.ID
+	cp := *p
+	return &cp, nil
+}
+
+func (s *fakePATStore) ListForUser(_ context.Context, userID uuid.UUID) ([]auth.PersonalAccessToken, error) {
+	var out []auth.PersonalAccessToken
+	for _, p := range s.byID {
+		if p.UserID == userID {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
+}
+
+func (s *fakePATStore) CountForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	items, _ := s.ListForUser(ctx, userID)
+	return int64(len(items)), nil
+}
+
+func (s *fakePATStore) GetByHash(_ context.Context, tokenHash string) (*auth.PersonalAccessToken, error) {
+	id, ok := s.byHash[tokenHash]
+	if !ok {
+		return nil, database.ErrNotFound
+	}
+	cp := *s.byID[id]
+	return &cp, nil
+}
+
+func (s *fakePATStore) Touch(_ context.Context, id uuid.UUID) error {
+	if p, ok := s.byID[id]; ok {
+		now := time.Now().UTC()
+		p.LastUsedAt = &now
+	}
+	return nil
+}
+
+func (s *fakePATStore) DeleteForUser(_ context.Context, id, userID uuid.UUID) error {
+	p, ok := s.byID[id]
+	if !ok || p.UserID != userID {
+		return database.ErrNotFound
+	}
+	delete(s.byHash, p.TokenHash)
+	delete(s.byID, id)
+	return nil
+}
+
+// TestCreateAndExchangeAPIToken exercises the whole MCP-client flow: mint a
+// "bsp_" token for a confirmed user, then exchange it for a genuinely signed
+// JWT pair carrying that user's id/role — mirrors
+// TokenExchangeView.create + agent/src/agent/mcp/auth.py's consumer.
+func TestCreateAndExchangeAPIToken(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.JWTConfig{
+		PrivateKeyPath: filepath.Join(dir, "priv.pem"),
+		PublicKeyPath:  filepath.Join(dir, "pub.pem"),
+		AccessTTL:      15 * time.Minute,
+		RefreshTTL:     168 * time.Hour,
+		Issuer:         "auth-test",
+	}
+	priv, pub, err := auth.LoadKeys(cfg, "development")
+	if err != nil {
+		t.Fatalf("LoadKeys: %v", err)
+	}
+	tokens := auth.NewTokenIssuer(priv, pub, cfg)
+
+	userRepo := newFakeUserRepo()
+	usersUC := user.NewUsecase(userRepo)
+	owner := &user.User{ID: uuid.New(), Phone: "+998901112233", Role: "user", ValidatedAt: ptrTime(time.Now())}
+	if err := userRepo.Create(context.Background(), owner); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	pat := newFakePATStore()
+	uc := auth.NewUsecase(usersUC, tokens, nil, newFakeRefreshStore(), nil, pat)
+	ctx := context.Background()
+
+	created, raw, err := uc.CreateAPIToken(ctx, owner.ID, "my mcp client")
+	if err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+	if raw[:4] != "bsp_" {
+		t.Fatalf("raw token = %q, want bsp_ prefix", raw)
+	}
+	if created.Prefix != raw[:12] {
+		t.Fatalf("stored prefix = %q, want first 12 chars of raw (%q)", created.Prefix, raw[:12])
+	}
+
+	exchanged, err := uc.ExchangeToken(ctx, raw)
+	if err != nil {
+		t.Fatalf("ExchangeToken: %v", err)
+	}
+	if exchanged.AccessToken == "" || exchanged.RefreshToken == "" {
+		t.Fatal("ExchangeToken returned an empty access or refresh token")
+	}
+	gotUID, _, err := tokens.VerifyAccessToken(exchanged.AccessToken)
+	if err != nil {
+		t.Fatalf("VerifyAccessToken on exchanged access token: %v", err)
+	}
+	if gotUID != owner.ID.String() {
+		t.Fatalf("exchanged token user id = %q, want %q", gotUID, owner.ID.String())
+	}
+
+	// A garbage/unknown token must be rejected, not silently accepted.
+	if _, err := uc.ExchangeToken(ctx, "bsp_does-not-exist"); status(err) != 401 {
+		t.Fatalf("expected 401 for unknown token, got %v", err)
+	}
+}
+
+func ptrTime(t time.Time) *time.Time { return &t }

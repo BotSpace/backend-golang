@@ -17,6 +17,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.GET("", h.List)
 		g.POST("", h.Create)
 		g.GET("/types", h.Types)
+		g.POST("/oauth/:provider/start", h.OAuthStart)
 		g.GET("/:id", h.Get)
 		g.PATCH("/:id", h.Update)
 		g.DELETE("/:id", h.Delete)

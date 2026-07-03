@@ -220,6 +220,36 @@ func (h *Handler) Delete(c *gin.Context) {
 	httpx.NoContent(c)
 }
 
+// OAuthStart godoc
+// @Summary      Begin an OAuth2 consent flow for an oauth2-mode credential type
+// @Tags         credentials
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        provider  path      string             true  "OAuth provider (e.g. google)"
+// @Param        body      body      OAuthStartRequest  true  "Target credential type_key"
+// @Success      200   {object}  OAuthStartResponse
+// @Failure      400   {object}  httpx.ErrorResponse
+// @Failure      404   {object}  httpx.ErrorResponse
+// @Router       /credentials/oauth/{provider}/start [post]
+func (h *Handler) OAuthStart(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	var req OAuthStartRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	authorizeURL, err := h.uc.OAuthStart(c.Request.Context(), ownerID, c.Param("provider"), req.TypeKey)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, OAuthStartResponse{AuthorizeURL: authorizeURL})
+}
+
 // InternalByID godoc
 // @Summary      Resolve a credential by id (decrypted, engine-only)
 // @Tags         credentials-internal

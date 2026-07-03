@@ -22,13 +22,28 @@ type Config struct {
 	Google GoogleConfig `mapstructure:"google"`
 }
 
-// GoogleConfig configures Google sign-in (POST /api/v1/auth/google).
+// GoogleConfig configures Google sign-in (POST /api/v1/auth/google) and the
+// credential module's Google OAuth2 "connect" flow (POST
+// /api/v1/credentials/oauth/google/start/).
 type GoogleConfig struct {
 	// ClientID is the expected `aud` claim on the ID token the dashboard
 	// forwards — the same OAuth client ID baked into the dashboard as
 	// NEXT_PUBLIC_GOOGLE_CLIENT_ID. Set via APP_GOOGLE_CLIENT_ID. Empty
 	// disables the endpoint (it returns a config error instead of a panic).
 	ClientID string `mapstructure:"client_id"`
+
+	// OAuthClientID/OAuthClientSecret are the offline-access OAuth2 app
+	// credentials for google_email/google_sheets/google_drive credential
+	// types (core/apps/credentials/oauth_providers.py's "google" provider —
+	// Django resolves these from admin-editable DB config with an env var
+	// fallback; this backend only implements the env var fallback). Usually
+	// the SAME OAuth client as ClientID above (Google allows one client to
+	// serve both ID-token sign-in and offline authorization-code access),
+	// but kept as separate config in case they diverge. Set via
+	// APP_GOOGLE_OAUTH_CLIENT_ID / APP_GOOGLE_OAUTH_CLIENT_SECRET; empty
+	// disables the "google" OAuth provider (start returns a config error).
+	OAuthClientID     string `mapstructure:"oauth_client_id"`
+	OAuthClientSecret string `mapstructure:"oauth_client_secret"`
 }
 
 // EngineConfig controls how bot engines (release/debug containers + shared
@@ -174,7 +189,7 @@ func Load() (*Config, error) {
 	// key is explicitly bound, so env-only secrets (no config.yaml value) get
 	// lost. Bind them explicitly. (viper gotcha: nested struct + AutomaticEnv.)
 	for _, key := range []string{
-		"google.client_id",
+		"google.client_id", "google.oauth_client_id", "google.oauth_client_secret",
 		"crypto.key", "internal.token",
 		"engine.mode", "engine.image_repository", "engine.image_tag",
 		"engine.redis_host", "engine.redis_port", "engine.redis_password",
@@ -254,7 +269,9 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("log.level", "info")
 
-	v.SetDefault("google.client_id", "") // APP_GOOGLE_CLIENT_ID — unset disables /auth/google
+	v.SetDefault("google.client_id", "")           // APP_GOOGLE_CLIENT_ID — unset disables /auth/google
+	v.SetDefault("google.oauth_client_id", "")     // APP_GOOGLE_OAUTH_CLIENT_ID — unset disables credential oauth "google" provider
+	v.SetDefault("google.oauth_client_secret", "") // APP_GOOGLE_OAUTH_CLIENT_SECRET
 
 	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
 	v.SetDefault("engine.namespace", "botmother")

@@ -77,6 +77,18 @@ func toInternalResponse(d *Detail) InternalResponse {
 	}
 }
 
+// OAuthStartRequest is the POST /credentials/oauth/:provider/start body.
+type OAuthStartRequest struct {
+	TypeKey string `json:"type_key" validate:"required,max=40"`
+}
+
+// OAuthStartResponse mirrors OAuthStartView.post's raw (unenveloped)
+// {"authorize_url": "..."} — agentv3's oauth_start() calls _unwrap_item,
+// which accepts a flat object with no "data" wrapper.
+type OAuthStartResponse struct {
+	AuthorizeURL string `json:"authorize_url"`
+}
+
 // CreateRequest is the POST /credentials body.
 type CreateRequest struct {
 	TypeKey string         `json:"type_key" validate:"required,max=40"`

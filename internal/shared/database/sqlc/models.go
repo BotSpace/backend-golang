@@ -270,6 +270,16 @@ type PaymentWithdrawalRequest struct {
 	UpdatedAt       time.Time      `json:"updated_at"`
 }
 
+type PersonalAccessToken struct {
+	ID         uuid.UUID  `json:"id"`
+	UserID     uuid.UUID  `json:"user_id"`
+	Name       string     `json:"name"`
+	TokenHash  string     `json:"token_hash"`
+	Prefix     string     `json:"prefix"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 type Plan struct {
 	ID              uuid.UUID      `json:"id"`
 	Name            string         `json:"name"`

@@ -99,12 +99,27 @@ type MongoCredentials struct {
 	ConnectionString string
 }
 
+// LogSnapshot is a non-streaming tail of a running deployment's pod logs —
+// the Go counterpart of Django's deployment_logs_snapshot() dict
+// (core/apps/api/services/kubernetes_service.py). PodName is empty when no
+// pod backs serviceID (deployment not running / never deployed).
+type LogSnapshot struct {
+	PodName   string
+	Lines     []string
+	Truncated bool
+}
+
 // Orchestrator deploys/stops bot engine instances. Implemented by a real
 // Docker/K8s client (or an HTTP client to engine-golang) in production.
 type Orchestrator interface {
 	Deploy(ctx context.Context, spec DeploySpec) (DeployResult, error)
 	Stop(ctx context.Context, serviceID string) error
 	Status(ctx context.Context, serviceID string) (Status, error)
+	// Logs returns a snapshot of the last tailLines lines of the deployment's
+	// pod logs (clamped 1..2000), optionally restricted to the last
+	// sinceSeconds (0/negative means "no restriction"). serviceID == ""
+	// (nothing deployed yet) returns a zero-value snapshot, not an error.
+	Logs(ctx context.Context, serviceID string, tailLines, sinceSeconds int) (LogSnapshot, error)
 }
 
 // MongoProvisioner creates/deletes per-project MongoDB databases + users.
@@ -125,6 +140,9 @@ func (Stub) Deploy(_ context.Context, spec DeploySpec) (DeployResult, error) {
 }
 func (Stub) Stop(context.Context, string) error             { return nil }
 func (Stub) Status(context.Context, string) (Status, error) { return StatusStopped, nil }
+func (Stub) Logs(context.Context, string, int, int) (LogSnapshot, error) {
+	return LogSnapshot{}, nil
+}
 func (Stub) Provision(_ context.Context, projectID uuid.UUID) (MongoCredentials, error) {
 	return MongoCredentials{}, nil
 }

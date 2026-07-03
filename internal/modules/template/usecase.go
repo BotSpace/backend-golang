@@ -32,6 +32,10 @@ type Usecase interface {
 	List(ctx context.Context, f TemplateListFilter) ([]Template, int64, error)
 	ToggleLike(ctx context.Context, slug string, userID uuid.UUID) (bool, error)
 
+	// Internal RAG feed (X-Internal-Token gated — see internal_feed.go).
+	ListInternalFeed(ctx context.Context, onlyVerified bool) ([]FeedItem, error)
+	GetInternalFeedItem(ctx context.Context, identifier string) (*FeedItem, error)
+
 	// Admin-wide catalog management.
 	AdminList(ctx context.Context, f AdminTemplateListFilter) ([]AdminTemplateSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminTemplateSummary, error)

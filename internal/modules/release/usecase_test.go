@@ -281,6 +281,8 @@ type fakeOrchestrator struct {
 	// test give different live services different outcomes (e.g. one
 	// running, one vanished/failed) without a second orchestrator instance.
 	byService map[string]engine.Status
+	logs      engine.LogSnapshot
+	logsErr   error
 }
 
 func newFakeOrchestrator() *fakeOrchestrator {
@@ -302,6 +304,13 @@ func (f *fakeOrchestrator) Status(_ context.Context, serviceID string) (engine.S
 		return s, nil
 	}
 	return f.status, nil
+}
+
+func (f *fakeOrchestrator) Logs(_ context.Context, serviceID string, tailLines, sinceSeconds int) (engine.LogSnapshot, error) {
+	if f.logsErr != nil {
+		return engine.LogSnapshot{}, f.logsErr
+	}
+	return f.logs, nil
 }
 
 // TestCreateReleaseStopsPriorActiveReleases ports Django's RelaseSignal

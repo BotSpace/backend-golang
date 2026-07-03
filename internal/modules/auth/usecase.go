@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/botspace/backend/internal/modules/user"
+	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
 )
@@ -27,10 +29,11 @@ type Usecase struct {
 	// google is nil when APP_GOOGLE_CLIENT_ID is unset — GoogleLogin then
 	// fails with a clear config error instead of a nil-pointer panic.
 	google GoogleVerifier
+	pat    PATStore
 }
 
-func NewUsecase(users user.Usecase, tokens *TokenIssuer, otp *OTPService, store RefreshStore, google GoogleVerifier) *Usecase {
-	return &Usecase{users: users, tokens: tokens, otp: otp, store: store, google: google}
+func NewUsecase(users user.Usecase, tokens *TokenIssuer, otp *OTPService, store RefreshStore, google GoogleVerifier, pat PATStore) *Usecase {
+	return &Usecase{users: users, tokens: tokens, otp: otp, store: store, google: google, pat: pat}
 }
 
 // Register creates a pending user and sends the confirmation code. The user
@@ -216,6 +219,79 @@ func (u *Usecase) Logout(ctx context.Context, in RefreshRequest) error {
 // query getting an actual caller.
 func (u *Usecase) CleanupExpiredRefreshTokens(ctx context.Context) error {
 	return u.store.DeleteExpired(ctx)
+}
+
+// maxAPITokensPerUser mirrors APITokenViewSet.create's "Maksimum 10 ta token
+// yaratish mumkin" cap.
+const maxAPITokensPerUser = 10
+
+// CreateAPIToken ports APITokenViewSet.create: mint a new "bsp_" personal
+// access token for userID. The raw token is returned ONLY here — the store
+// keeps just its sha256 hash, so a lost token can't be recovered, only
+// revoked and reissued.
+func (u *Usecase) CreateAPIToken(ctx context.Context, userID uuid.UUID, name string) (*PersonalAccessToken, string, error) {
+	if name == "" {
+		name = "API Token"
+	}
+	count, err := u.pat.CountForUser(ctx, userID)
+	if err != nil {
+		return nil, "", httpx.Internal(err)
+	}
+	if count >= maxAPITokensPerUser {
+		return nil, "", httpx.BadRequest("auth.api_token_limit", "maximum 10 api tokens allowed")
+	}
+	raw, err := generatePAT()
+	if err != nil {
+		return nil, "", httpx.Internal(err)
+	}
+	pat, err := u.pat.Create(ctx, userID, name, hashPAT(raw), raw[:12])
+	if err != nil {
+		return nil, "", httpx.Internal(err)
+	}
+	return pat, raw, nil
+}
+
+// ListAPITokens ports APITokenViewSet.list.
+func (u *Usecase) ListAPITokens(ctx context.Context, userID uuid.UUID) ([]PersonalAccessToken, error) {
+	items, err := u.pat.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	return items, nil
+}
+
+// DeleteAPIToken ports APITokenViewSet.destroy.
+func (u *Usecase) DeleteAPIToken(ctx context.Context, id, userID uuid.UUID) error {
+	if err := u.pat.DeleteForUser(ctx, id, userID); err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return httpx.NotFound("auth.api_token_not_found", "token not found")
+		}
+		return httpx.Internal(err)
+	}
+	return nil
+}
+
+// ExchangeToken ports TokenExchangeView.create: raw "bsp_..." token -> a
+// fresh JWT access+refresh pair for the token's owner, same shape/TTL as a
+// normal Login. Touches last_used_at best-effort (a touch failure must never
+// fail the exchange itself).
+func (u *Usecase) ExchangeToken(ctx context.Context, rawToken string) (TokenResponse, error) {
+	if rawToken == "" {
+		return TokenResponse{}, httpx.BadRequest("auth.token_required", "token field is required")
+	}
+	pat, err := u.pat.GetByHash(ctx, hashPAT(rawToken))
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return TokenResponse{}, httpx.Unauthorized("auth.invalid_api_token", "invalid or revoked token")
+		}
+		return TokenResponse{}, httpx.Internal(err)
+	}
+	usr, err := u.users.GetByID(ctx, pat.UserID)
+	if err != nil {
+		return TokenResponse{}, httpx.Unauthorized("auth.invalid_api_token", "invalid or revoked token")
+	}
+	_ = u.pat.Touch(ctx, pat.ID)
+	return u.issueTokens(ctx, usr.ID, usr.Role)
 }
 
 func (u *Usecase) issueTokens(ctx context.Context, userID uuid.UUID, role string) (TokenResponse, error) {
