@@ -4,6 +4,15 @@
 -- All timestamps are backdated relative to NOW() so the dashboard's 7d/30d
 -- KPIs and growth charts have something to show.
 
+-- Bootstrap admin account (id 524b9b0f-34ee-4eca-a2d4-52d4cace5f6c, phone
+-- +998900000001) referenced as actor_id/author_id by ticket_messages and
+-- audit_log below. On a fresh/empty database no such user exists yet, so
+-- create it here; ON CONFLICT (phone) DO NOTHING keeps this a no-op on any
+-- database where the admin account already exists (whatever its id).
+INSERT INTO users (id, phone, first_name, last_name, username, email, password_hash, role, is_active, is_staff, is_superuser, validated_at, created_at, updated_at) VALUES
+    ('524b9b0f-34ee-4eca-a2d4-52d4cace5f6c', '+998900000001', 'Admin', 'Botmother', 'admin', 'admin@botspace.uz', '$2a$10$opw8FG5jiJQW5NmPDQaSG.GXzjfp7PNAU8LlurrgPNP2LlR7CF9km', 'superuser', TRUE, TRUE, TRUE, NOW() - INTERVAL '30 days', NOW() - INTERVAL '30 days', NOW() - INTERVAL '30 days')
+ON CONFLICT (phone) DO NOTHING;
+
 -- ===================== users (15) =====================
 -- password_hash is bcrypt("Demo12345!") — usable for local testing, not a
 -- security concern since this is seed/demo data.
