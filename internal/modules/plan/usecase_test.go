@@ -128,32 +128,6 @@ func (r *fakeRepo) IncrementUsage(_ context.Context, id uuid.UUID, inputDelta, o
 	return nil
 }
 
-func (r *fakeRepo) ExpireActiveSubscriptions(_ context.Context) ([]Subscription, error) {
-	now := time.Now()
-	var moved []Subscription
-	for _, s := range r.subsByID {
-		if s.Status == StatusActive && s.ExpiresAt != nil && s.ExpiresAt.Before(now) {
-			s.Status = StatusGracePeriod
-			s.UpdatedAt = now
-			moved = append(moved, *s)
-		}
-	}
-	return moved, nil
-}
-
-func (r *fakeRepo) SuspendGracePeriodSubscriptions(_ context.Context) ([]Subscription, error) {
-	cutoff := time.Now().Add(-3 * 24 * time.Hour)
-	var moved []Subscription
-	for _, s := range r.subsByID {
-		if s.Status == StatusGracePeriod && s.ExpiresAt != nil && s.ExpiresAt.Before(cutoff) {
-			s.Status = StatusSuspended
-			s.UpdatedAt = time.Now()
-			moved = append(moved, *s)
-		}
-	}
-	return moved, nil
-}
-
 // ===================== admin CRUD (used by AdminXxxPlan tests, if any) =====================
 
 func (r *fakeRepo) ListAllPlans(_ context.Context) ([]Plan, error) {
@@ -433,57 +407,5 @@ func TestReportUsageUnknownUserIsNotFound(t *testing.T) {
 
 	if _, err := uc.ReportUsage(context.Background(), ReportUsageInput{UserID: uuid.New(), InputTokens: 1}); status(err) != 404 {
 		t.Fatalf("expected 404 for unknown user, got %v", err)
-	}
-}
-
-// TestExpireSubscriptions covers the scheduler's net-new expiry job (see
-// queries/plan.sql's ExpireActiveSubscriptions doc comment for why this
-// isn't a Django port): active -> grace_period once expires_at passes,
-// grace_period -> suspended a further 3 days after that. Subscriptions with
-// no expiry, or not yet due, must be left untouched.
-func TestExpireSubscriptions(t *testing.T) {
-	repo := newFakeRepo()
-	uc := NewUsecase(repo, newFakeUsers())
-	ctx := context.Background()
-	now := time.Now()
-
-	pastExpiry := now.Add(-time.Hour)
-	futureExpiry := now.Add(time.Hour)
-	longPastExpiry := now.Add(-4 * 24 * time.Hour) // >3 days ago
-
-	activeExpired := &Subscription{ID: uuid.New(), UserID: uuid.New(), Status: StatusActive, ExpiresAt: &pastExpiry}
-	activeNotYet := &Subscription{ID: uuid.New(), UserID: uuid.New(), Status: StatusActive, ExpiresAt: &futureExpiry}
-	activeNoExpiry := &Subscription{ID: uuid.New(), UserID: uuid.New(), Status: StatusActive, ExpiresAt: nil}
-	graceDueForSuspend := &Subscription{ID: uuid.New(), UserID: uuid.New(), Status: StatusGracePeriod, ExpiresAt: &longPastExpiry}
-	graceStillWithinWindow := &Subscription{ID: uuid.New(), UserID: uuid.New(), Status: StatusGracePeriod, ExpiresAt: &pastExpiry}
-
-	for _, s := range []*Subscription{activeExpired, activeNotYet, activeNoExpiry, graceDueForSuspend, graceStillWithinWindow} {
-		repo.subsByID[s.ID] = s
-	}
-
-	toGrace, suspended, err := uc.ExpireSubscriptions(ctx)
-	if err != nil {
-		t.Fatalf("ExpireSubscriptions: %v", err)
-	}
-	if toGrace != 1 {
-		t.Fatalf("expected 1 subscription moved to grace_period, got %d", toGrace)
-	}
-	if suspended != 1 {
-		t.Fatalf("expected 1 subscription suspended, got %d", suspended)
-	}
-	if repo.subsByID[activeExpired.ID].Status != StatusGracePeriod {
-		t.Error("expired active subscription should move to grace_period")
-	}
-	if repo.subsByID[activeNotYet.ID].Status != StatusActive {
-		t.Error("not-yet-expired active subscription must stay active")
-	}
-	if repo.subsByID[activeNoExpiry.ID].Status != StatusActive {
-		t.Error("subscription with no expiry must stay active")
-	}
-	if repo.subsByID[graceDueForSuspend.ID].Status != StatusSuspended {
-		t.Error("grace_period subscription past the 3-day window should be suspended")
-	}
-	if repo.subsByID[graceStillWithinWindow.ID].Status != StatusGracePeriod {
-		t.Error("grace_period subscription still within the 3-day window must stay grace_period")
 	}
 }

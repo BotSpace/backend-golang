@@ -191,7 +191,6 @@ func (s *fakeRefreshStore) Revoke(_ context.Context, jti uuid.UUID) error {
 	return nil
 }
 func (s *fakeRefreshStore) RevokeAllForUser(_ context.Context, _ uuid.UUID) error { return nil }
-func (s *fakeRefreshStore) DeleteExpired(_ context.Context) error                 { return nil }
 
 // ---- fake GoogleVerifier — stands in for a real call to Google's tokeninfo
 // endpoint so these tests never touch the network. ----

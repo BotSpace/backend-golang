@@ -111,19 +111,6 @@ func (r *fakeAuthbotRepo) DeleteCode(_ context.Context, codeID uuid.UUID) error 
 	return nil
 }
 
-func (r *fakeAuthbotRepo) DeleteExpiredCodes(_ context.Context) (int64, error) {
-	var n int64
-	now := time.Now()
-	for id, c := range r.codes {
-		if c.ExpiresAt.Before(now) {
-			delete(r.byValue, c.Value)
-			delete(r.codes, id)
-			n++
-		}
-	}
-	return n, nil
-}
-
 // ---- fake user.Repository, wrapped in the real user.Usecase ----
 // Mirrors internal/modules/user/usecase_test.go's fakeRepo so this module's
 // tests exercise the real Register/GetByPhone/MarkValidated business rules.

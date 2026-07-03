@@ -3,8 +3,6 @@ package file
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -29,12 +27,6 @@ type Usecase interface {
 	// Used returns aggregated usage for one project (projectID set) or every
 	// project the caller owns (projectID nil), mirroring services/used.py.
 	Used(ctx context.Context, ownerID uuid.UUID, projectID *uuid.UUID) (*UsageStats, error)
-
-	// CleanupExpired deletes every file whose expires_at has passed, both the
-	// DB row and its on-disk blob. Ports Django's cleanup_expired_files beat
-	// task; called by the scheduler (internal/shared/scheduler), not an HTTP
-	// route. Returns the number of files removed.
-	CleanupExpired(ctx context.Context) (int, error)
 }
 
 type usecase struct {
@@ -78,24 +70,6 @@ func (u *usecase) UpdateFile(ctx context.Context, uid, ownerID uuid.UUID, in Upd
 // disk; the metadata row is already gone by the time this returns.
 func (u *usecase) DeleteFile(ctx context.Context, uid, ownerID uuid.UUID) (*File, error) {
 	return mapFileErr(u.repo.DeleteFileByUUIDForOwner(ctx, uid, ownerID))
-}
-
-// CleanupExpired ports Django's cleanup_expired_files (core/apps/api/tasks/file.py):
-// best-effort per file — a blob that's already gone from disk (or fails to
-// unlink) doesn't stop the rest of the batch, matching the Django task's
-// per-object try/except.
-func (u *usecase) CleanupExpired(ctx context.Context) (int, error) {
-	expired, err := u.repo.DeleteExpiredFiles(ctx)
-	if err != nil {
-		return 0, httpx.Internal(err)
-	}
-	for _, f := range expired {
-		if f.FilePath == "" {
-			continue
-		}
-		_ = os.Remove(filepath.Join(mediaDir(), f.FilePath))
-	}
-	return len(expired), nil
 }
 
 func (u *usecase) ListFiles(ctx context.Context, f ListFileFilter) ([]File, int64, error) {

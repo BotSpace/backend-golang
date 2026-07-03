@@ -59,14 +59,6 @@ WHERE p.owner_id = sqlc.arg('owner_id') AND p.deleted_at IS NULL
   AND (sqlc.narg('project_id')::uuid IS NULL OR f.project_id = sqlc.narg('project_id'))
   AND (sqlc.narg('filetype')::text IS NULL OR f.filetype = sqlc.narg('filetype'));
 
--- name: DeleteExpiredFiles :many
--- Ports Django's cleanup_expired_files beat task: a single DELETE...RETURNING
--- so the caller can unlink each blob from disk without a separate
--- select-then-delete race window.
-DELETE FROM file
-WHERE expires_at IS NOT NULL AND expires_at < NOW()
-RETURNING *;
-
 -- name: FileProjectOwnedByOwner :one
 -- Lets the "used" usecase 404 on a project the caller does not own instead
 -- of silently returning zeroed totals.

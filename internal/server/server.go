@@ -300,12 +300,6 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// pattern as the Mongo/Kubernetes wiring above — see
 	// docs/redis-stream-events.md for the full contract.
 	s.startEventConsumer(ctx, debugUC)
-
-	// Periodic/scheduled jobs — Celery-beat parity. See
-	// internal/shared/scheduler's package doc for the in-process-ticker
-	// tradeoff and internal/server/scheduler.go for the job list + which
-	// Django beat jobs were deliberately left unported.
-	s.startScheduler(ctx, authUC, authbotUC, planUC, fileUC, releaseUC)
 }
 
 const (

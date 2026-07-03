@@ -57,15 +57,6 @@ type Usecase interface {
 	AdminCreatePlan(ctx context.Context, in CreatePlanInput) (*Plan, error)
 	AdminUpdatePlan(ctx context.Context, id uuid.UUID, in UpdatePlanInput) (*Plan, error)
 	AdminDeletePlan(ctx context.Context, id uuid.UUID) error
-
-	// ExpireSubscriptions transitions active subscriptions past expires_at
-	// into grace_period, and grace_period subscriptions past their 3-day
-	// grace window into suspended. Called by the scheduler
-	// (internal/shared/scheduler), not an HTTP route — see the queries'
-	// ExpireActiveSubscriptions/SuspendGracePeriodSubscriptions doc comment
-	// for why this is net-new Go-side logic, not a Django port. Returns
-	// (movedToGrace, movedToSuspended, error).
-	ExpireSubscriptions(ctx context.Context) (int, int, error)
 }
 
 type usecase struct {
@@ -90,18 +81,6 @@ func (u *usecase) ListActivePlans(ctx context.Context) ([]Plan, error) {
 
 func (u *usecase) Current(ctx context.Context, userID uuid.UUID) (*Subscription, *Plan, error) {
 	return u.getOrCreateSubscription(ctx, userID)
-}
-
-func (u *usecase) ExpireSubscriptions(ctx context.Context) (int, int, error) {
-	toGrace, err := u.repo.ExpireActiveSubscriptions(ctx)
-	if err != nil {
-		return 0, 0, fmt.Errorf("expire active subscriptions: %w", err)
-	}
-	suspended, err := u.repo.SuspendGracePeriodSubscriptions(ctx)
-	if err != nil {
-		return len(toGrace), 0, fmt.Errorf("suspend grace-period subscriptions: %w", err)
-	}
-	return len(toGrace), len(suspended), nil
 }
 
 func (u *usecase) Usage(ctx context.Context, userID uuid.UUID) (*Subscription, *Plan, error) {

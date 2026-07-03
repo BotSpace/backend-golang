@@ -88,18 +88,6 @@ func (r *fakeRepo) DeleteFileByUUIDForOwner(_ context.Context, uid, ownerID uuid
 	return &cp, nil
 }
 
-func (r *fakeRepo) DeleteExpiredFiles(_ context.Context) ([]File, error) {
-	now := time.Now()
-	var expired []File
-	for id, f := range r.files {
-		if f.ExpiresAt != nil && f.ExpiresAt.Before(now) {
-			expired = append(expired, *f)
-			delete(r.files, id)
-		}
-	}
-	return expired, nil
-}
-
 func (r *fakeRepo) ListFiles(_ context.Context, f ListFileFilter) ([]File, error) {
 	var out []File
 	for _, file := range r.files {
@@ -346,40 +334,5 @@ func TestUsedRejectsUnownedProject(t *testing.T) {
 	}
 	if _, err := uc.Used(ctx, owner, &project); err != nil {
 		t.Fatalf("used by the actual owner should succeed: %v", err)
-	}
-}
-
-// TestCleanupExpired ports Django's cleanup_expired_files beat task: rows
-// past expires_at are deleted, rows with no expiry (nil) or a future expiry
-// are left alone.
-func TestCleanupExpired(t *testing.T) {
-	repo := newFakeRepo()
-	uc := NewUsecase(repo)
-	ctx := context.Background()
-
-	past := time.Now().Add(-time.Hour)
-	future := time.Now().Add(time.Hour)
-	expiredID := uuid.New()
-	repo.files[expiredID] = &File{ID: expiredID, FilePath: "expired.png", ExpiresAt: &past}
-	freshID := uuid.New()
-	repo.files[freshID] = &File{ID: freshID, FilePath: "fresh.png", ExpiresAt: &future}
-	foreverID := uuid.New()
-	repo.files[foreverID] = &File{ID: foreverID, FilePath: "forever.png", ExpiresAt: nil}
-
-	n, err := uc.CleanupExpired(ctx)
-	if err != nil {
-		t.Fatalf("CleanupExpired: %v", err)
-	}
-	if n != 1 {
-		t.Fatalf("expected 1 file cleaned up, got %d", n)
-	}
-	if _, ok := repo.files[expiredID]; ok {
-		t.Error("expired file should have been deleted")
-	}
-	if _, ok := repo.files[freshID]; !ok {
-		t.Error("not-yet-expired file should remain")
-	}
-	if _, ok := repo.files[foreverID]; !ok {
-		t.Error("file with no expiry should remain")
 	}
 }
