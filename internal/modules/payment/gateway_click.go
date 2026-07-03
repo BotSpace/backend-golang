@@ -98,15 +98,38 @@ type clickResponse struct {
 	ErrorNote         string `json:"error_note"`
 }
 
-// Click error codes we emit (subset of the Merchant API spec).
+// Click error codes we emit (subset of the Merchant API spec, click_up/exceptions).
 const (
 	clickErrOK              = 0
 	clickErrSignFailed      = -1
+	clickErrIncorrectAmount = -2
 	clickErrActionNotFound  = -3
 	clickErrAccountNotFound = -5
 	clickErrBadRequest      = -8
 	clickErrTransCancelled  = -9
 )
+
+// amountsMatch ports click_up's check_amount (click_up/views.py): the
+// commission percent is an opt-in setting Django leaves unset in this
+// deployment (config/conf/click.py: CLICK_COMMISSION_PERCENT commented
+// out), so expectedAmount is compared to receivedAmount as-is, tolerant of
+// float rounding up to 1 tiyin (0.01) either way — same tolerance Django
+// uses (`abs(received_amount - expected_amount) > 0.01`).
+func amountsMatch(expectedAmount, receivedAmount string) bool {
+	want, err := strconv.ParseFloat(expectedAmount, 64)
+	if err != nil {
+		return false
+	}
+	got, err := strconv.ParseFloat(receivedAmount, 64)
+	if err != nil {
+		return false
+	}
+	diff := want - got
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= 0.01
+}
 
 // ClickWebhook handles Click's Prepare (action=0) and Complete (action=1)
 // calls. This is a deliberately simplified two-phase implementation: we do
@@ -141,6 +164,17 @@ func (h *Handler) ClickWebhook(c *gin.Context) {
 		c.JSON(200, clickResponse{
 			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
 			Error: clickErrAccountNotFound, ErrorNote: "User does not exist",
+		})
+		return
+	}
+
+	// Ports click_up's check_perform_transaction, which validates the amount
+	// on every call (Prepare AND Complete), before dispatching on action —
+	// a mismatched amount must never silently settle the transaction.
+	if !amountsMatch(txn.Amount, p.Amount) {
+		c.JSON(200, clickResponse{
+			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
+			Error: clickErrIncorrectAmount, ErrorNote: "Incorrect parameter amount",
 		})
 		return
 	}

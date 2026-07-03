@@ -106,6 +106,19 @@ func (r *fakeRepo) GetTransactionByExternalRef(_ context.Context, ref string) (*
 	cp := *r.transactions[id]
 	return &cp, nil
 }
+func (r *fakeRepo) ListTransactionsByExternalRefDateRange(_ context.Context, from, to time.Time) ([]Transaction, error) {
+	var out []Transaction
+	for _, t := range r.transactions {
+		if t.IdempotencyKey == "" {
+			continue
+		}
+		if t.CreatedAt.Before(from) || t.CreatedAt.After(to) {
+			continue
+		}
+		out = append(out, *t)
+	}
+	return out, nil
+}
 
 // ---- orders ----
 

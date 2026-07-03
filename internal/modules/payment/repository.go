@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
@@ -134,6 +135,20 @@ func (r *pgRepo) SetTransactionExternalRef(ctx context.Context, id uuid.UUID, re
 
 func (r *pgRepo) GetTransactionByExternalRef(ctx context.Context, ref string) (*Transaction, error) {
 	return mapTransaction(r.queries.GetPaymentTransactionByExternalRef(ctx, strPtr(ref)))
+}
+
+func (r *pgRepo) ListTransactionsByExternalRefDateRange(ctx context.Context, from, to time.Time) ([]Transaction, error) {
+	rows, err := r.queries.ListPaymentTransactionsByExternalRefDateRange(ctx, sqlcdb.ListPaymentTransactionsByExternalRefDateRangeParams{
+		FromTime: from, ToTime: to,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list payment transactions by external ref date range: %w", err)
+	}
+	out := make([]Transaction, len(rows))
+	for i, row := range rows {
+		out[i] = transactionFromSQLC(row)
+	}
+	return out, nil
 }
 
 // ===================== orders =====================

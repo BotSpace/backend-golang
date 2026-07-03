@@ -35,6 +35,17 @@ WHERE id = $1 AND idempotency_key IS NULL;
 -- name: GetPaymentTransactionByExternalRef :one
 SELECT * FROM transaction WHERE idempotency_key = $1 AND deleted_at IS NULL;
 
+-- name: ListPaymentTransactionsByExternalRefDateRange :many
+-- Backs Payme's GetStatement RPC: transactions the Payme gateway itself
+-- created (idempotency_key holds Payme's opaque transaction id — see
+-- SetPaymentTransactionExternalRef's doc above) within a created_at window.
+SELECT * FROM transaction
+WHERE idempotency_key IS NOT NULL
+  AND deleted_at IS NULL
+  AND created_at >= sqlc.arg('from_time')
+  AND created_at <= sqlc.arg('to_time')
+ORDER BY created_at DESC;
+
 -- ===================== payment_order =====================
 
 -- name: CreatePaymentOrder :one
