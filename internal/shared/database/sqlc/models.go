@@ -110,6 +110,19 @@ type Debug struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type DebugErrorEvent struct {
+	ID        uuid.UUID  `json:"id"`
+	ProjectID uuid.UUID  `json:"project_id"`
+	ChatID    int64      `json:"chat_id"`
+	NodeID    string     `json:"node_id"`
+	NodeType  string     `json:"node_type"`
+	Level     string     `json:"level"`
+	Message   string     `json:"message"`
+	Detail    string     `json:"detail"`
+	EventTs   *time.Time `json:"event_ts"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
 type DebugRunLog struct {
 	ID        uuid.UUID  `json:"id"`
 	ProjectID uuid.UUID  `json:"project_id"`
@@ -293,6 +306,7 @@ type Project struct {
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 	DeletedAt          *time.Time `json:"deleted_at"`
+	LegacyID           *int32     `json:"legacy_id"`
 }
 
 type ProjectModule struct {

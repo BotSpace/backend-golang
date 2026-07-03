@@ -63,6 +63,23 @@ WHERE c.id = sqlc.arg('id') AND c.deleted_at IS NULL AND c.system = FALSE
 SELECT mongo_database FROM projects
 WHERE id = sqlc.arg('project_id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
 
+-- name: CmsGetProjectTenantForOwner :one
+-- Resolves the CMS Mongo tenant key for a project, verifying ownership.
+-- legacy_id (nullable) is the Django project pk that existing imported Mongo
+-- documents were tagged with (`_project_id`); see migration 000033 and
+-- internal/modules/cms/usecase.go resolveMongoTenant for how NULL is handled.
+SELECT id, legacy_id FROM projects
+WHERE id = sqlc.arg('project_id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
+
+-- name: CmsSetProjectLegacyID :execrows
+-- Used only by scripts/backfill_legacy_project_id (one-shot data migration).
+UPDATE projects SET legacy_id = sqlc.arg('legacy_id')
+WHERE id = sqlc.arg('id') AND legacy_id IS NULL;
+
+-- name: CmsListProjectIDsWithoutLegacyID :many
+-- Used only by scripts/backfill_legacy_project_id to enumerate candidates.
+SELECT id FROM projects WHERE legacy_id IS NULL AND deleted_at IS NULL;
+
 -- ── Field ───────────────────────────────────────────────────────────────────
 
 -- name: CmsCreateField :one

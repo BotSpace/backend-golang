@@ -12,7 +12,7 @@ import (
 )
 
 const adminMonitoringProjects = `-- name: AdminMonitoringProjects :many
-SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, u.phone AS owner_phone,
+SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, p.legacy_id, u.phone AS owner_phone,
        COALESCE((SELECT r.status FROM relase r WHERE r.project_id = p.id ORDER BY r.version DESC LIMIT 1), '')::text AS release_status,
        COALESCE((SELECT res.cpu FROM resource res WHERE res.project_id = p.id ORDER BY res.created_at DESC LIMIT 1), 0)::int AS cpu_cores,
        COALESCE((SELECT res.ram FROM resource res WHERE res.project_id = p.id ORDER BY res.created_at DESC LIMIT 1), 0)::int AS memory_bytes,
@@ -71,6 +71,7 @@ func (q *Queries) AdminMonitoringProjects(ctx context.Context, arg AdminMonitori
 			&i.Project.CreatedAt,
 			&i.Project.UpdatedAt,
 			&i.Project.DeletedAt,
+			&i.Project.LegacyID,
 			&i.OwnerPhone,
 			&i.ReleaseStatus,
 			&i.CpuCores,
@@ -121,7 +122,7 @@ func (q *Queries) CountProjectsForOwner(ctx context.Context, arg CountProjectsFo
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (id, name, description, username, owner_id, flow, is_template)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at
+RETURNING id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id
 `
 
 type CreateProjectParams struct {
@@ -163,12 +164,13 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LegacyID,
 	)
 	return i, err
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at FROM projects WHERE id = $1 AND deleted_at IS NULL
+SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id FROM projects WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -192,12 +194,13 @@ func (q *Queries) GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LegacyID,
 	)
 	return i, err
 }
 
 const getProjectAdmin = `-- name: GetProjectAdmin :one
-SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, u.phone AS owner_phone, u.email AS owner_email
+SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, p.legacy_id, u.phone AS owner_phone, u.email AS owner_email
 FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.id = $1 AND p.deleted_at IS NULL
@@ -230,6 +233,7 @@ func (q *Queries) GetProjectAdmin(ctx context.Context, id uuid.UUID) (GetProject
 		&i.Project.CreatedAt,
 		&i.Project.UpdatedAt,
 		&i.Project.DeletedAt,
+		&i.Project.LegacyID,
 		&i.OwnerPhone,
 		&i.OwnerEmail,
 	)
@@ -237,7 +241,7 @@ func (q *Queries) GetProjectAdmin(ctx context.Context, id uuid.UUID) (GetProject
 }
 
 const getProjectForOwner = `-- name: GetProjectForOwner :one
-SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at FROM projects WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id FROM projects WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 `
 
 type GetProjectForOwnerParams struct {
@@ -266,13 +270,14 @@ func (q *Queries) GetProjectForOwner(ctx context.Context, arg GetProjectForOwner
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LegacyID,
 	)
 	return i, err
 }
 
 const listProjectsAdmin = `-- name: ListProjectsAdmin :many
 
-SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, u.phone AS owner_phone,
+SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owner_id, p.flow, p.is_template, p.release_webhook_uuid, p.debug_webhook_uuid, p.mongo_username, p.mongo_password, p.mongo_database, p.created_at, p.updated_at, p.deleted_at, p.legacy_id, u.phone AS owner_phone,
        (SELECT COUNT(*) FROM relase r WHERE r.project_id = p.id) AS releases_count,
        COALESCE((SELECT r.status FROM relase r WHERE r.project_id = p.id ORDER BY r.version DESC LIMIT 1), '')::text AS release_status
 FROM projects p
@@ -324,6 +329,7 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminPa
 			&i.Project.CreatedAt,
 			&i.Project.UpdatedAt,
 			&i.Project.DeletedAt,
+			&i.Project.LegacyID,
 			&i.OwnerPhone,
 			&i.ReleasesCount,
 			&i.ReleaseStatus,
@@ -339,7 +345,7 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminPa
 }
 
 const listProjectsForOwner = `-- name: ListProjectsForOwner :many
-SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at FROM projects
+SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id FROM projects
 WHERE owner_id = $1 AND deleted_at IS NULL
   AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%')
 ORDER BY created_at DESC
@@ -385,6 +391,7 @@ func (q *Queries) ListProjectsForOwner(ctx context.Context, arg ListProjectsForO
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.LegacyID,
 		); err != nil {
 			return nil, err
 		}
@@ -455,7 +462,7 @@ SET name        = COALESCE($1, name),
     flow        = COALESCE($4, flow),
     updated_at  = NOW()
 WHERE id = $5 AND owner_id = $6 AND deleted_at IS NULL
-RETURNING id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at
+RETURNING id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id
 `
 
 type UpdateProjectParams struct {
@@ -495,6 +502,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LegacyID,
 	)
 	return i, err
 }

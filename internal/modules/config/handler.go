@@ -62,3 +62,32 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 	httpx.OK(c, 200, toResponse(e))
 }
+
+// PublicSharedConfig godoc
+// @Summary  Public flat ai_agent.* config (no secrets) — used by agentv3
+// @Tags     shared-config
+// @Produce  json
+// @Router   /shared/config/public [get]
+func (h *Handler) PublicSharedConfig(c *gin.Context) {
+	out, err := h.uc.SharedAIAgentConfig(c.Request.Context(), false)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, out)
+}
+
+// InternalSharedConfig godoc
+// @Summary  Internal flat ai_agent.* config incl. secrets (X-Internal-Token) — used by agentv3
+// @Tags     shared-config
+// @Produce  json
+// @Param    X-Internal-Token  header  string  true  "Internal service token"
+// @Router   /shared/config/internal [get]
+func (h *Handler) InternalSharedConfig(c *gin.Context) {
+	out, err := h.uc.SharedAIAgentConfig(c.Request.Context(), true)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, out)
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -131,6 +132,7 @@ func TestValidateDocument_DefaultAppliedWhenMissing(t *testing.T) {
 type fakeRepo struct {
 	owners      map[uuid.UUID]uuid.UUID // projectID -> ownerID
 	mongoDBs    map[uuid.UUID]string    // projectID -> mongo_database
+	legacyIDs   map[uuid.UUID]*int32    // projectID -> Django legacy pk (nil = none)
 	collections map[uuid.UUID]*Collection
 	fields      map[uuid.UUID]*Field
 	exports     map[uuid.UUID]*ExportTask
@@ -140,6 +142,7 @@ func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		owners:      map[uuid.UUID]uuid.UUID{},
 		mongoDBs:    map[uuid.UUID]string{},
+		legacyIDs:   map[uuid.UUID]*int32{},
 		collections: map[uuid.UUID]*Collection{},
 		fields:      map[uuid.UUID]*Field{},
 		exports:     map[uuid.UUID]*ExportTask{},
@@ -230,6 +233,16 @@ func (r *fakeRepo) ProjectMongoDatabase(_ context.Context, ownerID, projectID uu
 		return "", database.ErrNotFound
 	}
 	return r.mongoDBs[projectID], nil
+}
+
+// ProjectMongoTenant: the fake never has a Django legacy id, so callers fall
+// back to the project's own UUID string as the tenant key (matches
+// usecase.resolveMongoTenant's nil-legacyID branch).
+func (r *fakeRepo) ProjectMongoTenant(_ context.Context, ownerID, projectID uuid.UUID) (*int32, error) {
+	if r.owners[projectID] != ownerID {
+		return nil, database.ErrNotFound
+	}
+	return r.legacyIDs[projectID], nil
 }
 
 func (r *fakeRepo) CreateField(_ context.Context, in CreateFieldInput) (*Field, error) {
@@ -340,6 +353,9 @@ func (r *fakeRepo) UpdateExportTaskStatus(_ context.Context, id uuid.UUID, statu
 }
 
 // fakeDocs is an in-memory DocumentRepository — no real Mongo required.
+// Every document is stamped with `_project_id` (tenant) and every read
+// filters by it, the same way the real Mongo-backed repo does, so tests can
+// verify cross-tenant isolation on the shared "db/coll" bucket.
 type fakeDocs struct {
 	byColl map[string]map[string]map[string]any // "db/coll" -> id -> doc
 	seq    int
@@ -357,7 +373,9 @@ func (r *fakeDocs) bucket(dbName, collName string) map[string]map[string]any {
 	return r.byColl[k]
 }
 
-func (r *fakeDocs) InsertOne(_ context.Context, dbName, collName string, doc map[string]any) (string, error) {
+func tenantEq(a, b any) bool { return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b) }
+
+func (r *fakeDocs) InsertOne(_ context.Context, dbName, collName string, tenant any, doc map[string]any) (string, error) {
 	r.seq++
 	id := uuid.New().String()
 	cp := map[string]any{}
@@ -365,43 +383,48 @@ func (r *fakeDocs) InsertOne(_ context.Context, dbName, collName string, doc map
 		cp[k] = v
 	}
 	cp["_id"] = id
+	cp["_project_id"] = tenant
 	r.bucket(dbName, collName)[id] = cp
 	return id, nil
 }
 
-func (r *fakeDocs) InsertMany(ctx context.Context, dbName, collName string, docs []map[string]any) ([]string, error) {
+func (r *fakeDocs) InsertMany(ctx context.Context, dbName, collName string, tenant any, docs []map[string]any) ([]string, error) {
 	ids := make([]string, len(docs))
 	for i, d := range docs {
-		id, _ := r.InsertOne(ctx, dbName, collName, d)
+		id, _ := r.InsertOne(ctx, dbName, collName, tenant, d)
 		ids[i] = id
 	}
 	return ids, nil
 }
 
-func (r *fakeDocs) Find(_ context.Context, dbName, collName string, q DocumentQuery) (DocumentList, error) {
+func (r *fakeDocs) Find(_ context.Context, dbName, collName string, tenant any, q DocumentQuery) (DocumentList, error) {
 	b := r.bucket(dbName, collName)
 	items := make([]map[string]any, 0, len(b))
 	for _, d := range b {
+		if !tenantEq(d["_project_id"], tenant) {
+			continue
+		}
 		items = append(items, d)
 	}
 	return DocumentList{Items: items, Total: int64(len(items))}, nil
 }
 
-func (r *fakeDocs) FindOne(_ context.Context, dbName, collName, id string, _ bool) (map[string]any, error) {
+func (r *fakeDocs) FindOne(_ context.Context, dbName, collName string, tenant any, id string, _ bool) (map[string]any, error) {
 	d, ok := r.bucket(dbName, collName)[id]
-	if !ok {
+	if !ok || !tenantEq(d["_project_id"], tenant) {
 		return nil, database.ErrNotFound
 	}
 	return d, nil
 }
 
-func (r *fakeDocs) Count(_ context.Context, dbName, collName string, _ map[string]any, _ bool) (int64, error) {
-	return int64(len(r.bucket(dbName, collName))), nil
+func (r *fakeDocs) Count(_ context.Context, dbName, collName string, tenant any, _ map[string]any, _ bool) (int64, error) {
+	list, _ := r.Find(context.Background(), dbName, collName, tenant, DocumentQuery{})
+	return int64(len(list.Items)), nil
 }
 
-func (r *fakeDocs) UpdateOne(_ context.Context, dbName, collName, id string, patch map[string]any) (map[string]any, error) {
+func (r *fakeDocs) UpdateOne(_ context.Context, dbName, collName string, tenant any, id string, patch map[string]any) (map[string]any, error) {
 	d, ok := r.bucket(dbName, collName)[id]
-	if !ok {
+	if !ok || !tenantEq(d["_project_id"], tenant) {
 		return nil, database.ErrNotFound
 	}
 	for k, v := range patch {
@@ -410,21 +433,31 @@ func (r *fakeDocs) UpdateOne(_ context.Context, dbName, collName, id string, pat
 	return d, nil
 }
 
-func (r *fakeDocs) SoftDeleteOne(_ context.Context, dbName, collName, id string) (bool, error) {
+func (r *fakeDocs) SoftDeleteOne(_ context.Context, dbName, collName string, tenant any, id string) (bool, error) {
 	b := r.bucket(dbName, collName)
-	if _, ok := b[id]; !ok {
+	d, ok := b[id]
+	if !ok || !tenantEq(d["_project_id"], tenant) {
 		return false, nil
 	}
 	delete(b, id)
 	return true, nil
 }
 
-func (r *fakeDocs) Aggregate(_ context.Context, _, _ string, _ []map[string]any, _ int64) ([]map[string]any, error) {
+func (r *fakeDocs) RestoreOne(_ context.Context, _, _ string, _ any, _ string) (bool, error) {
+	return true, nil
+}
+
+func (r *fakeDocs) Aggregate(_ context.Context, _, _ string, _ any, _ []map[string]any, _ int64) ([]map[string]any, error) {
 	return nil, nil
 }
 
-func (r *fakeDocs) DropCollection(_ context.Context, dbName, collName string) error {
-	delete(r.byColl, r.key(dbName, collName))
+func (r *fakeDocs) DropCollection(_ context.Context, dbName, collName string, tenant any) error {
+	b := r.bucket(dbName, collName)
+	for id, d := range b {
+		if tenantEq(d["_project_id"], tenant) {
+			delete(b, id)
+		}
+	}
 	return nil
 }
 
@@ -447,7 +480,7 @@ func isValidationError(err error) bool {
 
 func TestUsecase_CreateCollection_RejectsBadSlug(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, newFakeDocs())
+	uc := NewUsecase(repo, newFakeDocs(), "test_shared_db")
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID)
 
@@ -460,7 +493,7 @@ func TestUsecase_CreateCollection_RejectsBadSlug(t *testing.T) {
 func TestUsecase_InsertDocument_ValidatesAgainstSchema(t *testing.T) {
 	repo := newFakeRepo()
 	docs := newFakeDocs()
-	uc := NewUsecase(repo, docs)
+	uc := NewUsecase(repo, docs, "test_shared_db")
 	ctx := context.Background()
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID)
@@ -489,7 +522,7 @@ func TestUsecase_InsertDocument_ValidatesAgainstSchema(t *testing.T) {
 func TestUsecase_InsertDocument_RelationMustExist(t *testing.T) {
 	repo := newFakeRepo()
 	docs := newFakeDocs()
-	uc := NewUsecase(repo, docs)
+	uc := NewUsecase(repo, docs, "test_shared_db")
 	ctx := context.Background()
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID)
@@ -524,9 +557,113 @@ func TestUsecase_InsertDocument_RelationMustExist(t *testing.T) {
 	}
 }
 
+// TestUsecase_DocumentsAreScopedByProjectTenant is the item-1 regression
+// test: with a SHARED Mongo db+collection (two projects writing to the same
+// "db/coll" bucket, as botspace_cms now works — see mongo.go/usecase.go
+// resolveMongoTenant), one project must never see, count, update, or delete
+// another project's documents, and a project with a legacy_id (imported from
+// Django) must be reachable by that exact int tenant key.
+func TestUsecase_DocumentsAreScopedByProjectTenant(t *testing.T) {
+	repo := newFakeRepo()
+	docs := newFakeDocs()
+	uc := NewUsecase(repo, docs, "botspace_cms")
+	ctx := context.Background()
+
+	ownerA, ownerB := uuid.New(), uuid.New()
+	projA := repo.addProject(ownerA)
+	projB := repo.addProject(ownerB)
+	// Force both projects onto the SAME shared Mongo database name (as the
+	// real shared-DB deployment does) so the only isolation boundary left is
+	// the `_project_id` tenant filter under test.
+	repo.mongoDBs[projA] = "botspace_cms"
+	repo.mongoDBs[projB] = "botspace_cms"
+
+	collA, err := uc.CreateCollection(ctx, ownerA, projA, CreateCollectionInput{Name: "Orders", Slug: "orders"})
+	if err != nil {
+		t.Fatalf("create collection A: %v", err)
+	}
+	if _, err := uc.CreateCollection(ctx, ownerB, projB, CreateCollectionInput{Name: "Orders", Slug: "orders"}); err != nil {
+		t.Fatalf("create collection B: %v", err)
+	}
+
+	docA, err := uc.InsertDocument(ctx, ownerA, projA, collA.Slug, map[string]any{"title": "A's order"})
+	if err != nil {
+		t.Fatalf("insert doc A: %v", err)
+	}
+	if _, err := uc.InsertDocument(ctx, ownerB, projB, "orders", map[string]any{"title": "B's order"}); err != nil {
+		t.Fatalf("insert doc B: %v", err)
+	}
+
+	// A's list must only contain A's document.
+	listA, err := uc.FindDocuments(ctx, ownerA, projA, collA.Slug, DocumentQuery{})
+	if err != nil {
+		t.Fatalf("find documents A: %v", err)
+	}
+	if listA.Total != 1 || listA.Items[0]["title"] != "A's order" {
+		t.Fatalf("expected only A's 1 document, got %#v", listA)
+	}
+
+	// A must not be able to read B's document by id, even knowing its exact
+	// Mongo _id (cross-tenant document-id guessing must 404, not leak data).
+	docBID, _ := func() (string, bool) {
+		listB, _ := uc.FindDocuments(ctx, ownerB, projB, "orders", DocumentQuery{})
+		if len(listB.Items) == 0 {
+			return "", false
+		}
+		id, ok := listB.Items[0]["_id"].(string)
+		return id, ok
+	}()
+	if docBID == "" {
+		t.Fatal("expected B to have a document id")
+	}
+	if _, err := uc.FindOneDocument(ctx, ownerA, projA, collA.Slug, docBID); status(err) != 404 {
+		t.Fatalf("expected 404 reading B's doc as A, got %v", err)
+	}
+
+	// A's count/update/delete must not touch B's document either.
+	if n, err := uc.CountDocuments(ctx, ownerA, projA, collA.Slug, nil); err != nil || n != 1 {
+		t.Fatalf("expected count=1 for A, got %d err=%v", n, err)
+	}
+	if err := uc.DeleteDocument(ctx, ownerA, projA, collA.Slug, docBID); status(err) != 404 {
+		t.Fatalf("expected 404 deleting B's doc as A, got %v", err)
+	}
+
+	docAID, _ := docA["_id"].(string)
+	if _, err := uc.FindOneDocument(ctx, ownerB, projB, "orders", docAID); status(err) != 404 {
+		t.Fatalf("expected 404 reading A's doc as B, got %v", err)
+	}
+}
+
+// TestUsecase_ResolveMongoTenant_PrefersLegacyID mirrors the real
+// resolveMongoTenant behaviour directly: a project with a Django legacy_id
+// must be stamped/filtered with that int (matching pre-existing imported
+// Mongo documents' `_project_id`), not the project's Go UUID.
+func TestUsecase_ResolveMongoTenant_PrefersLegacyID(t *testing.T) {
+	repo := newFakeRepo()
+	docs := newFakeDocs()
+	uc := &usecase{repo: repo, docs: docs, sharedDBName: "botspace_cms"}
+	ctx := context.Background()
+
+	owner := uuid.New()
+	proj := repo.addProject(owner)
+	legacy := int32(1408)
+	repo.legacyIDs[proj] = &legacy
+
+	dbName, tenant, err := uc.resolveMongoTenant(ctx, owner, proj)
+	if err != nil {
+		t.Fatalf("resolveMongoTenant: %v", err)
+	}
+	if dbName != "botspace_cms" {
+		t.Fatalf("expected shared db name, got %q", dbName)
+	}
+	if tenant != int64(1408) {
+		t.Fatalf("expected tenant to be the legacy int64 1408, got %#v (%T)", tenant, tenant)
+	}
+}
+
 func TestUsecase_DeleteCollection_BlocksSystemCollections(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, newFakeDocs())
+	uc := NewUsecase(repo, newFakeDocs(), "test_shared_db")
 	ctx := context.Background()
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID)
