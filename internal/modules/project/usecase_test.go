@@ -2,12 +2,15 @@ package project
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/botspace/backend/internal/modules/cms"
+	"github.com/botspace/backend/internal/modules/release"
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
+	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
 )
 
@@ -560,5 +563,182 @@ func TestDelete_NilOrchestrator_StillDeletes(t *testing.T) {
 	}
 	if err := uc.Delete(ctx, p.ID, ownerID); err != nil {
 		t.Fatalf("Delete: %v", err)
+	}
+}
+
+// ===================== CreateFromTemplate =====================
+
+// fakeTemplateResolver is a stub TemplateResolver: it returns a fixed flow
+// (or a fixed error, mirroring "template not purchased") regardless of the
+// idOrSlug/buyerID it's called with, and records the last call's arguments
+// so tests can assert the usecase forwarded them correctly.
+type fakeTemplateResolver struct {
+	flow         json.RawMessage
+	err          error
+	lastIDOrSlug string
+	lastBuyerID  uuid.UUID
+}
+
+func (f *fakeTemplateResolver) ResolveForProjectCreate(_ context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error) {
+	f.lastIDOrSlug = idOrSlug
+	f.lastBuyerID = buyerID
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.flow, nil
+}
+
+// fakeReleaseOrchestrator is a stub ReleaseOrchestrator that just records
+// what CreateFromTemplate asked it to do.
+type fakeReleaseOrchestrator struct {
+	envs          map[string]string
+	releaseCalled bool
+	debugCalled   bool
+	deployErr     error
+}
+
+func (f *fakeReleaseOrchestrator) UpsertEnvironment(_ context.Context, in release.UpsertEnvironmentInput) (*release.Environment, error) {
+	if f.envs == nil {
+		f.envs = map[string]string{}
+	}
+	f.envs[in.Key] = in.Value
+	return &release.Environment{ID: uuid.New(), ProjectID: in.ProjectID, Key: in.Key, Value: in.Value}, nil
+}
+
+func (f *fakeReleaseOrchestrator) CreateRelease(_ context.Context, projectID, _ uuid.UUID) (*release.Release, error) {
+	f.releaseCalled = true
+	if f.deployErr != nil {
+		return nil, f.deployErr
+	}
+	return &release.Release{ID: uuid.New(), ProjectID: projectID, Version: 1}, nil
+}
+
+func (f *fakeReleaseOrchestrator) StartDebug(_ context.Context, projectID, _ uuid.UUID) (*release.Debug, error) {
+	f.debugCalled = true
+	if f.deployErr != nil {
+		return nil, f.deployErr
+	}
+	return &release.Debug{ID: uuid.New(), ProjectID: projectID}, nil
+}
+
+// TestCreateFromTemplate_CopiesFlowAndProvisionsCollections is the
+// deliverable test for the "create a project from a template" feature: it
+// must (a) seed the new project with the template's resolved flow — not an
+// empty one — and (b) get the exact same default users/chat CMS collections
+// TestCreate_ProvisionsDefaultCollections checks for a plain create, since
+// CreateFromTemplate is documented to reuse Create's internals rather than
+// duplicate them.
+func TestCreateFromTemplate_CopiesFlowAndProvisionsCollections(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	templateFlow := json.RawMessage(`{"nodes":[{"id":"start","type":"message"}],"edges":[]}`)
+	tmpl := &fakeTemplateResolver{flow: templateFlow}
+	rel := &fakeReleaseOrchestrator{}
+	uc := NewUsecase(repo, nil, cmsUC, tmpl, rel)
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID:  ownerID,
+		Template: "some-template-slug",
+		Name:     "My templated bot",
+		Token:    "123:abc",
+		Envs:     map[string]string{"ADMIN_CHAT_ID": "42"},
+	})
+	if err != nil {
+		t.Fatalf("CreateFromTemplate: %v", err)
+	}
+
+	// (a) flow copied from the template, not empty/default.
+	if string(p.Flow) != string(templateFlow) {
+		t.Fatalf("Flow = %s, want %s", p.Flow, templateFlow)
+	}
+	if tmpl.lastIDOrSlug != "some-template-slug" || tmpl.lastBuyerID != ownerID {
+		t.Fatalf("ResolveForProjectCreate called with (%q, %v), want (%q, %v)",
+			tmpl.lastIDOrSlug, tmpl.lastBuyerID, "some-template-slug", ownerID)
+	}
+
+	// (b) default system CMS collections provisioned, same as plain Create.
+	for _, slug := range []string{"users", "chat"} {
+		if _, ok := cmsUC.collections[slug]; !ok {
+			t.Fatalf("expected default collection %q to be created", slug)
+		}
+	}
+
+	// Token stored as RELEASE_BOT_TOKEN (same as a normal create with token).
+	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != "123:abc" {
+		t.Fatalf("RELEASE_BOT_TOKEN = %q, want 123:abc", got)
+	}
+
+	// Requested env applied through the release module.
+	if got := rel.envs["ADMIN_CHAT_ID"]; got != "42" {
+		t.Fatalf("ADMIN_CHAT_ID env = %q, want 42", got)
+	}
+
+	// mode defaults to "release" -> first release deployed, no debug started.
+	if !rel.releaseCalled {
+		t.Fatal("expected CreateRelease to be called for the default (release) mode")
+	}
+	if rel.debugCalled {
+		t.Fatal("did not expect StartDebug to be called for the default (release) mode")
+	}
+}
+
+// TestCreateFromTemplate_DebugMode mirrors Django's tokenless debug branch:
+// no token is stored, and the debug container is started instead of a
+// release being deployed.
+func TestCreateFromTemplate_DebugMode(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	tmpl := &fakeTemplateResolver{flow: json.RawMessage(`{"nodes":[],"edges":[]}`)}
+	rel := &fakeReleaseOrchestrator{}
+	uc := NewUsecase(repo, nil, cmsUC, tmpl, rel)
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID:  ownerID,
+		Template: "free-template",
+		Name:     "Debug bot",
+		Mode:     "debug",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromTemplate: %v", err)
+	}
+	if _, ok := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; ok {
+		t.Fatal("did not expect RELEASE_BOT_TOKEN to be set in debug mode")
+	}
+	if !rel.debugCalled {
+		t.Fatal("expected StartDebug to be called for mode=debug")
+	}
+	if rel.releaseCalled {
+		t.Fatal("did not expect CreateRelease to be called for mode=debug")
+	}
+}
+
+// TestCreateFromTemplate_NotPurchased ports the "template not purchased"
+// rejection (ProjectView.create_from_template, project.py:466-468):
+// TemplateResolver returning an error must abort before any project row
+// (or its collections/deploy) is created.
+func TestCreateFromTemplate_NotPurchased(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	tmpl := &fakeTemplateResolver{err: httpx.BadRequest("template.not_purchased", "template not purchased")}
+	rel := &fakeReleaseOrchestrator{}
+	uc := NewUsecase(repo, nil, cmsUC, tmpl, rel)
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	_, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID: ownerID, Template: "paid-template", Name: "Should not exist",
+	})
+	if err == nil {
+		t.Fatal("expected an error when the template was not purchased")
+	}
+	if len(repo.projects) != 0 {
+		t.Fatalf("expected no project to be created, got %d", len(repo.projects))
+	}
+	if rel.releaseCalled || rel.debugCalled {
+		t.Fatal("did not expect any deploy call when template resolution failed")
 	}
 }
