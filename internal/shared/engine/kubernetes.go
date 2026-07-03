@@ -181,6 +181,15 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 			env["API_TOKEN"] = o.cfg.InternalToken
 			env["INTERNAL_TOKEN"] = o.cfg.InternalToken
 		}
+		// Mirrors kubernetes_service.py:680-685: for a release (not debug)
+		// deploy, an explicit BOT_TOKEN env wins; otherwise fall back to the
+		// project's RELEASE_BOT_TOKEN (set on the project via its token field
+		// or the set-bot-token flow), and only then to the shared test token.
+		if _, ok := env["BOT_TOKEN"]; !ok && !spec.Debug {
+			if releaseToken, ok := env["RELEASE_BOT_TOKEN"]; ok && releaseToken != "" {
+				env["BOT_TOKEN"] = releaseToken
+			}
+		}
 		if _, ok := env["BOT_TOKEN"]; !ok && o.cfg.TestBotToken != "" {
 			env["BOT_TOKEN"] = o.cfg.TestBotToken
 		}

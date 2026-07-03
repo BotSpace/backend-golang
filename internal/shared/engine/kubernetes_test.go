@@ -124,6 +124,82 @@ func TestDeploy_Debug_UsesDebugNamingAndDebugEnv(t *testing.T) {
 	}
 }
 
+func TestDeploy_Release_MapsReleaseBotTokenToBotToken(t *testing.T) {
+	ctx := context.Background()
+	orch, cs := testOrchestrator()
+
+	projectID := uuid.New()
+	result, err := orch.Deploy(ctx, DeploySpec{
+		ProjectID:   projectID,
+		ReleaseUUID: uuid.New(),
+		Version:     1,
+		Debug:       false,
+		Flow:        []byte(`{}`),
+		Env:         map[string]string{"RELEASE_BOT_TOKEN": "123:release-tok"},
+	})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("secret not created: %v", err)
+	}
+	if got := string(secret.Data["BOT_TOKEN"]); got != "123:release-tok" {
+		t.Errorf("BOT_TOKEN = %q, want RELEASE_BOT_TOKEN value", got)
+	}
+}
+
+func TestDeploy_Release_ExplicitBotTokenWinsOverReleaseBotToken(t *testing.T) {
+	ctx := context.Background()
+	orch, cs := testOrchestrator()
+
+	projectID := uuid.New()
+	result, err := orch.Deploy(ctx, DeploySpec{
+		ProjectID:   projectID,
+		ReleaseUUID: uuid.New(),
+		Version:     1,
+		Debug:       false,
+		Flow:        []byte(`{}`),
+		Env:         map[string]string{"BOT_TOKEN": "explicit-tok", "RELEASE_BOT_TOKEN": "123:release-tok"},
+	})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("secret not created: %v", err)
+	}
+	if got := string(secret.Data["BOT_TOKEN"]); got != "explicit-tok" {
+		t.Errorf("BOT_TOKEN = %q, want explicit value preserved", got)
+	}
+}
+
+func TestDeploy_Debug_DoesNotFallBackToReleaseBotToken(t *testing.T) {
+	ctx := context.Background()
+	orch, cs := testOrchestrator()
+
+	projectID := uuid.New()
+	result, err := orch.Deploy(ctx, DeploySpec{
+		ProjectID: projectID,
+		Debug:     true,
+		Flow:      []byte(`{}`),
+		Env:       map[string]string{"RELEASE_BOT_TOKEN": "123:release-tok"},
+	})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("secret not created: %v", err)
+	}
+	// Debug mode must ignore RELEASE_BOT_TOKEN and fall straight through to
+	// the shared TestBotToken fallback (mirrors kubernetes_service.py's
+	// `prefix == "release"` guard).
+	if got := string(secret.Data["BOT_TOKEN"]); got != "test-bot-tok" {
+		t.Errorf("BOT_TOKEN = %q, want TestBotToken fallback", got)
+	}
+}
+
 func TestDeploy_Module_UsesExplicitNameAndImage(t *testing.T) {
 	ctx := context.Background()
 	orch, cs := testOrchestrator()

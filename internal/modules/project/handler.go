@@ -99,6 +99,7 @@ func (h *Handler) Create(c *gin.Context) {
 		Username:    req.Username,
 		Flow:        req.Flow,
 		IsTemplate:  req.IsTemplate,
+		Token:       req.Token,
 	})
 	if err != nil {
 		httpx.Error(c, err)
@@ -167,6 +168,7 @@ func (h *Handler) Update(c *gin.Context) {
 		Description: req.Description,
 		Username:    req.Username,
 		Flow:        req.Flow,
+		Token:       req.Token,
 	})
 	if err != nil {
 		httpx.Error(c, err)

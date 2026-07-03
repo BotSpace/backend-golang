@@ -48,6 +48,10 @@ type CreateRequest struct {
 	Username    string          `json:"username" validate:"omitempty,max=255"`
 	Flow        json.RawMessage `json:"flow" validate:"omitempty"`
 	IsTemplate  bool            `json:"is_template"`
+	// Token is the Telegram bot token (optional — mirrors Django's
+	// CreateProjectSerializer.token). Blank is fine: the dashboard falls back
+	// to its bot_token_required flow on the first /relase call.
+	Token string `json:"token" validate:"omitempty,max=255"`
 }
 
 type UpdateRequest struct {
@@ -55,6 +59,7 @@ type UpdateRequest struct {
 	Description *string         `json:"description" validate:"omitempty,max=5000"`
 	Username    *string         `json:"username" validate:"omitempty,max=255"`
 	Flow        json.RawMessage `json:"flow" validate:"omitempty"`
+	Token       *string         `json:"token" validate:"omitempty,max=255"`
 }
 
 // ListResponse is a paginated envelope for a project listing.
