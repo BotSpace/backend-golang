@@ -159,4 +159,10 @@ type Repository interface {
 	// debug row yet (never started).
 	GetDebugForOwner(ctx context.Context, projectID, ownerID uuid.UUID) (*ProjectDebug, error)
 	UpdateDebugStatus(ctx context.Context, id uuid.UUID, serviceID, status string) (*ProjectDebug, error)
+
+	// ActiveReleaseServiceIDsForOwner returns the service_id of every release
+	// row that still has one, owner-scoped — same cross-module SQL-only
+	// convention as GetDebugForOwner. Used by Delete to stop each release's
+	// k8s deployment before the project's rows disappear behind deleted_at.
+	ActiveReleaseServiceIDsForOwner(ctx context.Context, projectID, ownerID uuid.UUID) ([]string, error)
 }

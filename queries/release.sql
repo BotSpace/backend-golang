@@ -51,6 +51,20 @@ WHERE project_id = sqlc.arg('project_id')
   AND status IN ('initializing', 'running')
 RETURNING *;
 
+-- Owner-scoped list of every release's service_id that still has a live k8s
+-- deployment (any status — Stop is idempotent so an already-stopped/failed
+-- row's stale service_id is harmless to also pass through) for a project.
+-- Used by project.Usecase.Delete to tear down every release's Deployment
+-- (+ its -env Secret/-flow ConfigMap/bot-<uuid> Service) BEFORE the project
+-- disappears behind deleted_at — after that point GetDebugForOwner/
+-- ListReleasesForProject can no longer see the project's rows at all.
+-- name: ListReleaseServiceIDsForOwner :many
+SELECT r.service_id
+FROM relase r
+JOIN projects p ON p.id = r.project_id
+WHERE r.project_id = sqlc.arg('project_id') AND p.owner_id = sqlc.arg('owner_id') AND p.deleted_at IS NULL
+  AND r.service_id IS NOT NULL AND r.service_id <> '';
+
 -- Debug (one row per project). Upsert mirrors Django's get_or_create.
 -- name: GetDebugForOwner :one
 SELECT d.*

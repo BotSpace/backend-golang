@@ -326,6 +326,46 @@ func (q *Queries) ListEnviromentsForOwner(ctx context.Context, arg ListEnviromen
 	return items, nil
 }
 
+const listReleaseServiceIDsForOwner = `-- name: ListReleaseServiceIDsForOwner :many
+SELECT r.service_id
+FROM relase r
+JOIN projects p ON p.id = r.project_id
+WHERE r.project_id = $1 AND p.owner_id = $2 AND p.deleted_at IS NULL
+  AND r.service_id IS NOT NULL AND r.service_id <> ''
+`
+
+type ListReleaseServiceIDsForOwnerParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+}
+
+// Owner-scoped list of every release's service_id that still has a live k8s
+// deployment (any status — Stop is idempotent so an already-stopped/failed
+// row's stale service_id is harmless to also pass through) for a project.
+// Used by project.Usecase.Delete to tear down every release's Deployment
+// (+ its -env Secret/-flow ConfigMap/bot-<uuid> Service) BEFORE the project
+// disappears behind deleted_at — after that point GetDebugForOwner/
+// ListReleasesForProject can no longer see the project's rows at all.
+func (q *Queries) ListReleaseServiceIDsForOwner(ctx context.Context, arg ListReleaseServiceIDsForOwnerParams) ([]*string, error) {
+	rows, err := q.db.Query(ctx, listReleaseServiceIDsForOwner, arg.ProjectID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*string{}
+	for rows.Next() {
+		var service_id *string
+		if err := rows.Scan(&service_id); err != nil {
+			return nil, err
+		}
+		items = append(items, service_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleasesForProject = `-- name: ListReleasesForProject :many
 SELECT r.id, r.project_id, r.version, r.flow, r.service_id, r.status, r.created_at, r.updated_at
 FROM relase r

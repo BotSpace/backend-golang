@@ -34,7 +34,7 @@ func (r *pgRepo) CreateCollection(ctx context.Context, in CreateCollectionInput)
 		Slug:         in.Slug,
 		Description:  in.Description,
 		PrimaryField: in.PrimaryField,
-		System:       false,
+		System:       in.System,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// INSERT ... SELECT ... WHERE EXISTS produced no row: the project
