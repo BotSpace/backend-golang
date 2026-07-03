@@ -912,6 +912,17 @@ func (r *pgRepo) GetOrCreateOrder(ctx context.Context, userID, templateID uuid.U
 	return &o, nil
 }
 
+func (r *pgRepo) GetOrderForUserAndTemplate(ctx context.Context, userID, templateID uuid.UUID) (*Order, error) {
+	row, err := r.queries.TemplateGetOrderForUserAndTemplate(ctx, sqlcdb.TemplateGetOrderForUserAndTemplateParams{
+		UserID: &userID, TemplateID: &templateID,
+	})
+	if err != nil {
+		return nil, mapNoRows(err)
+	}
+	o := orderFromSQLC(row)
+	return &o, nil
+}
+
 func (r *pgRepo) GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Order, error) {
 	row, err := r.queries.TemplateGetOrderForOwner(ctx, sqlcdb.TemplateGetOrderForOwnerParams{ID: id, UserID: &ownerID})
 	if err != nil {

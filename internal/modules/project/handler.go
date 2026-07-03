@@ -2,6 +2,7 @@ package project
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
@@ -100,6 +101,69 @@ func (h *Handler) Create(c *gin.Context) {
 		Flow:        req.Flow,
 		IsTemplate:  req.IsTemplate,
 		Token:       req.Token,
+	})
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 201, toResponse(p))
+}
+
+// CreateFromTemplate godoc
+// @Summary      Create a project seeded from a purchased marketplace template
+// @Description  Requires the caller to already hold a paid order for the
+// @Description  template (POST /template/orders — free templates are
+// @Description  auto-confirmed there). mode=release (default) requires
+// @Description  token; mode=debug deploys the tokenless debug container
+// @Description  instead and ignores token entirely.
+// @Tags         projects
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      CreateFromTemplateRequest  true  "Template + create payload"
+// @Success      201  {object}  ProjectResponse
+// @Failure      400  {object}  httpx.ErrorResponse  "validation failed / template not purchased / token required"
+// @Failure      404  {object}  httpx.ErrorResponse  "template not found"
+// @Router       /projects/create-from-template [post]
+func (h *Handler) CreateFromTemplate(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	var req CreateFromTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	if details, err := validator.Struct(req); err != nil {
+		httpx.ErrorWithDetails(c, httpx.BadRequest("request.invalid", "validation failed"), details)
+		return
+	}
+	mode := req.Mode
+	if mode == "" {
+		mode = "release"
+	}
+	// managed_bot_id isn't wired yet anywhere in this backend (see
+	// CreateFromTemplateInput's doc comment) — reject explicitly instead of
+	// silently ignoring it and deploying a bot with no token at all.
+	if strings.TrimSpace(req.ManagedBotID) != "" {
+		httpx.Error(c, httpx.BadRequest(
+			"project.managed_bot_not_supported",
+			"managed_bot_id hali qo'llab-quvvatlanmaydi — token kiriting yoki mode=debug tanlang",
+		))
+		return
+	}
+	if mode == "release" && strings.TrimSpace(req.Token) == "" {
+		httpx.Error(c, httpx.BadRequest("project.token_required", "token majburiy (yoki mode=debug tanlang)"))
+		return
+	}
+	p, err := h.uc.CreateFromTemplate(c.Request.Context(), CreateFromTemplateInput{
+		OwnerID:  ownerID,
+		Template: req.Template,
+		Name:     req.Name,
+		Token:    req.Token,
+		Mode:     mode,
+		Envs:     req.Envs,
 	})
 	if err != nil {
 		httpx.Error(c, err)

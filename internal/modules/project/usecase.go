@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/botspace/backend/internal/modules/cms"
+	"github.com/botspace/backend/internal/modules/release"
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -21,6 +23,9 @@ import (
 // (unscoped) listing/detail/monitoring reachable only behind an admin route.
 type Usecase interface {
 	Create(ctx context.Context, in CreateInput) (*Project, error)
+	// CreateFromTemplate seeds a brand-new project from a marketplace
+	// template's flow — see its doc comment below for the full port notes.
+	CreateFromTemplate(ctx context.Context, in CreateFromTemplateInput) (*Project, error)
 	Get(ctx context.Context, id, ownerID uuid.UUID) (*Project, error)
 	Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateInput) (*Project, error)
 	Delete(ctx context.Context, id, ownerID uuid.UUID) error
@@ -29,6 +34,27 @@ type Usecase interface {
 	AdminList(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	AdminMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, int64, error)
+}
+
+// TemplateResolver is the minimal template-module surface CreateFromTemplate
+// needs — defined narrowly (same convention as CollectionProvisioner below)
+// so this package depends only on the read-only "resolve a purchased
+// template into a flow" step, not the whole marketplace usecase.
+// template.Usecase satisfies this interface structurally.
+type TemplateResolver interface {
+	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error)
+}
+
+// ReleaseOrchestrator is the minimal release-module surface
+// CreateFromTemplate needs: writing arbitrary env vars and mirroring
+// Django's create_from_template mode branch (release: create+deploy the
+// first release; debug: start the tokenless debug container immediately).
+// Same narrow-interface convention as CollectionProvisioner/TemplateResolver.
+// release.Usecase satisfies this interface structurally.
+type ReleaseOrchestrator interface {
+	UpsertEnvironment(ctx context.Context, in release.UpsertEnvironmentInput) (*release.Environment, error)
+	CreateRelease(ctx context.Context, projectID, ownerID uuid.UUID) (*release.Release, error)
+	StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*release.Debug, error)
 }
 
 // CollectionProvisioner is the minimal cms.Usecase surface this module needs
@@ -56,15 +82,24 @@ type usecase struct {
 	// provisionDefaultCollections) — kept optional for the same reason as
 	// orch above.
 	cms CollectionProvisioner
+	// tmpl is nil-able: nil means CreateFromTemplate always fails with a 500
+	// (there is genuinely nothing it can do without a template resolver —
+	// unlike cms/orch, this isn't an optional side effect).
+	tmpl TemplateResolver
+	// rel is nil-able: nil means CreateFromTemplate skips applying envs and
+	// deploying the first release/debug container — the project row + flow
+	// + default collections still get created, just not launched.
+	rel ReleaseOrchestrator
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
 // live debug-status reconciliation and Delete skips stopping containers.
 // cmsUC may be nil (including a nil cms.Usecase, which satisfies
 // CollectionProvisioner too) — Create then skips provisioning default
-// collections.
-func NewUsecase(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner) Usecase {
-	return &usecase{repo: repo, orch: orch, cms: cmsUC}
+// collections. tmplUC/relUC may also be nil — see the usecase struct's field
+// comments for what CreateFromTemplate then skips.
+func NewUsecase(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner, tmplUC TemplateResolver, relUC ReleaseOrchestrator) Usecase {
+	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC}
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
@@ -77,6 +112,106 @@ func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) 
 	}
 	u.provisionDefaultCollections(ctx, p)
 	return p, nil
+}
+
+// CreateFromTemplateInput is the template-seeded create payload — mirrors
+// Django's CreateProjectFromTemplate serializer (project.py:391-448), minus
+// ManagedBotID/Credentials (see CreateFromTemplate's doc comment for why).
+type CreateFromTemplateInput struct {
+	OwnerID uuid.UUID
+	// Template is the template's id (UUID) or slug — TemplateResolver tries
+	// both, same as the internal RAG feed's GetInternalFeedItem.
+	Template string
+	Name     string
+	// Token is optional, same semantics as CreateInput.Token — ignored
+	// entirely when Mode is "debug" (mirrors Django never wiring
+	// RELEASE_BOT_TOKEN on the tokenless debug branch).
+	Token string
+	// Mode is "release" (default, deploys the first release immediately) or
+	// "debug" (tokenless, starts the debug container immediately instead).
+	Mode string
+	Envs map[string]string
+}
+
+// CreateFromTemplate ports ProjectView.create_from_template
+// (core/apps/api/views/project.py:446-575): resolve+purchase-check the
+// template (via TemplateResolver, which also loads its flow), seed a
+// brand-new project with that flow through the ordinary Create path above —
+// so it gets the exact same default users/chat CMS collections +
+// RELEASE_BOT_TOKEN wiring a normal create gets, nothing duplicated — apply
+// any requested env vars, then either deploy the first release (mode
+// "release", the default) or start the tokenless debug container (mode
+// "debug"), matching Django's mode branch.
+//
+// Deliberately NOT ported (kept simple per the task's own instruction):
+//   - managed_bot_id wiring — the Go backend has no project<->managed-bot
+//     attach path at all yet, not even from the plain POST /projects create
+//     (see ProjectsAPI.setBotToken's stub in the dashboard); adding it here
+//     first would be a bigger, unrelated feature.
+//   - the `credentials` map / spec-driven collections+modules install
+//     (Django's apply_spec_to_project + replace_placeholders_in_flow). A
+//     template flow with unresolved "cred:<key>" placeholders deploys as-is
+//     (an inert credential_id field) rather than failing outright.
+func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateInput) (*Project, error) {
+	if u.tmpl == nil {
+		return nil, httpx.Internal(errors.New("project: template resolver not configured"))
+	}
+	flow, err := u.tmpl.ResolveForProjectCreate(ctx, in.Template, in.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+
+	mode := in.Mode
+	if mode == "" {
+		mode = "release"
+	}
+	token := in.Token
+	if mode == "debug" {
+		token = "" // debug never wires a token, mirrors Django's tokenless branch
+	}
+
+	p, err := u.Create(ctx, CreateInput{
+		OwnerID: in.OwnerID,
+		Name:    in.Name,
+		Flow:    flow,
+		Token:   token,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if u.rel == nil {
+		return p, nil
+	}
+
+	// Env application is best-effort like provisionDefaultCollections above
+	// — one bad KEY must never abort an otherwise-successful create.
+	for key, value := range in.Envs {
+		if _, envErr := u.rel.UpsertEnvironment(ctx, release.UpsertEnvironmentInput{
+			ProjectID: p.ID, OwnerID: in.OwnerID, UserID: in.OwnerID, Key: key, Value: value,
+		}); envErr != nil {
+			log.Printf("project: create-from-template env %q for project %s failed: %v", key, p.ID, envErr)
+		}
+	}
+
+	// Unlike envs, the deploy itself propagates its error (matches Django
+	// re-raising ApiException as a 503) — the whole point of create-from-
+	// template is a running bot, so a deploy failure must not look like
+	// success even though the project row now exists (same orphan-on-error
+	// tradeoff Django accepts here).
+	if mode == "debug" {
+		if _, derr := u.rel.StartDebug(ctx, p.ID, in.OwnerID); derr != nil {
+			return nil, derr
+		}
+	} else {
+		if _, rerr := u.rel.CreateRelease(ctx, p.ID, in.OwnerID); rerr != nil {
+			return nil, rerr
+		}
+	}
+
+	// Re-fetch so the response reflects the just-deployed release/debug
+	// state (Create's own return value predates the deploy above).
+	return u.Get(ctx, p.ID, in.OwnerID)
 }
 
 // defaultCollectionField is one field of a defaultCollection spec.

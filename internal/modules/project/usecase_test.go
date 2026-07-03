@@ -160,7 +160,7 @@ func (r *fakeRepo) ActiveReleaseServiceIDsForOwner(_ context.Context, projectID,
 // it.
 func TestCreate_WithToken_StoresReleaseBotToken(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -179,7 +179,7 @@ func TestCreate_WithToken_StoresReleaseBotToken(t *testing.T) {
 // bot_token_required contract only kicks in later, at release-deploy time.
 func TestCreate_WithoutToken_DoesNotForceOne(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -196,7 +196,7 @@ func TestCreate_WithoutToken_DoesNotForceOne(t *testing.T) {
 // update path (dashboard's updateBotAction posts {..., token} on PATCH).
 func TestUpdate_WithToken_StoresReleaseBotToken(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -221,7 +221,7 @@ func TestUpdate_WithToken_StoresReleaseBotToken(t *testing.T) {
 // rule).
 func TestUpdate_BlankToken_LeavesReleaseBotTokenUntouched(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -273,7 +273,7 @@ func (f *fakeOrchestrator) Logs(context.Context, string, int, int) (engine.LogSn
 func TestGet_ReconcilesDebugStatus(t *testing.T) {
 	repo := newFakeRepo()
 	orch := &fakeOrchestrator{status: engine.StatusRunning}
-	uc := NewUsecase(repo, orch, nil)
+	uc := NewUsecase(repo, orch, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -305,7 +305,7 @@ func TestGet_ReconcilesDebugStatus(t *testing.T) {
 // object — matches the dashboard's `project?.debug?.status` optional chain.
 func TestGet_NoDebugRow_LeavesDebugNil(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, &fakeOrchestrator{status: engine.StatusRunning}, nil)
+	uc := NewUsecase(repo, &fakeOrchestrator{status: engine.StatusRunning}, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -378,7 +378,7 @@ func (f *fakeCollectionProvisioner) AddField(_ context.Context, _, _ uuid.UUID, 
 func TestCreate_ProvisionsDefaultCollections(t *testing.T) {
 	repo := newFakeRepo()
 	cmsUC := newFakeCollectionProvisioner()
-	uc := NewUsecase(repo, nil, cmsUC)
+	uc := NewUsecase(repo, nil, cmsUC, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -467,7 +467,7 @@ func TestCreate_ProvisionsDefaultCollections(t *testing.T) {
 // project creation itself.
 func TestCreate_NilCMS_DoesNotFail(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -483,7 +483,7 @@ func TestCreate_NilCMS_DoesNotFail(t *testing.T) {
 func TestDelete_StopsRunningContainers(t *testing.T) {
 	repo := newFakeRepo()
 	orch := &fakeOrchestrator{}
-	uc := NewUsecase(repo, orch, nil)
+	uc := NewUsecase(repo, orch, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -527,7 +527,7 @@ func TestDelete_StopsRunningContainers(t *testing.T) {
 func TestDelete_BestEffort_StopErrorDoesNotBlockDelete(t *testing.T) {
 	repo := newFakeRepo()
 	orch := &fakeOrchestrator{stopErr: errors.New("k8s unavailable")}
-	uc := NewUsecase(repo, orch, nil)
+	uc := NewUsecase(repo, orch, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
@@ -550,7 +550,7 @@ func TestDelete_BestEffort_StopErrorDoesNotBlockDelete(t *testing.T) {
 // containers.
 func TestDelete_NilOrchestrator_StillDeletes(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, nil, nil)
+	uc := NewUsecase(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	ownerID := uuid.New()
 
