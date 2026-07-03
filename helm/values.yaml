@@ -2,4 +2,4 @@
 # CI har push'da tag'ni yangilaydi (worker-golang/engine-golang pattern).
 image:
   repository: registry.iprogrammer.uz/botspace/backend-golang
-  tag: "25edac7"
+  tag: "9a98fed"
