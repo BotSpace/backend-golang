@@ -135,7 +135,7 @@ func (u *usecase) GetRelease(ctx context.Context, id, ownerID uuid.UUID) (*Relea
 // an orchestrator error just returns the DB row unchanged so a transient k8s
 // API hiccup never turns into a request failure.
 func (u *usecase) reconcileRelease(ctx context.Context, rel Release) Release {
-	if rel.ServiceID == "" || (rel.Status != StatusPending && rel.Status != StatusInitializing) {
+	if rel.ServiceID == "" || (rel.Status != StatusPending && rel.Status != StatusInitializing && rel.Status != StatusFailed) {
 		return rel
 	}
 	live, err := u.orch.Status(ctx, rel.ServiceID)
@@ -280,7 +280,7 @@ func (u *usecase) GetDebugLogs(ctx context.Context, projectID, ownerID uuid.UUID
 // reconcileDebug is GetDebug's counterpart to reconcileRelease — see its doc
 // comment.
 func (u *usecase) reconcileDebug(ctx context.Context, dbg Debug) Debug {
-	if dbg.ServiceID == "" || (dbg.Status != StatusPending && dbg.Status != StatusInitializing) {
+	if dbg.ServiceID == "" || (dbg.Status != StatusPending && dbg.Status != StatusInitializing && dbg.Status != StatusFailed) {
 		return dbg
 	}
 	live, err := u.orch.Status(ctx, dbg.ServiceID)
