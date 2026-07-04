@@ -408,21 +408,19 @@ func (q *Queries) ListReleasesForProject(ctx context.Context, arg ListReleasesFo
 	return items, nil
 }
 
-const releaseGetProjectLegacyID = `-- name: ReleaseGetProjectLegacyID :one
-SELECT legacy_id FROM projects WHERE id = $1 AND deleted_at IS NULL
+const releaseGetProjectOwnerID = `-- name: ReleaseGetProjectOwnerID :one
+SELECT owner_id FROM projects WHERE id = $1 AND deleted_at IS NULL
 `
 
-// Internal (not owner-checked): resolves a project's Django legacy integer pk
-// for real-time WS room naming ("project_<legacy-id>" — see
-// internal/shared/wsevents.ProjectRoom). Nullable: a project created after
-// the Go cutover has no legacy_id (migration 000033). Callers must have
-// already verified ownership via whatever row (release/debug) carried this
-// project_id.
-func (q *Queries) ReleaseGetProjectLegacyID(ctx context.Context, id uuid.UUID) (*int32, error) {
-	row := q.db.QueryRow(ctx, releaseGetProjectLegacyID, id)
-	var legacy_id *int32
-	err := row.Scan(&legacy_id)
-	return legacy_id, err
+// Internal (not owner-checked): resolves a project's owner_id for real-time
+// WS room naming ("user_<owner-id>" — see internal/shared/wsevents.UserRoom).
+// Callers must have already verified ownership via whatever row
+// (release/debug) carried this project_id.
+func (q *Queries) ReleaseGetProjectOwnerID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, releaseGetProjectOwnerID, id)
+	var owner_id uuid.UUID
+	err := row.Scan(&owner_id)
+	return owner_id, err
 }
 
 const stopActiveReleasesExcept = `-- name: StopActiveReleasesExcept :many

@@ -115,10 +115,13 @@ type Repository interface {
 	// webhook routing survives redeploys.
 	GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (releaseUUID, debugUUID uuid.UUID, err error)
 
-	// ProjectLegacyID resolves a project's Django legacy integer pk (nil when
-	// it has none — a project created after the Go cutover), used only to
-	// name the real-time WS broadcast room ("project_<id>", see
-	// internal/shared/wsevents.ProjectRoom). Not owner-scoped: callers only
-	// ever have projectID from a row they already loaded owner-scoped.
-	ProjectLegacyID(ctx context.Context, projectID uuid.UUID) (*int32, error)
+	// ProjectOwnerID resolves a project's owner_id, used to name the
+	// real-time WS broadcast room ("user_<owner-id>", see
+	// internal/shared/wsevents.UserRoom) — the constructor's ws-hub
+	// connection (the one that decodes release/debug status JSON events)
+	// joins a room keyed by its own user id, never by project, so the
+	// publish side must resolve the project's owner to reach it. Not
+	// owner-scoped itself: callers only ever have projectID from a row they
+	// already loaded owner-scoped.
+	ProjectOwnerID(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 }

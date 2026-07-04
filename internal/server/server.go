@@ -418,11 +418,14 @@ const (
 // until ctx is cancelled. See docs/redis-stream-events.md for the event
 // contract (XADD shape, registered "task" names, JSON args per task). wsPub
 // is nil-able (see wsevents.Publisher) — every consumer.Register body below
-// forwards its event to the constructor's "project_<ref>" WS room AFTER the
-// Postgres/Redis persistence succeeds, using the engine's raw project_id
-// reference as-is (no legacy-id resolution needed: IssueCollabToken's room
-// naming already accepts either an int or a string ref verbatim — see
-// wsevents.ProjectRoom).
+// forwards its event to the constructor's ws-hub AFTER the Postgres/Redis
+// persistence succeeds, via resolveDebugEventOwner + wsevents.UserRoom (the
+// ws-hub's plain access token has no project_id claim, so it always sits in
+// a "user_<id>" room — publishing to "project_<ref>" as this used to do
+// meant the event never reached it, see internal/shared/wsevents doc
+// comment). Each event's own "project" field keeps the engine's raw
+// payload.ProjectID as-is (that's what the constructor's client-side filter
+// compares against project.id).
 func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, wsPub wsevents.Publisher) {
 	addr := s.cfg.Engine.RedisAddr()
 	if addr == "" {
@@ -454,20 +457,22 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			level := payload.Level
-			if level == "" {
-				level = "error" // core/domain/ws.py ErrorEvent's default
+			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+				level := payload.Level
+				if level == "" {
+					level = "error" // core/domain/ws.py ErrorEvent's default
+				}
+				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventError, map[string]any{
+					"project":   payload.ProjectID,
+					"chat_id":   payload.ChatID,
+					"node_id":   payload.NodeID,
+					"node_type": payload.NodeType,
+					"level":     level,
+					"message":   payload.Message,
+					"detail":    payload.Detail,
+					"ts":        payload.TS,
+				})
 			}
-			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventError, map[string]any{
-				"project":   payload.ProjectID,
-				"chat_id":   payload.ChatID,
-				"node_id":   payload.NodeID,
-				"node_type": payload.NodeType,
-				"level":     level,
-				"message":   payload.Message,
-				"detail":    payload.Detail,
-				"ts":        payload.TS,
-			})
 		}
 		return nil
 	})
@@ -496,17 +501,19 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventNodeExecution, map[string]any{
-				"project":   payload.ProjectID,
-				"chat_id":   payload.ChatID,
-				"node_id":   payload.NodeID,
-				"node_type": payload.NodeType,
-				"status":    payload.Status,
-				"error":     payload.Error,
-				"ts":        payload.TS,
-				"run_id":    payload.RunID,
-				"seq":       payload.Seq,
-			})
+			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventNodeExecution, map[string]any{
+					"project":   payload.ProjectID,
+					"chat_id":   payload.ChatID,
+					"node_id":   payload.NodeID,
+					"node_type": payload.NodeType,
+					"status":    payload.Status,
+					"error":     payload.Error,
+					"ts":        payload.TS,
+					"run_id":    payload.RunID,
+					"seq":       payload.Seq,
+				})
+			}
 		}
 		return nil
 	})
@@ -530,12 +537,14 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventContext, map[string]any{
-				"project":   payload.ProjectID,
-				"chat_id":   payload.ChatID,
-				"variables": payload.Variables,
-				"ts":        payload.TS,
-			})
+			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventContext, map[string]any{
+					"project":   payload.ProjectID,
+					"chat_id":   payload.ChatID,
+					"variables": payload.Variables,
+					"ts":        payload.TS,
+				})
+			}
 		}
 		return nil
 	})
@@ -548,6 +557,21 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 		}
 		_ = consumer.Close()
 	}()
+}
+
+// resolveDebugEventOwner resolves the engine's raw project_id reference
+// (debugmod.Usecase.ResolveProjectRef — legacy int pk as a string, or Django
+// project.uuid) down to this backend's internal project row, then to that
+// project's owner_id, so the caller can publish to wsevents.UserRoom(owner).
+// Best-effort: any resolution failure (unknown ref, project gone) is
+// returned as-is so callers just skip the WS forward, matching the
+// try/except-swallowing convention of every other WS publish in this repo.
+func resolveDebugEventOwner(ctx context.Context, debugUC debugmod.Usecase, projectRef string) (uuid.UUID, error) {
+	projectID, err := debugUC.ResolveProjectRef(ctx, projectRef)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return debugUC.GetProjectOwner(ctx, projectID)
 }
 
 // debugErrorEventPayload is the "args" shape for the "debug.error_event"

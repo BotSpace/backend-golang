@@ -9,13 +9,22 @@
 // This mirrors Django's core/apps/websocket/services/events.py ws_publish
 // EXACTLY — same channel name, same {"room","data":{"event","data"}}
 // envelope — so the unchanged websocket service keeps broadcasting to the
-// constructor without any change on its side. The only deliberate deviation
-// from the old Django behavior is the room: Django published to
-// "user_<owner_id>"; this backend publishes to "project_<ref>" (ref = the
-// project's Django legacy int pk, or its own uuid when it has none) — the
-// SAME room the constructor's collab-token connection already joins for live
-// flow collaboration (see internal/modules/project/collab_token.go), so one
-// WS connection now receives both collab ops and status/debug events.
+// constructor without any change on its side.
+//
+// Room naming is where this matters: the constructor actually holds TWO WS
+// connections to that service — a collab-client (binary flow-edit ops only,
+// joins "project_<ref>" via its collab-token's project_id claim) and a
+// ws-hub (decodes the JSON domain events this package publishes:
+// release_status, debug_status, node_execution, context, error). The ws-hub
+// authenticates with a plain access token that carries NO project_id claim,
+// so the websocket service always assigns it to "user_<user_id>" (see
+// archive/websocket/cmd/main.go's room-assignment logic) regardless of which
+// project is open. Publishing domain events to "project_<ref>" (as an
+// earlier version of this file did, matching only the collab-client's room)
+// meant the ws-hub — the only connection that reads JSON — never received
+// them. Use UserRoom (keyed by the project's OWNER, mirroring Django's old
+// "user_<service.project.owner.id>") for every JSON domain event; ProjectRoom
+// remains correct only for anything the collab-client itself needs.
 package wsevents
 
 import (
@@ -24,6 +33,7 @@ import (
 	"fmt"
 
 	"github.com/botspace/backend/internal/shared/logger"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -47,9 +57,27 @@ const (
 // project.usecase.IssueCollabToken's `fmt.Sprintf("project_%v", projectRef)`
 // exactly — ref is either an int32 (Django legacy pk) or a string (this
 // backend's own uuid, or the engine's raw project_id reference forwarded
-// as-is).
+// as-is). Only the collab-token's binary-op WS connection joins this room —
+// domain JSON events (release/debug status, node execution, context, error)
+// must use UserRoom instead, see below.
 func ProjectRoom(ref any) string {
 	return fmt.Sprintf("project_%v", ref)
+}
+
+// UserRoom formats the "user_<owner-id>" room name, matching Django's
+// _send_ws_notification (core/apps/api/management/commands/watch_k8s_events.py
+// published to "user_<service.project.owner.id>"). The constructor's ws-hub
+// connection (the one that decodes JSON domain events — release_status,
+// debug_status, node_execution, context, error) authenticates with a plain
+// access token that has NO project_id claim, so the standalone websocket
+// service (archive/websocket/cmd/main.go) always assigns it to
+// "user_<user_id>", never a "project_<ref>" room. Every JSON domain event
+// MUST therefore be published here (keyed by the PROJECT'S OWNER, since a
+// project's constructor session belongs to its owner) or the ws-hub never
+// sees it — see internal/modules/release/ws_events.go and
+// internal/server/server.go's startEventConsumer.
+func UserRoom(ownerID uuid.UUID) string {
+	return "user_" + ownerID.String()
 }
 
 // Publisher publishes one event into a room. Implementations must be

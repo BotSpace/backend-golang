@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/botspace/backend/internal/shared/wsevents"
-	"github.com/google/uuid"
 )
 
 // releaseStatusPayload mirrors Django's ReleaseContainerStatus. `project` is
@@ -29,28 +28,22 @@ type debugStatusPayload struct {
 	UpdatedAt *string `json:"updated_at"`
 }
 
-// projectRoomRef returns the WS room key for a project, matching
-// IssueCollabToken EXACTLY (legacy int if the project has one, else its uuid) —
-// the constructor joins the room named by its collab-token's project_id claim,
-// so the publish room MUST derive it the same way or the event never arrives.
-func projectRoomRef(legacyID *int32, id uuid.UUID) any {
-	if legacyID != nil {
-		return *legacyID
-	}
-	return id.String()
-}
-
 // publishReleaseStatus best-effort broadcasts a release status change to the
-// constructor's "project_<legacy-id>" WS room. Silently skipped when no
-// publisher is wired, the project has no legacy id yet, or the legacy-id
-// lookup fails — mirrors Django's _send_ws_notification wrapping the whole
-// call in a bare try/except.
+// constructor's ws-hub via its "user_<owner-id>" WS room (see
+// wsevents.UserRoom — the ws-hub's plain access token has no project_id
+// claim, so it always sits in a user room, never a project one). Silently
+// skipped when no publisher is wired or the owner lookup fails — mirrors
+// Django's _send_ws_notification wrapping the whole call in a bare
+// try/except.
 func (u *usecase) publishReleaseStatus(ctx context.Context, rel *Release) {
 	if u.pub == nil || rel == nil {
 		return
 	}
-	legacyID, _ := u.repo.ProjectLegacyID(ctx, rel.ProjectID)
-	u.pub.Publish(ctx, wsevents.ProjectRoom(projectRoomRef(legacyID, rel.ProjectID)), wsevents.EventReleaseStatus, releaseStatusPayload{
+	ownerID, err := u.repo.ProjectOwnerID(ctx, rel.ProjectID)
+	if err != nil {
+		return
+	}
+	u.pub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventReleaseStatus, releaseStatusPayload{
 		Project:   rel.ProjectID.String(),
 		Status:    string(rel.Status),
 		Version:   rel.Version,
@@ -63,13 +56,16 @@ func (u *usecase) publishDebugStatus(ctx context.Context, dbg *Debug) {
 	if u.pub == nil || dbg == nil {
 		return
 	}
-	legacyID, _ := u.repo.ProjectLegacyID(ctx, dbg.ProjectID)
+	ownerID, err := u.repo.ProjectOwnerID(ctx, dbg.ProjectID)
+	if err != nil {
+		return
+	}
 	var updatedAt *string
 	if !dbg.UpdatedAt.IsZero() {
 		s := dbg.UpdatedAt.UTC().Format(time.RFC3339)
 		updatedAt = &s
 	}
-	u.pub.Publish(ctx, wsevents.ProjectRoom(projectRoomRef(legacyID, dbg.ProjectID)), wsevents.EventDebugStatus, debugStatusPayload{
+	u.pub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventDebugStatus, debugStatusPayload{
 		Project:   dbg.ProjectID.String(),
 		Status:    string(dbg.Status),
 		ServiceID: optionalString(dbg.ServiceID),
