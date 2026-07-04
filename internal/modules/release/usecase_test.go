@@ -382,8 +382,9 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 		t.Fatalf("expected persisted status running, got %s", stored.Status)
 	}
 
-	// A crashed pod (orchestrator has no record of the deployment) must
-	// resolve to failed, not hang at initializing forever.
+	// No pod yet (scheduling gap right after deploy — common for bigger template
+	// flows) must stay initializing and keep polling, NOT false-fail. A crash
+	// reports StatusFailed instead; the worker's crash cleanup handles the rest.
 	rel2, err := uc.CreateRelease(ctx, projectID, ownerID)
 	if err != nil {
 		t.Fatalf("create second release: %v", err)
@@ -394,8 +395,17 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get second release: %v", err)
 	}
-	if got2.Status != StatusFailed {
-		t.Fatalf("expected vanished deployment to resolve to failed, got %s", got2.Status)
+	if got2.Status != StatusInitializing {
+		t.Fatalf("expected scheduling-gap deployment to stay initializing, got %s", got2.Status)
+	}
+	// A genuinely crash-looping pod DOES resolve to failed.
+	orch.status = engine.StatusFailed
+	got3, err := uc.GetRelease(ctx, rel2.ID, ownerID)
+	if err != nil {
+		t.Fatalf("get release (crash): %v", err)
+	}
+	if got3.Status != StatusFailed {
+		t.Fatalf("expected crash-looping deployment to resolve to failed, got %s", got3.Status)
 	}
 }
 
