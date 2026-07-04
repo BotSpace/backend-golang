@@ -42,6 +42,17 @@ func (r *pgRepo) ResolveProjectByUUID(ctx context.Context, projectUUID uuid.UUID
 	return id, nil
 }
 
+func (r *pgRepo) GetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	ownerID, err := r.queries.DebugGetProjectOwner(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, database.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get project owner: %w", err)
+	}
+	return ownerID, nil
+}
+
 func (r *pgRepo) InsertErrorEvent(ctx context.Context, e ErrorEvent) (*ErrorEvent, error) {
 	id := e.ID
 	if id == uuid.Nil {

@@ -24,6 +24,17 @@ type Project struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 
+	// LegacyID is the Django project table's integer primary key, nullable
+	// (NULL means a project created after the Go cutover with no Django
+	// counterpart — see migration 000033's doc comment). Used by
+	// IssueCollabToken to pick the "project_<id>" collab room the same way
+	// the engine/collab_persist_worker's Django int pk always has —
+	// int(payload["project_id"]) in core/apps/api/management/commands/
+	// collab_persist_worker.py hard-requires an integer, so a project
+	// without a legacy_id falls back to its own uuid string (live relay
+	// still works; only the Postgres flow-persistence side then no-ops).
+	LegacyID *int32
+
 	// Debug is only populated by Get (single retrieve) — mirrors Django's
 	// RetrieveProjectSerializer, which nests RetrieveDebugSerializer, vs
 	// List/Create/Update which don't. The dashboard's launch-status poll

@@ -309,6 +309,7 @@ func fromSQLC(r sqlcdb.Project) Project {
 		DebugWebhookUUID:   r.DebugWebhookUuid,
 		CreatedAt:          r.CreatedAt,
 		UpdatedAt:          r.UpdatedAt,
+		LegacyID:           r.LegacyID,
 	}
 }
 

@@ -14,6 +14,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.POST("", h.Create)
 		g.POST("/create-from-template", h.CreateFromTemplate)
 		g.GET("/:id", h.Get)
+		g.GET("/:id/collab-token", h.CollabToken)
 		g.PATCH("/:id", h.Update)
 		g.DELETE("/:id", h.Delete)
 	}

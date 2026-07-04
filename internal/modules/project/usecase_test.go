@@ -1035,3 +1035,98 @@ func TestCreateFromTemplate_DebugMode_IgnoresManagedBotID(t *testing.T) {
 		t.Fatal("expected StartDebug to be called for mode=debug")
 	}
 }
+
+// ---------------------------------------------------------------------
+// IssueCollabToken
+// ---------------------------------------------------------------------
+
+func appErrStatus(err error) int {
+	if ae, ok := httpx.AsAppError(err); ok {
+		return ae.Status
+	}
+	return 0
+}
+
+func TestIssueCollabToken_NotConfigured_FailsLoudly(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	p, _ := repo.Create(context.Background(), CreateInput{OwnerID: ownerID, Name: "Bot"})
+	uc := NewUsecase(repo, nil, nil, nil, nil) // no collab signer wired
+
+	if _, _, err := uc.IssueCollabToken(context.Background(), p.ID, ownerID); appErrStatus(err) != 500 {
+		t.Fatalf("expected a 500 when no signer is configured, got %v", err)
+	}
+}
+
+func TestIssueCollabToken_NotOwner_404s(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	p, _ := repo.Create(context.Background(), CreateInput{OwnerID: ownerID, Name: "Bot"})
+	signer, err := NewCollabTokenSignerFromEnv(0)
+	if err != nil {
+		t.Fatalf("signer: %v", err)
+	}
+	_ = signer // nil (PRIVATE_KEY unset in this test) — irrelevant, ownership is checked first
+	uc := NewUsecaseWithCollabSigner(NewUsecase(repo, nil, nil, nil, nil), signer)
+
+	if _, _, err := uc.IssueCollabToken(context.Background(), p.ID, uuid.New()); appErrStatus(err) != 404 {
+		t.Fatalf("expected 404 for a non-owning caller, got %v", err)
+	}
+}
+
+func TestIssueCollabToken_UsesLegacyIDWhenPresent(t *testing.T) {
+	privPEM, pub := generateTestRSAKeyPEM(t)
+	t.Setenv("PRIVATE_KEY", string(privPEM))
+
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	p, _ := repo.Create(context.Background(), CreateInput{OwnerID: ownerID, Name: "Bot"})
+	legacyID := int32(1408)
+	repo.projects[p.ID].LegacyID = &legacyID
+
+	signer, err := NewCollabTokenSignerFromEnv(0)
+	if err != nil || signer == nil {
+		t.Fatalf("build signer: %v", err)
+	}
+	uc := NewUsecaseWithCollabSigner(NewUsecase(repo, nil, nil, nil, nil), signer)
+
+	token, room, err := uc.IssueCollabToken(context.Background(), p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("IssueCollabToken: %v", err)
+	}
+	if room != "project_1408" {
+		t.Fatalf("expected room project_1408, got %q", room)
+	}
+	claims := verifyLikeWebsocketService(t, token, pub)
+	if pid, ok := claims["project_id"].(float64); !ok || pid != 1408 {
+		t.Fatalf("expected project_id 1408 (float64), got %#v", claims["project_id"])
+	}
+}
+
+func TestIssueCollabToken_FallsBackToUUIDWithoutLegacyID(t *testing.T) {
+	privPEM, pub := generateTestRSAKeyPEM(t)
+	t.Setenv("PRIVATE_KEY", string(privPEM))
+
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	p, _ := repo.Create(context.Background(), CreateInput{OwnerID: ownerID, Name: "Bot"})
+	// no LegacyID set — a project created after the Go cutover.
+
+	signer, err := NewCollabTokenSignerFromEnv(0)
+	if err != nil || signer == nil {
+		t.Fatalf("build signer: %v", err)
+	}
+	uc := NewUsecaseWithCollabSigner(NewUsecase(repo, nil, nil, nil, nil), signer)
+
+	token, room, err := uc.IssueCollabToken(context.Background(), p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("IssueCollabToken: %v", err)
+	}
+	if room != "project_"+p.ID.String() {
+		t.Fatalf("expected room project_%s, got %q", p.ID, room)
+	}
+	claims := verifyLikeWebsocketService(t, token, pub)
+	if pid, ok := claims["project_id"].(string); !ok || pid != p.ID.String() {
+		t.Fatalf("expected project_id %s (string), got %#v", p.ID, claims["project_id"])
+	}
+}

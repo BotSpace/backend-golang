@@ -171,6 +171,10 @@ type Querier interface {
 	// Growth chart: one row per calendar day (UTC) since `since`, newest last.
 	// Cast to text (not DATE) to keep the sqlc-generated column a plain string.
 	DailyUserSignups(ctx context.Context, since time.Time) ([]DailyUserSignupsRow, error)
+	// Owner-scoping for the Redis-only context cache (debug.context_event has
+	// no Postgres table to join owner_id against, unlike debug_error_event —
+	// see ListContext in usecase.go).
+	DebugGetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	DebugInsertErrorEvent(ctx context.Context, arg DebugInsertErrorEventParams) (DebugErrorEvent, error)
 	// Debug per-node execution status events ("debug.node_event" redis stream
 	// task, migration 000036) — write-only for now (no read API yet; add one
