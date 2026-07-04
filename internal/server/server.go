@@ -36,6 +36,7 @@ import (
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/logger"
+	"github.com/botspace/backend/internal/shared/media"
 	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/redisq"
 	"github.com/botspace/backend/internal/shared/wsevents"
@@ -64,6 +65,10 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Public object-storage base for turning stored media keys into full URLs
+	// (template covers, avatars, …). Process-wide; set once here.
+	media.Configure(cfg.Storage.URL, cfg.Storage.BucketMedia)
 
 	priv, pub, err := auth.LoadKeys(cfg.JWT, cfg.Env)
 	if err != nil {

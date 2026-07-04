@@ -12,19 +12,29 @@ import (
 )
 
 type Config struct {
-	Env    string       `mapstructure:"env"`
-	HTTP   HTTPConfig   `mapstructure:"http"`
-	DB     DBConfig     `mapstructure:"db"`
-	JWT    JWTConfig    `mapstructure:"jwt"`
-	OTP    OTPConfig    `mapstructure:"otp"`
-	Log    LogConfig    `mapstructure:"log"`
-	Engine EngineConfig `mapstructure:"engine"`
-	Google GoogleConfig `mapstructure:"google"`
+	Env     string        `mapstructure:"env"`
+	HTTP    HTTPConfig    `mapstructure:"http"`
+	DB      DBConfig      `mapstructure:"db"`
+	JWT     JWTConfig     `mapstructure:"jwt"`
+	OTP     OTPConfig     `mapstructure:"otp"`
+	Log     LogConfig     `mapstructure:"log"`
+	Engine  EngineConfig  `mapstructure:"engine"`
+	Google  GoogleConfig  `mapstructure:"google"`
+	Storage StorageConfig `mapstructure:"storage"`
 }
 
 // GoogleConfig configures Google sign-in (POST /api/v1/auth/google) and the
 // credential module's Google OAuth2 "connect" flow (POST
 // /api/v1/credentials/oauth/google/start/).
+// StorageConfig points at the public object-storage (Backblaze B2, S3-API)
+// where uploaded media lives. URL is the S3 endpoint, BucketMedia the public
+// bucket; internal/shared/media builds "<URL>/<BucketMedia>/<key>" from the
+// bucket-relative keys the DB stores (e.g. template.image = "template/x.png").
+type StorageConfig struct {
+	URL         string `mapstructure:"url"`          // APP_STORAGE_URL
+	BucketMedia string `mapstructure:"bucket_media"` // APP_STORAGE_BUCKET_MEDIA
+}
+
 type GoogleConfig struct {
 	// ClientID is the expected `aud` claim on the ID token the dashboard
 	// forwards — the same OAuth client ID baked into the dashboard as
@@ -214,6 +224,7 @@ func Load() (*Config, error) {
 		"engine.redis_host", "engine.redis_port", "engine.redis_password",
 		"engine.test_bot_token", "engine.mongo_addr", "engine.mongo_db_name",
 		"engine.api_url",
+		"storage.url", "storage.bucket_media",
 	} {
 		_ = v.BindEnv(key)
 	}
