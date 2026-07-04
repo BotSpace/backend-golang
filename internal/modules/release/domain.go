@@ -114,4 +114,11 @@ type Repository interface {
 	// UUIDs, used to name the orchestrator's "bot-<uuid>" Service so Telegram
 	// webhook routing survives redeploys.
 	GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (releaseUUID, debugUUID uuid.UUID, err error)
+
+	// ProjectLegacyID resolves a project's Django legacy integer pk (nil when
+	// it has none — a project created after the Go cutover), used only to
+	// name the real-time WS broadcast room ("project_<id>", see
+	// internal/shared/wsevents.ProjectRoom). Not owner-scoped: callers only
+	// ever have projectID from a row they already loaded owner-scoped.
+	ProjectLegacyID(ctx context.Context, projectID uuid.UUID) (*int32, error)
 }

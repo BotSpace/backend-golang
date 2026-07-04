@@ -204,6 +204,17 @@ func (r *pgRepo) GetProjectFlowForOwner(ctx context.Context, projectID, ownerID 
 	return json.RawMessage(flow), nil
 }
 
+func (r *pgRepo) ProjectLegacyID(ctx context.Context, projectID uuid.UUID) (*int32, error) {
+	id, err := r.queries.ReleaseGetProjectLegacyID(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project legacy id: %w", err)
+	}
+	return id, nil
+}
+
 func (r *pgRepo) GetProjectWebhookUUIDs(ctx context.Context, projectID, ownerID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
 	row, err := r.queries.GetProjectWebhookUUIDsForOwner(ctx, sqlcdb.GetProjectWebhookUUIDsForOwnerParams{
 		ID:      projectID,

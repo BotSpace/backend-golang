@@ -15,20 +15,22 @@ import (
 // method is scoped to (projectID, ownerID), mirroring the SQL joins in
 // queries/release.sql.
 type fakeRepo struct {
-	projectOwner map[uuid.UUID]uuid.UUID
-	projectFlow  map[uuid.UUID]json.RawMessage
-	releases     map[uuid.UUID]*Release
-	debugs       map[uuid.UUID]*Debug // keyed by projectID (one-to-one)
-	envs         map[string]*Environment
+	projectOwner    map[uuid.UUID]uuid.UUID
+	projectFlow     map[uuid.UUID]json.RawMessage
+	projectLegacyID map[uuid.UUID]*int32
+	releases        map[uuid.UUID]*Release
+	debugs          map[uuid.UUID]*Debug // keyed by projectID (one-to-one)
+	envs            map[string]*Environment
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		projectOwner: map[uuid.UUID]uuid.UUID{},
-		projectFlow:  map[uuid.UUID]json.RawMessage{},
-		releases:     map[uuid.UUID]*Release{},
-		debugs:       map[uuid.UUID]*Debug{},
-		envs:         map[string]*Environment{},
+		projectOwner:    map[uuid.UUID]uuid.UUID{},
+		projectFlow:     map[uuid.UUID]json.RawMessage{},
+		projectLegacyID: map[uuid.UUID]*int32{},
+		releases:        map[uuid.UUID]*Release{},
+		debugs:          map[uuid.UUID]*Debug{},
+		envs:            map[string]*Environment{},
 	}
 }
 
@@ -240,6 +242,19 @@ func (r *fakeRepo) GetProjectFlowForOwner(_ context.Context, projectID, ownerID 
 	return r.projectFlow[projectID], nil
 }
 
+// withLegacyID sets a project's fake Django legacy pk — tests that assert on
+// the published WS room use this.
+func (r *fakeRepo) withLegacyID(projectID uuid.UUID, legacyID int32) {
+	r.projectLegacyID[projectID] = &legacyID
+}
+
+func (r *fakeRepo) ProjectLegacyID(_ context.Context, projectID uuid.UUID) (*int32, error) {
+	if _, ok := r.projectOwner[projectID]; !ok {
+		return nil, database.ErrNotFound
+	}
+	return r.projectLegacyID[projectID], nil
+}
+
 func (r *fakeRepo) GetProjectWebhookUUIDs(_ context.Context, projectID, ownerID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
 	if !r.owns(projectID, ownerID) {
 		return uuid.Nil, uuid.Nil, database.ErrNotFound
@@ -291,6 +306,30 @@ func (f *fakeOrchestrator) Logs(_ context.Context, serviceID string, tailLines, 
 		return engine.LogSnapshot{}, f.logsErr
 	}
 	return f.logs, nil
+}
+
+// fakePublisher records every Publish call so tests can assert on the room/
+// event/payload a release or debug status change broadcasts, without a real
+// Redis connection.
+type fakePublisher struct {
+	calls []publishCall
+}
+
+type publishCall struct {
+	room  string
+	event string
+	data  any
+}
+
+func (f *fakePublisher) Publish(_ context.Context, room, event string, data any) {
+	f.calls = append(f.calls, publishCall{room: room, event: event, data: data})
+}
+
+func (f *fakePublisher) last() (publishCall, bool) {
+	if len(f.calls) == 0 {
+		return publishCall{}, false
+	}
+	return f.calls[len(f.calls)-1], true
 }
 
 // TestCreateReleaseStopsPriorActiveReleases ports Django's RelaseSignal
@@ -448,4 +487,132 @@ func TestUpsertEnvironmentIsIdempotentByKey(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected error when a non-owner writes an environment variable")
 	}
+}
+
+// TestCreateReleasePublishesWSEvent verifies a release deploy broadcasts a
+// "release_status" event to the constructor's "project_<legacy-id>" room —
+// see internal/shared/wsevents and ws_events.go's publishReleaseStatus. Room
+// naming must match project.usecase.IssueCollabToken's
+// fmt.Sprintf("project_%v", projectRef) exactly, since that's the room the
+// constructor's WS connection joins.
+func TestCreateReleasePublishesWSEvent(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	pub := &fakePublisher{}
+	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	repo.withLegacyID(projectID, 1408)
+
+	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+
+	call, ok := pub.last()
+	if !ok {
+		t.Fatal("expected CreateRelease to publish a WS event")
+	}
+	if call.room != "project_1408" {
+		t.Fatalf("expected room project_1408, got %q", call.room)
+	}
+	if call.event != "release_status" {
+		t.Fatalf("expected event release_status, got %q", call.event)
+	}
+	payload, ok := call.data.(releaseStatusPayload)
+	if !ok {
+		t.Fatalf("expected releaseStatusPayload, got %T", call.data)
+	}
+	if payload.Project != 1408 || payload.Status != string(rel.Status) || payload.Version != rel.Version {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+// TestReconcileReleasePublishesWSEventOnStatusChange verifies a lazily
+// reconciled status transition (GetRelease asking the orchestrator live)
+// also broadcasts — this is the path that mirrors Django's k8s-watcher-driven
+// _send_ws_notification, since this backend has no separate watcher.
+func TestReconcileReleasePublishesWSEventOnStatusChange(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	orch.status = engine.StatusInitializing
+	pub := &fakePublisher{}
+	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	repo.withLegacyID(projectID, 42)
+
+	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	pub.calls = nil // reset — only interested in the reconcile-triggered publish
+
+	orch.status = engine.StatusRunning
+	got, err := uc.GetRelease(ctx, rel.ID, ownerID)
+	if err != nil {
+		t.Fatalf("get release: %v", err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("expected reconciled to running, got %s", got.Status)
+	}
+	call, ok := pub.last()
+	if !ok {
+		t.Fatal("expected reconcile to publish a WS event on status change")
+	}
+	if call.room != "project_42" || call.event != "release_status" {
+		t.Fatalf("unexpected publish call: %+v", call)
+	}
+}
+
+// TestStartDebugPublishesWSEvent is CreateReleasePublishesWSEvent's Debug
+// counterpart, verifying the "debug_status" event and updated_at field.
+func TestStartDebugPublishesWSEvent(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	pub := &fakePublisher{}
+	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	repo.withLegacyID(projectID, 7)
+
+	if _, err := uc.StartDebug(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("start debug: %v", err)
+	}
+
+	call, ok := pub.last()
+	if !ok {
+		t.Fatal("expected StartDebug to publish a WS event")
+	}
+	if call.room != "project_7" || call.event != "debug_status" {
+		t.Fatalf("unexpected publish call: %+v", call)
+	}
+	if _, ok := call.data.(debugStatusPayload); !ok {
+		t.Fatalf("expected debugStatusPayload, got %T", call.data)
+	}
+}
+
+// TestPublishSkippedWhenNoPublisherWired ensures the degrade-gracefully
+// contract: a plain NewUsecase (nil publisher) never touches the publish
+// path, matching every other optional-dependency convention in this backend.
+func TestPublishSkippedWhenNoPublisherWired(t *testing.T) {
+	repo := newFakeRepo()
+	uc := NewUsecase(repo, newFakeOrchestrator())
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	repo.withLegacyID(projectID, 99)
+
+	if _, err := uc.CreateRelease(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	// No assertion beyond "did not panic" — NewUsecase's usecase.pub is nil,
+	// so publishReleaseStatus must no-op cleanly.
 }

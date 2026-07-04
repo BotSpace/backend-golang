@@ -8,6 +8,7 @@ import (
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/httpx"
+	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/google/uuid"
 )
 
@@ -40,10 +41,25 @@ type Usecase interface {
 type usecase struct {
 	repo Repository
 	orch engine.Orchestrator
+	// pub is nil-able — see NewUsecaseWithEventPublisher's doc comment.
+	pub wsevents.Publisher
 }
 
 func NewUsecase(repo Repository, orch engine.Orchestrator) Usecase {
 	return &usecase{repo: repo, orch: orch}
+}
+
+// NewUsecaseWithEventPublisher wires a real-time event publisher (see
+// internal/shared/wsevents) that broadcasts release/debug status changes to
+// the constructor via the standalone websocket service — mirrors Django's
+// watch_k8s_events._send_ws_notification / ReleaseView.perform_create /
+// ProjectView._start_debug_container's ws_publish calls (core/domain/ws.py
+// EventTypes.RELEASE_STATUS / DEBUG_STATUS). pub may be nil — same
+// degrade-gracefully convention as the rest of this backend's optional deps
+// (see server.go's cms/chat Mongo wiring): nil just means every publish
+// call below no-ops.
+func NewUsecaseWithEventPublisher(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher) Usecase {
+	return &usecase{repo: repo, orch: orch, pub: pub}
 }
 
 // CreateRelease ports Django's ReleaseView.perform_create + the RelaseSignal
@@ -102,6 +118,7 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	if err != nil {
 		return nil, httpx.Internal(fmt.Errorf("save release deploy result: %w", err))
 	}
+	u.publishReleaseStatus(ctx, updated)
 	if deployErr != nil {
 		return updated, deploymentUnavailable(deployErr)
 	}
@@ -147,6 +164,7 @@ func (u *usecase) reconcileRelease(ctx context.Context, rel Release) Release {
 		return rel
 	}
 	if updated, err := u.repo.UpdateReleaseDeployResult(ctx, rel.ID, rel.ServiceID, next); err == nil {
+		u.publishReleaseStatus(ctx, updated)
 		return *updated
 	}
 	rel.Status = next
@@ -168,6 +186,7 @@ func (u *usecase) StopRelease(ctx context.Context, id, ownerID uuid.UUID) (*Rele
 	if err != nil {
 		return nil, mapReleaseErr(err)
 	}
+	u.publishReleaseStatus(ctx, updated)
 	return updated, nil
 }
 
@@ -224,6 +243,7 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 	if err != nil {
 		return nil, httpx.Internal(fmt.Errorf("save debug deploy result: %w", err))
 	}
+	u.publishDebugStatus(ctx, updated)
 	if deployErr != nil {
 		return updated, deploymentUnavailable(deployErr)
 	}
@@ -243,6 +263,7 @@ func (u *usecase) StopDebug(ctx context.Context, projectID, ownerID uuid.UUID) (
 	if err != nil {
 		return nil, mapDebugErr(err)
 	}
+	u.publishDebugStatus(ctx, updated)
 	return updated, nil
 }
 
@@ -292,6 +313,7 @@ func (u *usecase) reconcileDebug(ctx context.Context, dbg Debug) Debug {
 		return dbg
 	}
 	if updated, err := u.repo.UpdateDebugDeployResult(ctx, dbg.ID, dbg.ServiceID, next); err == nil {
+		u.publishDebugStatus(ctx, updated)
 		return *updated
 	}
 	dbg.Status = next

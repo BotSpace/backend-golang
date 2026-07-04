@@ -58,7 +58,19 @@ Django legacy int, e.g. `PROJECT_ID=1408`).
 
 ## Event registry
 
-### `debug.error_event` — IMPLEMENTED (consumer + persistence + read API live)
+Every `debug.*` handler below, after its Postgres/Redis persistence
+succeeds, ALSO forwards the event to the constructor's live WS feed by
+publishing to the standalone `websocket` service's Redis Pub/Sub channel
+(package `internal/shared/wsevents` — see its doc comment for the channel
+name + envelope shape, which mirrors Django's `ws_publish` exactly). The room
+is `project_<ref>` using the event's own `project_id` verbatim (no legacy-id
+resolution needed — `IssueCollabToken`'s room naming already accepts either
+an int or a string ref, and this is the raw engine reference either way).
+`release_status`/`debug_status` are published the same way but originate
+from `internal/modules/release`'s usecase (deploy/stop/reconcile), not this
+consumer — see `internal/modules/release/ws_events.go`.
+
+### `debug.error_event` — IMPLEMENTED (consumer + persistence + read API live), forwarded as WS `error`
 
 Replaces the old synchronous `POST {API_URL}/api/debug/error-event/` /
 `error-event` HTTP call the engine's `internal/debug/emitter.go` `EmitError`/
@@ -86,7 +98,7 @@ Replaces the old synchronous `POST {API_URL}/api/debug/error-event/` /
 - Read side: `GET /api/v1/debug/errors?project_id=<internal-uuid>&limit=` (JWT,
   owner-scoped) → `{"errors":[{node_id,node_type,message,detail,chat_id,ts}]}`.
 
-### `debug.node_event` — IMPLEMENTED (consumer + persistence live, no read API yet)
+### `debug.node_event` — IMPLEMENTED (consumer + persistence live, no read API yet), forwarded as WS `node_execution`
 
 Replaces `POST .../api/debug/node-event/` (engine's `nodeEvent`, emitter.go
 line 26). Django only ever WebSocket-published this (no persistence); this
@@ -111,7 +123,7 @@ for a future "node execution history" read API, but does not expose one yet
 }
 ```
 
-### `debug.context_event` — IMPLEMENTED (Redis-cache consumer live)
+### `debug.context_event` — IMPLEMENTED (Redis-cache consumer live), forwarded as WS `context`
 
 Replaces `POST .../api/debug/context-event/` (engine's `contextEvent`,
 emitter.go line 222). Django cached only the *latest* snapshot per
