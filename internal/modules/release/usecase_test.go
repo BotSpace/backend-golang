@@ -15,22 +15,20 @@ import (
 // method is scoped to (projectID, ownerID), mirroring the SQL joins in
 // queries/release.sql.
 type fakeRepo struct {
-	projectOwner    map[uuid.UUID]uuid.UUID
-	projectFlow     map[uuid.UUID]json.RawMessage
-	projectLegacyID map[uuid.UUID]*int32
-	releases        map[uuid.UUID]*Release
-	debugs          map[uuid.UUID]*Debug // keyed by projectID (one-to-one)
-	envs            map[string]*Environment
+	projectOwner map[uuid.UUID]uuid.UUID
+	projectFlow  map[uuid.UUID]json.RawMessage
+	releases     map[uuid.UUID]*Release
+	debugs       map[uuid.UUID]*Debug // keyed by projectID (one-to-one)
+	envs         map[string]*Environment
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		projectOwner:    map[uuid.UUID]uuid.UUID{},
-		projectFlow:     map[uuid.UUID]json.RawMessage{},
-		projectLegacyID: map[uuid.UUID]*int32{},
-		releases:        map[uuid.UUID]*Release{},
-		debugs:          map[uuid.UUID]*Debug{},
-		envs:            map[string]*Environment{},
+		projectOwner: map[uuid.UUID]uuid.UUID{},
+		projectFlow:  map[uuid.UUID]json.RawMessage{},
+		releases:     map[uuid.UUID]*Release{},
+		debugs:       map[uuid.UUID]*Debug{},
+		envs:         map[string]*Environment{},
 	}
 }
 
@@ -242,17 +240,12 @@ func (r *fakeRepo) GetProjectFlowForOwner(_ context.Context, projectID, ownerID 
 	return r.projectFlow[projectID], nil
 }
 
-// withLegacyID sets a project's fake Django legacy pk — tests that assert on
-// the published WS room use this.
-func (r *fakeRepo) withLegacyID(projectID uuid.UUID, legacyID int32) {
-	r.projectLegacyID[projectID] = &legacyID
-}
-
-func (r *fakeRepo) ProjectLegacyID(_ context.Context, projectID uuid.UUID) (*int32, error) {
-	if _, ok := r.projectOwner[projectID]; !ok {
-		return nil, database.ErrNotFound
+func (r *fakeRepo) ProjectOwnerID(_ context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	owner, ok := r.projectOwner[projectID]
+	if !ok {
+		return uuid.Nil, database.ErrNotFound
 	}
-	return r.projectLegacyID[projectID], nil
+	return owner, nil
 }
 
 func (r *fakeRepo) GetProjectWebhookUUIDs(_ context.Context, projectID, ownerID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
@@ -490,11 +483,12 @@ func TestUpsertEnvironmentIsIdempotentByKey(t *testing.T) {
 }
 
 // TestCreateReleasePublishesWSEvent verifies a release deploy broadcasts a
-// "release_status" event to the constructor's "project_<legacy-id>" room —
-// see internal/shared/wsevents and ws_events.go's publishReleaseStatus. Room
-// naming must match project.usecase.IssueCollabToken's
-// fmt.Sprintf("project_%v", projectRef) exactly, since that's the room the
-// constructor's WS connection joins.
+// "release_status" event to the constructor's ws-hub via its
+// "user_<owner-id>" WS room — see internal/shared/wsevents.UserRoom and
+// ws_events.go's publishReleaseStatus. The ws-hub's plain access token has no
+// project_id claim, so the websocket service always assigns it to a user
+// room, never a project one; publishing anywhere else means the JSON event
+// never reaches it.
 func TestCreateReleasePublishesWSEvent(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
@@ -504,7 +498,6 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
-	repo.withLegacyID(projectID, 1408)
 
 	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
 	if err != nil {
@@ -515,8 +508,8 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 	if !ok {
 		t.Fatal("expected CreateRelease to publish a WS event")
 	}
-	if call.room != "project_1408" {
-		t.Fatalf("expected room project_1408, got %q", call.room)
+	if call.room != "user_"+ownerID.String() {
+		t.Fatalf("expected room user_%s, got %q", ownerID, call.room)
 	}
 	if call.event != "release_status" {
 		t.Fatalf("expected event release_status, got %q", call.event)
@@ -525,17 +518,19 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected releaseStatusPayload, got %T", call.data)
 	}
-	// Room is the legacy id (matches the collab-token), but data.project is the
-	// uuid — the constructor filters on String(data.project) === project.id (uuid).
+	// Room is keyed by owner, but data.project stays the project uuid — the
+	// constructor filters on String(data.project) === project.id (uuid).
 	if payload.Project != projectID.String() || payload.Status != string(rel.Status) || payload.Version != rel.Version {
 		t.Fatalf("unexpected payload: %+v", payload)
 	}
 }
 
-// A project with NO legacy id (created after the Go cutover) must STILL publish
-// — to its uuid room, matching the collab-token's uuid fallback. The old code
-// skipped these, so template-created bots never got live status on reload.
-func TestPublishStatus_NoLegacyID_UsesUUIDRoom(t *testing.T) {
+// TestPublishStatus_OwnerLookupFails_SkipsPublish verifies the best-effort
+// contract: if ProjectOwnerID can't resolve the project's owner (e.g. it was
+// hard-deleted between the deploy and the publish), the publish is silently
+// skipped rather than broadcasting to a bogus/empty room — mirrors Django's
+// _send_ws_notification swallowing failures.
+func TestPublishStatus_OwnerLookupFails_SkipsPublish(t *testing.T) {
 	repo := newFakeRepo()
 	pub := &fakePublisher{}
 	uc := NewUsecaseWithEventPublisher(repo, newFakeOrchestrator(), pub)
@@ -546,15 +541,14 @@ func TestPublishStatus_NoLegacyID_UsesUUIDRoom(t *testing.T) {
 	if _, err := uc.CreateRelease(ctx, projectID, ownerID); err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	call, ok := pub.last()
-	if !ok {
-		t.Fatal("no-legacy project must still publish a WS event")
-	}
-	if call.room != "project_"+projectID.String() {
-		t.Fatalf("expected uuid room, got %q", call.room)
-	}
-	if p := call.data.(releaseStatusPayload); p.Project != projectID.String() {
-		t.Fatalf("expected data.project = uuid, got %q", p.Project)
+	pub.calls = nil // reset — only interested in the next publish attempt
+
+	// Simulate the owner lookup failing (project gone from the owner index).
+	delete(repo.projectOwner, projectID)
+
+	uc.(*usecase).publishReleaseStatus(ctx, &Release{ProjectID: projectID, Status: StatusRunning})
+	if len(pub.calls) != 0 {
+		t.Fatalf("expected no publish when owner lookup fails, got %+v", pub.calls)
 	}
 }
 
@@ -572,7 +566,6 @@ func TestReconcileReleasePublishesWSEventOnStatusChange(t *testing.T) {
 
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
-	repo.withLegacyID(projectID, 42)
 
 	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
 	if err != nil {
@@ -592,7 +585,7 @@ func TestReconcileReleasePublishesWSEventOnStatusChange(t *testing.T) {
 	if !ok {
 		t.Fatal("expected reconcile to publish a WS event on status change")
 	}
-	if call.room != "project_42" || call.event != "release_status" {
+	if call.room != "user_"+ownerID.String() || call.event != "release_status" {
 		t.Fatalf("unexpected publish call: %+v", call)
 	}
 }
@@ -608,7 +601,6 @@ func TestStartDebugPublishesWSEvent(t *testing.T) {
 
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
-	repo.withLegacyID(projectID, 7)
 
 	if _, err := uc.StartDebug(ctx, projectID, ownerID); err != nil {
 		t.Fatalf("start debug: %v", err)
@@ -618,7 +610,7 @@ func TestStartDebugPublishesWSEvent(t *testing.T) {
 	if !ok {
 		t.Fatal("expected StartDebug to publish a WS event")
 	}
-	if call.room != "project_7" || call.event != "debug_status" {
+	if call.room != "user_"+ownerID.String() || call.event != "debug_status" {
 		t.Fatalf("unexpected publish call: %+v", call)
 	}
 	if _, ok := call.data.(debugStatusPayload); !ok {
@@ -636,7 +628,6 @@ func TestPublishSkippedWhenNoPublisherWired(t *testing.T) {
 
 	ownerID := uuid.New()
 	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
-	repo.withLegacyID(projectID, 99)
 
 	if _, err := uc.CreateRelease(ctx, projectID, ownerID); err != nil {
 		t.Fatalf("create release: %v", err)

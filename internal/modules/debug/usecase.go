@@ -42,6 +42,12 @@ type Usecase interface {
 	// server.go (bot-user upsert, token usage, …) can resolve the same
 	// engine-supplied project reference without duplicating this logic.
 	ResolveProjectRef(ctx context.Context, raw string) (uuid.UUID, error)
+	// GetProjectOwner exposes Repository.GetProjectOwner so callers outside
+	// this module — server.go's redisq consumer, resolving the WS
+	// "user_<owner-id>" room to forward node_execution/context/error events
+	// to the constructor's ws-hub — can look up a project's owner without
+	// reaching into the repository layer directly.
+	GetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 }
 
 type usecase struct {
@@ -182,6 +188,14 @@ func (u *usecase) ListErrors(ctx context.Context, ownerID, projectID uuid.UUID, 
 		return nil, httpx.Internal(err)
 	}
 	return items, nil
+}
+
+// GetProjectOwner passes straight through to the repository — see the
+// Usecase.GetProjectOwner doc comment for why this exists (non-HTTP redisq
+// callers want the raw database.ErrNotFound, not an httpx-mapped error, so
+// they can decide for themselves whether to skip a best-effort WS publish).
+func (u *usecase) GetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	return u.repo.GetProjectOwner(ctx, projectID)
 }
 
 func mapNotFound(err error) error {

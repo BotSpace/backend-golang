@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // TestBuildEnvelopeMatchesDjangoShape locks down the exact wire shape Django's
@@ -55,6 +57,19 @@ func TestProjectRoomFormatsIntAndString(t *testing.T) {
 	}
 	if got := ProjectRoom("9c1f6b2e-0000-0000-0000-000000000000"); got != "project_9c1f6b2e-0000-0000-0000-000000000000" {
 		t.Fatalf("unexpected room for uuid ref: %q", got)
+	}
+}
+
+// TestUserRoomFormatsOwnerID verifies room naming matches Django's old
+// _send_ws_notification, which published to "user_<service.project.owner.id>"
+// — the room the constructor's ws-hub connection actually joins (its plain
+// access token has no project_id claim), so every JSON domain event
+// (release_status, debug_status, node_execution, context, error) must key
+// off this, not ProjectRoom.
+func TestUserRoomFormatsOwnerID(t *testing.T) {
+	ownerID := uuid.MustParse("9c1f6b2e-0000-0000-0000-000000000000")
+	if got := UserRoom(ownerID); got != "user_9c1f6b2e-0000-0000-0000-000000000000" {
+		t.Fatalf("unexpected room for owner uuid: %q", got)
 	}
 }
 

@@ -144,11 +144,9 @@ SELECT flow FROM projects WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('own
 SELECT release_webhook_uuid, debug_webhook_uuid FROM projects
 WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
 
--- Internal (not owner-checked): resolves a project's Django legacy integer pk
--- for real-time WS room naming ("project_<legacy-id>" — see
--- internal/shared/wsevents.ProjectRoom). Nullable: a project created after
--- the Go cutover has no legacy_id (migration 000033). Callers must have
--- already verified ownership via whatever row (release/debug) carried this
--- project_id.
--- name: ReleaseGetProjectLegacyID :one
-SELECT legacy_id FROM projects WHERE id = sqlc.arg('id') AND deleted_at IS NULL;
+-- Internal (not owner-checked): resolves a project's owner_id for real-time
+-- WS room naming ("user_<owner-id>" — see internal/shared/wsevents.UserRoom).
+-- Callers must have already verified ownership via whatever row
+-- (release/debug) carried this project_id.
+-- name: ReleaseGetProjectOwnerID :one
+SELECT owner_id FROM projects WHERE id = sqlc.arg('id') AND deleted_at IS NULL;
