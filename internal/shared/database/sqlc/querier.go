@@ -190,10 +190,12 @@ type Querier interface {
 	// Mirrors Django's cms/views/_common.py resolve_project()'s integer-pk
 	// branch: the engine's raw project ref is the Django legacy int pk.
 	DebugResolveProjectByLegacyID(ctx context.Context, legacyID *int32) (uuid.UUID, error)
-	// Mirrors resolve_project()'s UUID branch: Django's `project.uuid` field —
-	// copied verbatim into this table's `uuid` column by the ETL — NOT this
-	// table's `id` (which is a uuid5 hash of the legacy pk, not the same value).
-	DebugResolveProjectByUUID(ctx context.Context, argUuid uuid.UUID) (uuid.UUID, error)
+	// The engine's PROJECT_ID env is THIS backend's projects.id (a uuid5 hash of
+	// the legacy pk — orchestrator sets env["PROJECT_ID"]=spec.ProjectID), while
+	// older/Django-origin events pass projects.uuid (the ETL-copied Django field).
+	// Match EITHER column so both resolve — node/context events were failing with
+	// project.not_found because only `uuid` was checked and the engine sends `id`.
+	DebugResolveProjectByUUID(ctx context.Context, ref uuid.UUID) (uuid.UUID, error)
 	// Consumes a code so it cannot be replayed (Django: code.delete() after login).
 	DeleteAuthbotCode(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteBlogPost(ctx context.Context, id uuid.UUID) (int64, error)
