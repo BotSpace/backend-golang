@@ -168,22 +168,32 @@ func TestClickWebhook_HappyPath_PrepareThenComplete(t *testing.T) {
 	prepareForm.Set("action", "0")
 	prepareForm.Set("sign_time", signTime)
 	prepareForm.Set("sign_string", clickSign(g, "1", txnID.String(), "", "10000.00", "0", signTime))
-	if resp := postClickWebhook(h, prepareForm); resp.Error != clickErrOK {
-		t.Fatalf("prepare failed: %d %s", resp.Error, resp.ErrorNote)
+	prepareResp := postClickWebhook(h, prepareForm)
+	if prepareResp.Error != clickErrOK {
+		t.Fatalf("prepare failed: %d %s", prepareResp.Error, prepareResp.ErrorNote)
 	}
+	if prepareResp.ClickTransID != 1 || prepareResp.MerchantPrepareID == nil || *prepareResp.MerchantPrepareID != 1 {
+		t.Fatalf("prepare ids are not Click-compatible: %+v", prepareResp)
+	}
+	prepareID := "1"
 
 	completeForm := url.Values{}
 	completeForm.Set("click_trans_id", "1")
 	completeForm.Set("service_id", g.ServiceID)
 	completeForm.Set("merchant_trans_id", txnID.String())
+	completeForm.Set("merchant_prepare_id", prepareID)
 	completeForm.Set("amount", "10000.00")
 	completeForm.Set("action", "1")
 	completeForm.Set("error", "0")
 	completeForm.Set("sign_time", signTime)
-	completeForm.Set("sign_string", clickSign(g, "1", txnID.String(), "", "10000.00", "1", signTime))
+	completeForm.Set("sign_string", clickSign(g, "1", txnID.String(), prepareID, "10000.00", "1", signTime))
 
-	if resp := postClickWebhook(h, completeForm); resp.Error != clickErrOK {
-		t.Fatalf("complete failed: %d %s", resp.Error, resp.ErrorNote)
+	completeResp := postClickWebhook(h, completeForm)
+	if completeResp.Error != clickErrOK {
+		t.Fatalf("complete failed: %d %s", completeResp.Error, completeResp.ErrorNote)
+	}
+	if completeResp.MerchantConfirmID == nil || *completeResp.MerchantConfirmID != 1 {
+		t.Fatalf("complete confirm id is not Click-compatible: %+v", completeResp)
 	}
 	if got := repo.users[ownerID].balance; got != 9500 {
 		t.Fatalf("owner not credited: balance=%d, want 9500", got)
