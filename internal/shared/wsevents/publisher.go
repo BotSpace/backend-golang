@@ -119,8 +119,21 @@ func (p *RedisPublisher) Publish(ctx context.Context, room, event string, data a
 		p.warn("wsevents: marshal event failed", err, room, event)
 		return
 	}
-	if err := p.rdb.Publish(ctx, channelName, body).Err(); err != nil {
+	res := p.rdb.Publish(ctx, channelName, body)
+	if err := res.Err(); err != nil {
 		p.warn("wsevents: publish failed", err, room, event)
+		return
+	}
+	// receivers is the number of Redis subscribers that got this message — i.e.
+	// how many `websocket` service replicas are listening. 0 means the event was
+	// published into the void (service down / not subscribed / wrong Redis), the
+	// single most useful signal when debugging "events don't reach the client".
+	if p.log != nil {
+		p.log.Info("wsevents: published",
+			logger.String("channel", channelName),
+			logger.String("room", room),
+			logger.String("event", event),
+			logger.Int64("receivers", res.Val()))
 	}
 }
 
