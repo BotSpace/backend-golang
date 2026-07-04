@@ -94,13 +94,14 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 	p, err := h.uc.Create(c.Request.Context(), CreateInput{
-		OwnerID:     ownerID,
-		Name:        req.Name,
-		Description: req.Description,
-		Username:    req.Username,
-		Flow:        req.Flow,
-		IsTemplate:  req.IsTemplate,
-		Token:       req.Token,
+		OwnerID:      ownerID,
+		Name:         req.Name,
+		Description:  req.Description,
+		Username:     req.Username,
+		Flow:         req.Flow,
+		IsTemplate:   req.IsTemplate,
+		Token:        req.Token,
+		ManagedBotID: req.ManagedBotID,
 	})
 	if err != nil {
 		httpx.Error(c, err)
@@ -143,27 +144,21 @@ func (h *Handler) CreateFromTemplate(c *gin.Context) {
 	if mode == "" {
 		mode = "release"
 	}
-	// managed_bot_id isn't wired yet anywhere in this backend (see
-	// CreateFromTemplateInput's doc comment) — reject explicitly instead of
-	// silently ignoring it and deploying a bot with no token at all.
-	if strings.TrimSpace(req.ManagedBotID) != "" {
+	if mode == "release" && strings.TrimSpace(req.Token) == "" && strings.TrimSpace(req.ManagedBotID) == "" {
 		httpx.Error(c, httpx.BadRequest(
-			"project.managed_bot_not_supported",
-			"managed_bot_id hali qo'llab-quvvatlanmaydi — token kiriting yoki mode=debug tanlang",
+			"project.token_required",
+			"token yoki managed_bot_id majburiy (yoki mode=debug tanlang)",
 		))
 		return
 	}
-	if mode == "release" && strings.TrimSpace(req.Token) == "" {
-		httpx.Error(c, httpx.BadRequest("project.token_required", "token majburiy (yoki mode=debug tanlang)"))
-		return
-	}
 	p, err := h.uc.CreateFromTemplate(c.Request.Context(), CreateFromTemplateInput{
-		OwnerID:  ownerID,
-		Template: req.Template,
-		Name:     req.Name,
-		Token:    req.Token,
-		Mode:     mode,
-		Envs:     req.Envs,
+		OwnerID:      ownerID,
+		Template:     req.Template,
+		Name:         req.Name,
+		Token:        req.Token,
+		ManagedBotID: req.ManagedBotID,
+		Mode:         mode,
+		Envs:         req.Envs,
 	})
 	if err != nil {
 		httpx.Error(c, err)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -55,6 +56,16 @@ type Usecase interface {
 
 	ListManagedBots(ctx context.Context, ownerID uuid.UUID) ([]ManagedBot, error)
 	ManagedBotConfig() ManagedBotConfig
+	// ResolveManagedBotToken loads a manager-bot-wizard-created bot
+	// owner-scoped by id, decrypts its stored token, marks it used, and
+	// returns the plaintext — mirrors Django's ProjectView._attach_managed_bot
+	// / create_from_template's managed_bot_id branch (ManagedBotModel.objects.
+	// get(id=managed_bot_id, owner=request.user) + get_token() +
+	// managed_bot.used = True). Consumed by the project module (see
+	// project.ManagedBotTokenResolver) so a project can attach a managed
+	// bot's token as its own RELEASE_BOT_TOKEN without this package needing
+	// to import the project module.
+	ResolveManagedBotToken(ctx context.Context, managedBotID, ownerID uuid.UUID) (string, error)
 	// ClaimManagedBotUsername reserves a not-yet-created bot's username for
 	// ownerID for claimTTL — consumed by HandleManagedBotWebhook once
 	// Telegram confirms the bot's creation.
@@ -141,6 +152,30 @@ func (u *usecase) ListManagedBots(ctx context.Context, ownerID uuid.UUID) ([]Man
 		return nil, httpx.Internal(err)
 	}
 	return bots, nil
+}
+
+func (u *usecase) ResolveManagedBotToken(ctx context.Context, managedBotID, ownerID uuid.UUID) (string, error) {
+	bot, err := u.repo.GetManagedBotByIDForOwner(ctx, managedBotID, ownerID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return "", httpx.NotFound("managed_bot.not_found", "managed bot topilmadi")
+		}
+		return "", httpx.Internal(err)
+	}
+	if u.cipher == nil {
+		return "", httpx.Internal(errors.New("webhook: crypto cipher not configured"))
+	}
+	plain, err := u.cipher.Decrypt(bot.TokenEncrypted)
+	if err != nil {
+		return "", httpx.Internal(fmt.Errorf("decrypt managed bot token: %w", err))
+	}
+	// Best-effort, same convention as HandleManagedBotWebhook's own upsert —
+	// a failed "used" flip must not fail an otherwise-successful token
+	// resolution (the bot is already about to be attached to the project).
+	if err := u.repo.MarkManagedBotUsed(ctx, bot.ID); err != nil {
+		log.Printf("webhook: mark managed bot %s used failed: %v", bot.ID, err)
+	}
+	return string(plain), nil
 }
 
 func (u *usecase) ManagedBotConfig() ManagedBotConfig {

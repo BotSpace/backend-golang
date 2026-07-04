@@ -85,6 +85,25 @@ func (r *pgRepo) UpsertManagedBot(ctx context.Context, in UpsertManagedBotInput)
 	return &b, nil
 }
 
+func (r *pgRepo) GetManagedBotByIDForOwner(ctx context.Context, id, ownerID uuid.UUID) (*ManagedBot, error) {
+	row, err := r.queries.GetManagedBotByIDForOwner(ctx, sqlcdb.GetManagedBotByIDForOwnerParams{ID: id, OwnerID: &ownerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, database.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get managed bot: %w", err)
+	}
+	b := fromSQLCBot(row)
+	return &b, nil
+}
+
+func (r *pgRepo) MarkManagedBotUsed(ctx context.Context, id uuid.UUID) error {
+	if err := r.queries.MarkManagedBotUsed(ctx, id); err != nil {
+		return fmt.Errorf("mark managed bot used: %w", err)
+	}
+	return nil
+}
+
 func fromSQLCEndpoint(r sqlcdb.WebhookEndpoint) WebhookEndpoint {
 	return WebhookEndpoint{
 		ID:        r.ID,

@@ -71,6 +71,12 @@ type CreateInput struct {
 	Flow        json.RawMessage
 	IsTemplate  bool
 	Token       string
+	// ManagedBotID is the id (UUID string) of a manager-bot-wizard-created
+	// bot to attach instead of a manually-entered Token — mirrors Django's
+	// CreateProjectSerializer.managed_bot_id (ProjectView._attach_managed_bot).
+	// Only consulted when Token is blank; resolved via the injected
+	// ManagedBotTokenResolver (see usecase.resolveManagedBotToken).
+	ManagedBotID string
 }
 
 // UpdateInput carries optional fields; nil pointers are left unchanged. A

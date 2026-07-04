@@ -104,6 +104,26 @@ func (r *fakeRepo) UpsertManagedBot(_ context.Context, in UpsertManagedBotInput)
 	return &cp, nil
 }
 
+func (r *fakeRepo) GetManagedBotByIDForOwner(_ context.Context, id, ownerID uuid.UUID) (*ManagedBot, error) {
+	for _, b := range r.bots {
+		if b.ID == id && b.OwnerID != nil && *b.OwnerID == ownerID {
+			cp := *b
+			return &cp, nil
+		}
+	}
+	return nil, database.ErrNotFound
+}
+
+func (r *fakeRepo) MarkManagedBotUsed(_ context.Context, id uuid.UUID) error {
+	for _, b := range r.bots {
+		if b.ID == id {
+			b.Used = true
+			return nil
+		}
+	}
+	return nil
+}
+
 func status(err error) int {
 	if ae, ok := httpx.AsAppError(err); ok {
 		return ae.Status
@@ -259,5 +279,42 @@ func TestManagedBotClaimIsConsumedByWebhook(t *testing.T) {
 	unclaimed := repo.bots[556]
 	if unclaimed.OwnerID != nil {
 		t.Fatalf("expected the second bot to be unowned (claim already consumed), got owner %v", unclaimed.OwnerID)
+	}
+}
+
+func TestResolveManagedBotToken(t *testing.T) {
+	repo := newFakeRepo()
+	cipher := testCipher(t)
+	ownerID := uuid.New()
+	strangerID := uuid.New()
+
+	encrypted, err := cipher.Encrypt([]byte("123456:real-bot-token"))
+	if err != nil {
+		t.Fatalf("encrypt fixture token: %v", err)
+	}
+	bot := &ManagedBot{ID: uuid.New(), OwnerID: &ownerID, TgBotID: 42, Username: "mybot", TokenEncrypted: encrypted}
+	repo.bots[bot.TgBotID] = bot
+
+	uc := NewUsecase(repo, cipher)
+	ctx := context.Background()
+
+	// Owned bot resolves to its decrypted token and gets marked used.
+	token, err := uc.ResolveManagedBotToken(ctx, bot.ID, ownerID)
+	if err != nil {
+		t.Fatalf("resolve managed bot token: %v", err)
+	}
+	if token != "123456:real-bot-token" {
+		t.Fatalf("token = %q, want the decrypted fixture token", token)
+	}
+	if !repo.bots[bot.TgBotID].Used {
+		t.Fatal("expected the managed bot to be marked used after resolution")
+	}
+
+	// A different owner (or an unknown id) must 404, not leak the token.
+	if _, err := uc.ResolveManagedBotToken(ctx, bot.ID, strangerID); status(err) != 404 {
+		t.Fatalf("expected 404 for a non-owned managed bot, got %v", err)
+	}
+	if _, err := uc.ResolveManagedBotToken(ctx, uuid.New(), ownerID); status(err) != 404 {
+		t.Fatalf("expected 404 for an unknown managed bot id, got %v", err)
 	}
 }

@@ -69,6 +69,17 @@ type CollectionProvisioner interface {
 	AddField(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, in cms.FieldCreate) (*cms.Field, error)
 }
 
+// ManagedBotTokenResolver is the minimal webhook-module surface Create/
+// CreateFromTemplate need to resolve a manager-bot-wizard-created bot's
+// decrypted token by id, owner-scoped — same narrow-interface convention as
+// TemplateResolver/ReleaseOrchestrator/CollectionProvisioner above.
+// webhook.Usecase satisfies this interface structurally. A NotFound-shaped
+// error (see httpx.NotFound) is expected when the id doesn't exist or isn't
+// owned by the caller — resolveManagedBotToken passes it straight through.
+type ManagedBotTokenResolver interface {
+	ResolveManagedBotToken(ctx context.Context, managedBotID, ownerID uuid.UUID) (string, error)
+}
+
 type usecase struct {
 	repo Repository
 	// orch is nil-able: an "" orchestrator (e.g. engine.NewStub()) or nil
@@ -96,6 +107,12 @@ type usecase struct {
 	// BotLink (see populateBotLink). Wired via NewUsecaseWithBotLinks.
 	botResolver  BotUsernameResolver
 	testBotToken string
+	// managedBot is nil-able, same optional-dependency convention as the
+	// fields above: nil simply means a non-empty CreateInput.ManagedBotID /
+	// CreateFromTemplateInput.ManagedBotID fails with a clear 500 instead of
+	// silently being ignored (see resolveManagedBotToken) — wired via
+	// NewUsecaseWithManagedBotResolver.
+	managedBot ManagedBotTokenResolver
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
@@ -118,21 +135,56 @@ func NewUsecaseWithBotLinks(repo Repository, orch engine.Orchestrator, cmsUC Col
 	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC, botResolver: botResolver, testBotToken: testBotToken}
 }
 
+// NewUsecaseWithManagedBotResolver is NewUsecaseWithBotLinks plus resolving
+// CreateInput/CreateFromTemplateInput's ManagedBotID into a decrypted
+// Telegram token through managedBot (typically the webhook module's
+// Usecase, which structurally satisfies ManagedBotTokenResolver) — see
+// resolveManagedBotToken. managedBot may be nil, same optional-dependency
+// convention as every other field here — see the usecase struct's managedBot
+// field comment for what's skipped then.
+func NewUsecaseWithManagedBotResolver(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner, tmplUC TemplateResolver, relUC ReleaseOrchestrator, botResolver BotUsernameResolver, testBotToken string, managedBot ManagedBotTokenResolver) Usecase {
+	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC, botResolver: botResolver, testBotToken: testBotToken, managedBot: managedBot}
+}
+
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
 	p, err := u.repo.Create(ctx, in)
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
-	if err := u.applyToken(ctx, p, p.OwnerID, in.Token); err != nil {
+	token := in.Token
+	if strings.TrimSpace(token) == "" && strings.TrimSpace(in.ManagedBotID) != "" {
+		if token, err = u.resolveManagedBotToken(ctx, in.ManagedBotID, p.OwnerID); err != nil {
+			return nil, err
+		}
+	}
+	if err := u.applyToken(ctx, p, p.OwnerID, token); err != nil {
 		return nil, err
 	}
 	u.provisionDefaultCollections(ctx, p)
 	return p, nil
 }
 
+// resolveManagedBotToken parses managedBotIDStr as a UUID and resolves it to
+// its decrypted Telegram token via the injected ManagedBotTokenResolver —
+// mirrors Django's ProjectView._attach_managed_bot / create_from_template's
+// managed_bot_id branch (ManagedBotModel.objects.get(id=..., owner=...) +
+// get_token()). Returns a 400 for a malformed id, whatever the resolver
+// reports (typically a 404) when the bot doesn't exist or isn't owned by
+// ownerID, and a 500 when no resolver is wired at all.
+func (u *usecase) resolveManagedBotToken(ctx context.Context, managedBotIDStr string, ownerID uuid.UUID) (string, error) {
+	if u.managedBot == nil {
+		return "", httpx.Internal(errors.New("project: managed bot resolver not configured"))
+	}
+	managedBotID, err := uuid.Parse(strings.TrimSpace(managedBotIDStr))
+	if err != nil {
+		return "", httpx.BadRequest("project.managed_bot_invalid_id", "managed_bot_id noto'g'ri formatda")
+	}
+	return u.managedBot.ResolveManagedBotToken(ctx, managedBotID, ownerID)
+}
+
 // CreateFromTemplateInput is the template-seeded create payload — mirrors
 // Django's CreateProjectFromTemplate serializer (project.py:391-448), minus
-// ManagedBotID/Credentials (see CreateFromTemplate's doc comment for why).
+// Credentials (see CreateFromTemplate's doc comment for why).
 type CreateFromTemplateInput struct {
 	OwnerID uuid.UUID
 	// Template is the template's id (UUID) or slug — TemplateResolver tries
@@ -143,6 +195,12 @@ type CreateFromTemplateInput struct {
 	// entirely when Mode is "debug" (mirrors Django never wiring
 	// RELEASE_BOT_TOKEN on the tokenless debug branch).
 	Token string
+	// ManagedBotID is an alternative to Token, same semantics as
+	// CreateInput.ManagedBotID — also ignored entirely when Mode is "debug".
+	// mode "release" requires one of Token/ManagedBotID (see
+	// Handler.CreateFromTemplate's validation, mirroring Django's
+	// CreateProjectFromTemplate.validate).
+	ManagedBotID string
 	// Mode is "release" (default, deploys the first release immediately) or
 	// "debug" (tokenless, starts the debug container immediately instead).
 	Mode string
@@ -160,10 +218,6 @@ type CreateFromTemplateInput struct {
 // "debug"), matching Django's mode branch.
 //
 // Deliberately NOT ported (kept simple per the task's own instruction):
-//   - managed_bot_id wiring — the Go backend has no project<->managed-bot
-//     attach path at all yet, not even from the plain POST /projects create
-//     (see ProjectsAPI.setBotToken's stub in the dashboard); adding it here
-//     first would be a bigger, unrelated feature.
 //   - the `credentials` map / spec-driven collections+modules install
 //     (Django's apply_spec_to_project + replace_placeholders_in_flow). A
 //     template flow with unresolved "cred:<key>" placeholders deploys as-is
@@ -182,15 +236,20 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 		mode = "release"
 	}
 	token := in.Token
+	managedBotID := in.ManagedBotID
 	if mode == "debug" {
-		token = "" // debug never wires a token, mirrors Django's tokenless branch
+		// debug never wires a token (or a managed bot), mirrors Django's
+		// tokenless branch — the platform TEST_BOT_TOKEN answers instead.
+		token = ""
+		managedBotID = ""
 	}
 
 	p, err := u.Create(ctx, CreateInput{
-		OwnerID: in.OwnerID,
-		Name:    in.Name,
-		Flow:    flow,
-		Token:   token,
+		OwnerID:      in.OwnerID,
+		Name:         in.Name,
+		Flow:         flow,
+		Token:        token,
+		ManagedBotID: managedBotID,
 	})
 	if err != nil {
 		return nil, err

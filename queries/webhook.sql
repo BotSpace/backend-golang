@@ -31,6 +31,19 @@ WHERE we.token = sqlc.arg('token') AND p.deleted_at IS NULL;
 -- name: ListManagedBotsForOwner :many
 SELECT * FROM managed_bot WHERE owner_id = sqlc.arg('owner_id') ORDER BY created_at DESC;
 
+-- name: GetManagedBotByIDForOwner :one
+-- Owner-scoped lookup for resolving a manager-bot-wizard-created bot's
+-- token during project create (see webhook.Usecase.ResolveManagedBotToken).
+-- Zero rows means "not found or not owned by ownerID" — the caller cannot
+-- and should not distinguish the two.
+SELECT * FROM managed_bot WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id');
+
+-- name: MarkManagedBotUsed :exec
+-- Marks a managed bot consumed once its token has been attached to a
+-- project's RELEASE_BOT_TOKEN — mirrors Django's
+-- ManagedBotModel.used = True; managed_bot.save(update_fields=["used"]).
+UPDATE managed_bot SET used = TRUE, updated_at = NOW() WHERE id = sqlc.arg('id');
+
 -- name: UpsertManagedBot :one
 -- Keyed by the Telegram bot id (manager-bot webhook is idempotent per bot).
 -- owner_id is intentionally overwritten on every call, including with NULL,
