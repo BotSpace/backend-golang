@@ -2,7 +2,9 @@ package template
 
 import (
 	"encoding/json"
+
 	"fmt"
+	"github.com/botspace/backend/internal/shared/media"
 	"time"
 
 	"github.com/google/uuid"
@@ -88,8 +90,8 @@ func toTemplateResponse(t *Template) TemplateResponse {
 		ID:               t.ID.String(),
 		Name:             t.Name,
 		Slug:             t.Slug,
-		Image:            t.Image,
-		Video:            t.Video,
+		Image:            media.URL(t.Image),
+		Video:            media.URL(t.Video),
 		ShortDescription: t.ShortDescription,
 		Description:      t.Description,
 		Price:            t.Price(),
@@ -166,7 +168,7 @@ func toAdminTemplateResponse(s *AdminTemplateSummary) AdminTemplateResponse {
 		ID:            t.ID.String(),
 		Name:          t.Name,
 		Slug:          t.Slug,
-		Image:         t.Image,
+		Image:         media.URL(t.Image),
 		AuthorID:      uuidPtrToStrPtr(t.AuthorID),
 		AuthorName:    s.AuthorName,
 		AuthorPhone:   s.AuthorPhone,
@@ -232,8 +234,8 @@ func toAdminTemplateDetailResponse(s *AdminTemplateSummary) AdminTemplateDetailR
 		ID:               t.ID.String(),
 		Name:             t.Name,
 		Slug:             t.Slug,
-		Image:            t.Image,
-		Video:            t.Video,
+		Image:            media.URL(t.Image),
+		Video:            media.URL(t.Video),
 		AuthorID:         uuidPtrToStrPtr(t.AuthorID),
 		AuthorName:       s.AuthorName,
 		AuthorPhone:      s.AuthorPhone,
@@ -347,8 +349,8 @@ func toSubmissionResponse(s *Submission) SubmissionResponse {
 		Name:             s.Name,
 		ShortDescription: s.ShortDescription,
 		Description:      s.Description,
-		Image:            s.Image,
-		Video:            s.Video,
+		Image:            media.URL(s.Image),
+		Video:            media.URL(s.Video),
 		DemoURL:          s.DemoURL,
 		OriginalPrice:    s.OriginalPrice,
 		Categories:       toCategoryResponses(s.Categories),
