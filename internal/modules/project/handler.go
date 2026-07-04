@@ -219,7 +219,11 @@ func (h *Handler) CollabToken(c *gin.Context) {
 		httpx.Error(c, err)
 		return
 	}
-	httpx.OK(c, 200, CollabTokenResponse{Token: token, Room: room})
+	// The constructor's collab-client reads `resp.data.token` (it was written
+	// against Django's DRF envelope), so nest under "data" — matching that
+	// contract verbatim, otherwise the token is undefined and the WS enters a
+	// reconnect/refetch loop. ponytail: match the consumer, don't fight it.
+	httpx.OK(c, 200, gin.H{"data": CollabTokenResponse{Token: token, Room: room}})
 }
 
 // Update godoc
