@@ -187,6 +187,13 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 			env["REDIS_ADDR"] = o.cfg.RedisAddr
 			env["REDIS_PASSWORD"] = o.cfg.RedisPassword
 			env["REDIS_PREFIX"] = redisPrefix(spec, name)
+			// Route debug node/context/error events over the backend:events Redis
+			// stream (consumed by startEventConsumer, which forwards them to the
+			// constructor's WS room). Without this the engine falls back to HTTP
+			// POST /api/debug/node-event/ — an endpoint the Go backend doesn't
+			// serve (Django did) — so every node/context event 404s and the
+			// constructor never sees node colors / variables / error alerts.
+			env["BACKEND_EVENTS_STREAM"] = "true"
 		}
 		if o.cfg.MongoAddr != "" {
 			env["MONGO_ADDR"] = o.cfg.MongoAddr
