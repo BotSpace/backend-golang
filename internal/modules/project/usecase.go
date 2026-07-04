@@ -34,6 +34,14 @@ type Usecase interface {
 	AdminList(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	AdminMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, int64, error)
+
+	// IssueCollabToken mints the short-lived RS256 token the constructor
+	// presents to the standalone `websocket` service to join this project's
+	// real-time collaboration room — see collab_token.go's doc comment for
+	// why this deliberately signs with a different key than this backend's
+	// own auth tokens. 404s (via mapErr) exactly like Get when id isn't
+	// owned by ownerID.
+	IssueCollabToken(ctx context.Context, id, ownerID uuid.UUID) (token, room string, err error)
 }
 
 // TemplateResolver is the minimal template-module surface CreateFromTemplate
@@ -113,6 +121,11 @@ type usecase struct {
 	// silently being ignored (see resolveManagedBotToken) — wired via
 	// NewUsecaseWithManagedBotResolver.
 	managedBot ManagedBotTokenResolver
+	// collabSigner is nil-able: nil means IssueCollabToken fails with a
+	// clear 500 ("collab token signing key not configured") instead of
+	// silently minting a token the websocket service can never verify — see
+	// collab_token.go. Wired via NewUsecaseWithCollabSigner.
+	collabSigner *CollabTokenSigner
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
@@ -144,6 +157,27 @@ func NewUsecaseWithBotLinks(repo Repository, orch engine.Orchestrator, cmsUC Col
 // field comment for what's skipped then.
 func NewUsecaseWithManagedBotResolver(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner, tmplUC TemplateResolver, relUC ReleaseOrchestrator, botResolver BotUsernameResolver, testBotToken string, managedBot ManagedBotTokenResolver) Usecase {
 	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC, botResolver: botResolver, testBotToken: testBotToken, managedBot: managedBot}
+}
+
+// NewUsecaseWithCollabSigner wraps an already-built Usecase (as returned by
+// NewUsecase/NewUsecaseWithBotLinks/NewUsecaseWithManagedBotResolver) with a
+// CollabTokenSigner for IssueCollabToken — a separate wrapper (rather than a
+// growing constructor parameter list) so callers that don't need
+// collab-token aren't forced to thread a nil signer through every existing
+// constructor call site. signer may be nil (e.g. the PRIVATE_KEY env this
+// backend needs isn't configured yet) — IssueCollabToken then fails loudly
+// instead of silently minting an unverifiable token, see collab_token.go.
+func NewUsecaseWithCollabSigner(uc Usecase, signer *CollabTokenSigner) Usecase {
+	u, ok := uc.(*usecase)
+	if !ok {
+		// No other Usecase implementation exists in this codebase outside
+		// tests, and tests construct *usecase directly — this would only
+		// fire from a programming error.
+		panic("project: NewUsecaseWithCollabSigner requires a Usecase built by this package's own constructors")
+	}
+	clone := *u
+	clone.collabSigner = signer
+	return &clone
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
@@ -402,6 +436,43 @@ func (u *usecase) Get(ctx context.Context, id, ownerID uuid.UUID) (*Project, err
 	}
 	u.populateBotLink(ctx, p)
 	return p, nil
+}
+
+// IssueCollabToken mirrors Django's ProjectViewSet.collab_token action
+// (core/apps/api/views/project.py): GetForOwner's own WHERE owner_id = $2
+// 404s a non-owning caller exactly like Django's get_object()-via-
+// get_queryset() ownership filter, so no separate ownership check is
+// needed here.
+func (u *usecase) IssueCollabToken(ctx context.Context, id, ownerID uuid.UUID) (string, string, error) {
+	p, err := u.repo.GetForOwner(ctx, id, ownerID)
+	if p, err = mapErr(p, err); err != nil {
+		return "", "", err
+	}
+	if u.collabSigner == nil {
+		return "", "", httpx.Internal(errors.New(
+			"collab token signing key not configured: set PRIVATE_KEY (the same RSA key as k8s secret jwt-secret) on this deployment",
+		))
+	}
+	// projectRef mirrors Django's token["project_id"] = project.id (its
+	// integer pk) whenever this project has one (legacy_id, backfilled from
+	// Django) — the standalone websocket service's room ("project_<id>")
+	// must match what Django's collab_persist_worker.py's int(project_id)
+	// expects. A project created after the Go cutover has no legacy_id, so
+	// falls back to its own uuid: live relay between connected clients
+	// still works (the room is just a string), only the Postgres
+	// flow-persistence side then no-ops (collab_persist_worker's int()
+	// parse fails and it silently drops that op — see its _decode).
+	var projectRef any
+	if p.LegacyID != nil {
+		projectRef = *p.LegacyID
+	} else {
+		projectRef = p.ID.String()
+	}
+	token, err := u.collabSigner.Sign(ownerID, projectRef)
+	if err != nil {
+		return "", "", httpx.Internal(fmt.Errorf("sign collab token: %w", err))
+	}
+	return token, fmt.Sprintf("project_%v", projectRef), nil
 }
 
 // populateBotLink best-effort fills BotMode/BotUsername/BotLink — mirrors

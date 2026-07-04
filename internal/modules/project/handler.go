@@ -193,6 +193,35 @@ func (h *Handler) Get(c *gin.Context) {
 	httpx.OK(c, 200, toResponse(p))
 }
 
+// CollabToken godoc
+// @Summary      Mint a short-lived real-time collaboration WS token
+// @Description  Returned token is presented as ?token= to the standalone
+// @Description  websocket service to join this project's "project_<id>"
+// @Description  room. Owner-scoped like Get (404s for a non-owned id).
+// @Tags         projects
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Project id"
+// @Success      200  {object}  CollabTokenResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Router       /projects/{id}/collab-token [get]
+func (h *Handler) CollabToken(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	token, room, err := h.uc.IssueCollabToken(c.Request.Context(), id, ownerID)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, CollabTokenResponse{Token: token, Room: room})
+}
+
 // Update godoc
 // @Summary      Update a project
 // @Tags         projects

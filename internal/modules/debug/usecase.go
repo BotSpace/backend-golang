@@ -33,6 +33,11 @@ type Usecase interface {
 	// degrade-gracefully-without-Redis pattern used elsewhere in this repo.
 	RecordContext(ctx context.Context, in RecordContextEventInput) error
 	ListErrors(ctx context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error)
+	// ListContext is the owner-scoped read side of "debug.context_event" —
+	// GET /api/v1/debug/context/?project_id=. Returns an empty (nil) slice,
+	// not an error, when this usecase was built without a ContextCache (no
+	// Redis wired) — same degrade-gracefully convention as RecordContext.
+	ListContext(ctx context.Context, ownerID, projectID uuid.UUID) ([]ContextSnapshot, error)
 	// ResolveProjectRef is exported so other redisq event handlers wired in
 	// server.go (bot-user upsert, token usage, …) can resolve the same
 	// engine-supplied project reference without duplicating this logic.
@@ -108,10 +113,42 @@ func (u *usecase) RecordContext(ctx context.Context, in RecordContextEventInput)
 	if err != nil {
 		return err
 	}
-	if err := u.cache.SetContext(ctx, projectID, in.ChatID, in.Variables, contextEventTTL); err != nil {
+	var ts *int64
+	if in.EventTS != nil {
+		v := in.EventTS.Unix()
+		ts = &v
+	}
+	if err := u.cache.SetContext(ctx, projectID, in.ChatID, in.Variables, ts, contextEventTTL); err != nil {
 		return httpx.Internal(err)
 	}
 	return nil
+}
+
+// ListContext owner-scopes the Redis-only context cache: unlike
+// debug_error_event (a real Postgres table joinable to projects.owner_id in
+// one query, see ListErrorEventsForOwner), the cache has no owner column —
+// so ownership is checked explicitly via GetProjectOwner before reading it.
+// Mirrors Django's DebugContextListView 403 ("Ruxsat yo'q") for a
+// non-owning caller and 404 for an unknown project.
+func (u *usecase) ListContext(ctx context.Context, ownerID, projectID uuid.UUID) ([]ContextSnapshot, error) {
+	if u.cache == nil {
+		return nil, nil
+	}
+	actualOwner, err := u.repo.GetProjectOwner(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.NotFound("project.not_found", "project not found")
+		}
+		return nil, httpx.Internal(err)
+	}
+	if actualOwner != ownerID {
+		return nil, httpx.Forbidden("project.forbidden", "not the project owner")
+	}
+	items, err := u.cache.ListContext(ctx, projectID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	return items, nil
 }
 
 // ResolveProjectRef mirrors Django's cms/views/_common.py resolve_project():

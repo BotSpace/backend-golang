@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// CollabTokenResponse mirrors Django's collab_token action response exactly
+// ({"token": "...", "room": "project_<id>"}) — see collab_token.go.
+type CollabTokenResponse struct {
+	Token string `json:"token"`
+	Room  string `json:"room"`
+}
+
 // ProjectResponse is the public projection of a project.
 type ProjectResponse struct {
 	ID                 string          `json:"id"`

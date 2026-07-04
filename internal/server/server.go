@@ -215,6 +215,22 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC,
 		project.NewTelegramUsernameResolver(), s.cfg.Engine.TestBotToken, webhookUC,
 	)
+	// collab-token (GET /projects/:id/collab-token) needs to sign with the
+	// SAME RSA private key Django's SIGNING_KEY uses (k8s secret jwt-secret,
+	// env PRIVATE_KEY) — NOT this backend's own auth signing key
+	// (backend-golang-jwt) — so the standalone websocket service (which
+	// verifies against jwt-secret's PUBLIC_KEY) accepts it. See
+	// project/collab_token.go's doc comment. A nil signer (PRIVATE_KEY
+	// unset) makes IssueCollabToken fail loudly per-request rather than
+	// silently mint a token nothing can verify.
+	if collabSigner, err := project.NewCollabTokenSignerFromEnv(0); err != nil {
+		s.log.Warn("collab-token signer disabled — PRIVATE_KEY set but unparseable", logger.Err(err))
+	} else {
+		if collabSigner == nil {
+			s.log.Warn("collab-token signer disabled — PRIVATE_KEY env not set (mount k8s secret jwt-secret to enable)")
+		}
+		projectUC = project.NewUsecaseWithCollabSigner(projectUC, collabSigner)
+	}
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.

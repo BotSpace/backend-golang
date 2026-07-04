@@ -38,3 +38,9 @@ INSERT INTO debug_node_event (id, project_id, chat_id, node_id, node_type, statu
 VALUES (sqlc.arg('id'), sqlc.arg('project_id'), sqlc.arg('chat_id'), sqlc.arg('node_id'), sqlc.arg('node_type'),
         sqlc.arg('status'), sqlc.arg('error'), sqlc.arg('run_id'), sqlc.arg('seq'), sqlc.narg('event_ts'))
 RETURNING *;
+
+-- name: DebugGetProjectOwner :one
+-- Owner-scoping for the Redis-only context cache (debug.context_event has
+-- no Postgres table to join owner_id against, unlike debug_error_event —
+-- see ListContext in usecase.go).
+SELECT owner_id FROM projects WHERE id = sqlc.arg('project_id') AND deleted_at IS NULL;

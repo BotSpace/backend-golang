@@ -22,14 +22,30 @@ type fakeRepo struct {
 
 // fakeCache is an in-memory ContextCache — no Redis required.
 type fakeCache struct {
-	sets map[string]json.RawMessage
+	sets  map[string]json.RawMessage
+	snaps map[uuid.UUID][]ContextSnapshot
 }
 
-func newFakeCache() *fakeCache { return &fakeCache{sets: map[string]json.RawMessage{}} }
+func newFakeCache() *fakeCache {
+	return &fakeCache{sets: map[string]json.RawMessage{}, snaps: map[uuid.UUID][]ContextSnapshot{}}
+}
 
-func (c *fakeCache) SetContext(_ context.Context, projectID uuid.UUID, chatID int64, variables json.RawMessage, _ time.Duration) error {
+func (c *fakeCache) SetContext(_ context.Context, projectID uuid.UUID, chatID int64, variables json.RawMessage, ts *int64, _ time.Duration) error {
 	c.sets[contextCacheKey(projectID, chatID)] = variables
+	items := c.snaps[projectID]
+	for i, s := range items {
+		if s.ChatID == chatID {
+			items[i] = ContextSnapshot{ChatID: chatID, Variables: variables, TS: ts}
+			c.snaps[projectID] = items
+			return nil
+		}
+	}
+	c.snaps[projectID] = append(items, ContextSnapshot{ChatID: chatID, Variables: variables, TS: ts})
 	return nil
+}
+
+func (c *fakeCache) ListContext(_ context.Context, projectID uuid.UUID) ([]ContextSnapshot, error) {
+	return c.snaps[projectID], nil
 }
 
 func newFakeRepo() *fakeRepo {
@@ -70,6 +86,14 @@ func (r *fakeRepo) InsertNodeEvent(_ context.Context, e NodeEvent) (*NodeEvent, 
 	}
 	r.nodeEvents = append(r.nodeEvents, e)
 	return &e, nil
+}
+
+func (r *fakeRepo) GetProjectOwner(_ context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	owner, ok := r.owners[projectID]
+	if !ok {
+		return uuid.Nil, database.ErrNotFound
+	}
+	return owner, nil
 }
 
 func (r *fakeRepo) ListErrorEventsForOwner(_ context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error) {
@@ -232,5 +256,54 @@ func TestRecordContext_NoopsWithoutCache(t *testing.T) {
 		ProjectRef: "1408", ChatID: 42, Variables: json.RawMessage(`{}`),
 	}); err != nil {
 		t.Fatalf("expected no-op (nil error) without a cache, got %v", err)
+	}
+}
+
+func TestListContext_ScopesByOwnerAndReturnsLatestSnapshots(t *testing.T) {
+	repo := newFakeRepo()
+	owner := uuid.New()
+	internal := uuid.New()
+	repo.byLegacyID[1408] = internal
+	repo.owners[internal] = owner
+	cache := newFakeCache()
+	uc := NewUsecaseWithContextCache(repo, cache)
+	ctx := context.Background()
+
+	if err := uc.RecordContext(ctx, RecordContextEventInput{
+		ProjectRef: "1408", ChatID: 42, Variables: json.RawMessage(`{"foo":"bar"}`),
+	}); err != nil {
+		t.Fatalf("record context: %v", err)
+	}
+
+	items, err := uc.ListContext(ctx, owner, internal)
+	if err != nil {
+		t.Fatalf("list context: %v", err)
+	}
+	if len(items) != 1 || items[0].ChatID != 42 || string(items[0].Variables) != `{"foo":"bar"}` {
+		t.Fatalf("unexpected items: %#v", items)
+	}
+
+	// A different owner must not see this project's context at all.
+	otherOwner := uuid.New()
+	if _, err := uc.ListContext(ctx, otherOwner, internal); status(err) != 403 {
+		t.Fatalf("expected 403 for a non-owning caller, got %v", err)
+	}
+
+	// An unknown project resolves to 404.
+	if _, err := uc.ListContext(ctx, owner, uuid.New()); status(err) != 404 {
+		t.Fatalf("expected 404 for an unknown project, got %v", err)
+	}
+}
+
+func TestListContext_NoopsWithoutCache(t *testing.T) {
+	repo := newFakeRepo()
+	owner := uuid.New()
+	internal := uuid.New()
+	repo.owners[internal] = owner
+	uc := NewUsecase(repo) // no ContextCache wired
+
+	items, err := uc.ListContext(context.Background(), owner, internal)
+	if err != nil || items != nil {
+		t.Fatalf("expected (nil, nil) without a cache, got (%#v, %v)", items, err)
 	}
 }

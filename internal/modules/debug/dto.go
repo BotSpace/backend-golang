@@ -1,6 +1,9 @@
 package debug
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ErrorEventResponse is the wire shape for GET /api/v1/debug/errors/,
 // matching the spec agentv3's backend.py integration expects:
@@ -32,4 +35,31 @@ func toErrorsResponse(items []ErrorEvent) ListErrorsResponse {
 		}
 	}
 	return ListErrorsResponse{Errors: out}
+}
+
+// ContextChatResponse is one chat's latest snapshot, matching Django's
+// DebugContextListView dict exactly ({"chat_id", "variables", "ts"} — the
+// engine-supplied epoch-seconds int, not a formatted datetime).
+type ContextChatResponse struct {
+	ChatID    int64           `json:"chat_id"`
+	Variables json.RawMessage `json:"variables"`
+	TS        *int64          `json:"ts"`
+}
+
+// ListContextResponse is the wire shape for GET /api/v1/debug/context/,
+// matching Django's {"chats": [...]}.
+type ListContextResponse struct {
+	Chats []ContextChatResponse `json:"chats"`
+}
+
+func toContextResponse(items []ContextSnapshot) ListContextResponse {
+	out := make([]ContextChatResponse, len(items))
+	for i, s := range items {
+		variables := s.Variables
+		if variables == nil {
+			variables = json.RawMessage("{}")
+		}
+		out[i] = ContextChatResponse{ChatID: s.ChatID, Variables: variables, TS: s.TS}
+	}
+	return ListContextResponse{Chats: out}
 }

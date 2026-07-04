@@ -42,3 +42,29 @@ func (h *Handler) ListErrors(c *gin.Context) {
 	}
 	httpx.OK(c, 200, toErrorsResponse(items))
 }
+
+// ListContext godoc
+// @Summary  Latest flow-context (variables) snapshot per active debug chat
+// @Tags     debug
+// @Security BearerAuth
+// @Param    project_id  query  string  true  "project id"
+// @Router   /debug/context [get]
+func (h *Handler) ListContext(c *gin.Context) {
+	ownerID, err := uuid.Parse(middleware.UserID(c))
+	if err != nil {
+		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token"))
+		return
+	}
+	projectID, err := uuid.Parse(c.Query("project_id"))
+	if err != nil {
+		httpx.Error(c, httpx.BadRequest("debug.invalid_project_id", "project_id is required and must be a uuid"))
+		return
+	}
+
+	items, err := h.uc.ListContext(c.Request.Context(), ownerID, projectID)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toContextResponse(items))
+}

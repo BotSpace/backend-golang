@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const debugGetProjectOwner = `-- name: DebugGetProjectOwner :one
+SELECT owner_id FROM projects WHERE id = $1 AND deleted_at IS NULL
+`
+
+// Owner-scoping for the Redis-only context cache (debug.context_event has
+// no Postgres table to join owner_id against, unlike debug_error_event —
+// see ListContext in usecase.go).
+func (q *Queries) DebugGetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, debugGetProjectOwner, projectID)
+	var owner_id uuid.UUID
+	err := row.Scan(&owner_id)
+	return owner_id, err
+}
+
 const debugInsertErrorEvent = `-- name: DebugInsertErrorEvent :one
 INSERT INTO debug_error_event (id, project_id, chat_id, node_id, node_type, level, message, detail, event_ts)
 VALUES ($1, $2, $3, $4, $5,

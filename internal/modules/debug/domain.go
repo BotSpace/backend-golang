@@ -98,14 +98,43 @@ type Repository interface {
 	ListErrorEventsForOwner(ctx context.Context, ownerID, projectID uuid.UUID, limit int32) ([]ErrorEvent, error)
 
 	InsertNodeEvent(ctx context.Context, e NodeEvent) (*NodeEvent, error)
+
+	// GetProjectOwner resolves this backend's internal projects.id to its
+	// owner_id — used by ListContext to owner-scope the Redis-only context
+	// cache (which, unlike debug_error_event, has no owner_id column to join
+	// against). Returns database.ErrNotFound when the project doesn't exist
+	// (or is soft-deleted).
+	GetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
+}
+
+// ContextSnapshot is one cached (project, chat) variable snapshot, as
+// returned by ContextCache.ListContext — mirrors the dict Django's
+// DebugContextListView reads back out of its per-chat cache key
+// (core/apps/api/views/debug.py debug_ctx_{pk}_{chat_id}).
+type ContextSnapshot struct {
+	ChatID    int64
+	Variables json.RawMessage
+	// TS is the engine-supplied epoch-seconds timestamp, pass-through (not
+	// reformatted) — matches Django's raw `ts` int, nil when the engine
+	// never sent one.
+	TS *int64
 }
 
 // ContextCache is the (optional) latest-snapshot cache port for
 // "debug.context_event" — mirrors Django's Redis-cache-only behavior (never
 // a growing Postgres table, see docs/redis-stream-events.md). Nil-able: a
-// backend without Redis wired just no-ops the write (see NewUsecase).
+// backend without Redis wired just no-ops the write (see NewUsecase) and
+// ListContext then returns an empty list rather than failing the request.
 type ContextCache interface {
-	// SetContext caches variables for (projectID, chatID) with a TTL,
-	// overwriting any previous snapshot.
-	SetContext(ctx context.Context, projectID uuid.UUID, chatID int64, variables json.RawMessage, ttl time.Duration) error
+	// SetContext caches the latest snapshot for (projectID, chatID) with a
+	// TTL, overwriting any previous snapshot, and remembers chatID in the
+	// project's chat-id set (see ListContext) so it can be found again later
+	// — mirrors Django's DebugContextEventView (cache.set snapshot +
+	// cache.set chats-list).
+	SetContext(ctx context.Context, projectID uuid.UUID, chatID int64, variables json.RawMessage, ts *int64, ttl time.Duration) error
+	// ListContext returns the latest snapshot for every chat_id ever
+	// remembered for projectID, newest ts first, silently skipping chats
+	// whose individual snapshot has already expired — mirrors
+	// DebugContextListView exactly.
+	ListContext(ctx context.Context, projectID uuid.UUID) ([]ContextSnapshot, error)
 }
