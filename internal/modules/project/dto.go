@@ -88,17 +88,21 @@ type CreateRequest struct {
 	// CreateProjectSerializer.token). Blank is fine: the dashboard falls back
 	// to its bot_token_required flow on the first /relase call.
 	Token string `json:"token" validate:"omitempty,max=255"`
+	// ManagedBotID is an alternative to Token: a bot created through the
+	// manager-bot wizard (mirrors Django's CreateProjectSerializer.
+	// managed_bot_id). Ignored when Token is also given.
+	ManagedBotID string `json:"managed_bot_id" validate:"omitempty"`
 }
 
 // CreateFromTemplateRequest is the body for
 // POST /projects/create-from-template — mirrors Django's
 // CreateProjectFromTemplate serializer (core/apps/api/serializers/project/
 // project.py) and the dashboard's ProjectsAPI.createFromTemplate payload
-// shape (services.ts). ManagedBotID and Credentials are accepted (so a
-// client sending the full dashboard body doesn't get a 400 for unknown
-// fields) but not wired yet — see project.Usecase.CreateFromTemplate's doc
-// comment for why, and Handler.CreateFromTemplate for the explicit error a
-// non-empty ManagedBotID gets instead of being silently ignored.
+// shape (services.ts). ManagedBotID is an alternative to Token (mode
+// "release" requires one of the two — see Handler.CreateFromTemplate).
+// Credentials is accepted (so a client sending the full dashboard body
+// doesn't get a 400 for unknown fields) but not wired yet — see
+// project.Usecase.CreateFromTemplate's doc comment for why.
 type CreateFromTemplateRequest struct {
 	// Template is the template's id (UUID) or slug.
 	Template     string            `json:"template" validate:"required"`

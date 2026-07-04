@@ -882,3 +882,156 @@ func TestCreateFromTemplate_NotPurchased(t *testing.T) {
 		t.Fatal("did not expect any deploy call when template resolution failed")
 	}
 }
+
+// ===================== managed_bot_id =====================
+
+// fakeManagedBotResolver is a stub ManagedBotTokenResolver: it resolves a
+// single fixed (managedBotID, ownerID) pair to a fixed token, and 404s for
+// anything else — mirrors webhook.Usecase.ResolveManagedBotToken's own
+// not-found-or-not-owned behaviour.
+type fakeManagedBotResolver struct {
+	managedBotID uuid.UUID
+	ownerID      uuid.UUID
+	token        string
+
+	calls int
+}
+
+func (f *fakeManagedBotResolver) ResolveManagedBotToken(_ context.Context, managedBotID, ownerID uuid.UUID) (string, error) {
+	f.calls++
+	if managedBotID != f.managedBotID || ownerID != f.ownerID {
+		return "", httpx.NotFound("managed_bot.not_found", "managed bot topilmadi")
+	}
+	return f.token, nil
+}
+
+// TestCreate_WithManagedBotID_StoresDecryptedTokenAsReleaseBotToken ports
+// Django's ProjectView._attach_managed_bot: a managed_bot_id given at create
+// time (with no explicit token) must resolve through the injected
+// ManagedBotTokenResolver and land in RELEASE_BOT_TOKEN exactly like a
+// manually-entered token would.
+func TestCreate_WithManagedBotID_StoresDecryptedTokenAsReleaseBotToken(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	managedBotID := uuid.New()
+	resolver := &fakeManagedBotResolver{managedBotID: managedBotID, ownerID: ownerID, token: "999:decrypted-managed-token"}
+	uc := NewUsecaseWithManagedBotResolver(repo, nil, nil, nil, nil, nil, "", resolver)
+	ctx := context.Background()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "Managed bot project", ManagedBotID: managedBotID.String()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("expected the resolver to be called exactly once, got %d", resolver.calls)
+	}
+	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != "999:decrypted-managed-token" {
+		t.Fatalf("RELEASE_BOT_TOKEN = %q, want the resolved managed-bot token", got)
+	}
+}
+
+// TestCreate_WithManagedBotID_NotOwned_ReturnsError ensures a managed_bot_id
+// that doesn't exist (or isn't owned by the caller) fails the create with a
+// clear error — not a silently tokenless project.
+func TestCreate_WithManagedBotID_NotOwned_ReturnsError(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	strangerID := uuid.New()
+	managedBotID := uuid.New()
+	resolver := &fakeManagedBotResolver{managedBotID: managedBotID, ownerID: ownerID, token: "999:decrypted-managed-token"}
+	uc := NewUsecaseWithManagedBotResolver(repo, nil, nil, nil, nil, nil, "", resolver)
+	ctx := context.Background()
+
+	_, err := uc.Create(ctx, CreateInput{OwnerID: strangerID, Name: "Should fail", ManagedBotID: managedBotID.String()})
+	if err == nil {
+		t.Fatal("expected an error for a managed_bot_id not owned by the caller")
+	}
+	ae, ok := httpx.AsAppError(err)
+	if !ok || (ae.Status != 404 && ae.Status != 400) {
+		t.Fatalf("expected a 400/404 app error, got %v", err)
+	}
+}
+
+// TestCreate_WithManagedBotID_NoResolverConfigured_Returns500 documents the
+// nil-resolver degrade path (same optional-dependency convention as
+// orch/cms/tmpl/rel): a managed_bot_id given without a resolver wired must
+// fail loudly instead of silently deploying a tokenless bot.
+func TestCreate_WithManagedBotID_NoResolverConfigured_Returns500(t *testing.T) {
+	repo := newFakeRepo()
+	uc := NewUsecase(repo, nil, nil, nil, nil)
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	_, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "No resolver", ManagedBotID: uuid.New().String()})
+	if err == nil {
+		t.Fatal("expected an error when no ManagedBotTokenResolver is configured")
+	}
+}
+
+// TestCreateFromTemplate_WithManagedBotID mirrors Django's
+// create_from_template managed_bot_id branch: mode=release with a
+// managed_bot_id (no token) resolves the same way as Create, stores
+// RELEASE_BOT_TOKEN, and still deploys the first release like a
+// manually-entered token would.
+func TestCreateFromTemplate_WithManagedBotID(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	tmpl := &fakeTemplateResolver{flow: json.RawMessage(`{"nodes":[],"edges":[]}`)}
+	rel := &fakeReleaseOrchestrator{}
+	ownerID := uuid.New()
+	managedBotID := uuid.New()
+	resolver := &fakeManagedBotResolver{managedBotID: managedBotID, ownerID: ownerID, token: "777:managed-template-token"}
+	uc := NewUsecaseWithManagedBotResolver(repo, nil, cmsUC, tmpl, rel, nil, "", resolver)
+	ctx := context.Background()
+
+	p, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID:      ownerID,
+		Template:     "some-template",
+		Name:         "Managed template bot",
+		ManagedBotID: managedBotID.String(),
+	})
+	if err != nil {
+		t.Fatalf("CreateFromTemplate: %v", err)
+	}
+	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != "777:managed-template-token" {
+		t.Fatalf("RELEASE_BOT_TOKEN = %q, want the resolved managed-bot token", got)
+	}
+	if !rel.releaseCalled {
+		t.Fatal("expected CreateRelease to be called (release mode with a resolved managed bot token)")
+	}
+}
+
+// TestCreateFromTemplate_DebugMode_IgnoresManagedBotID mirrors Django's
+// tokenless debug branch ignoring managed_bot_id exactly like it ignores
+// token: mode=debug must never touch the resolver at all.
+func TestCreateFromTemplate_DebugMode_IgnoresManagedBotID(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	tmpl := &fakeTemplateResolver{flow: json.RawMessage(`{"nodes":[],"edges":[]}`)}
+	rel := &fakeReleaseOrchestrator{}
+	ownerID := uuid.New()
+	managedBotID := uuid.New()
+	resolver := &fakeManagedBotResolver{managedBotID: managedBotID, ownerID: ownerID, token: "should-not-be-used"}
+	uc := NewUsecaseWithManagedBotResolver(repo, nil, cmsUC, tmpl, rel, nil, "", resolver)
+	ctx := context.Background()
+
+	p, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID:      ownerID,
+		Template:     "free-template",
+		Name:         "Debug bot",
+		Mode:         "debug",
+		ManagedBotID: managedBotID.String(),
+	})
+	if err != nil {
+		t.Fatalf("CreateFromTemplate: %v", err)
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("expected the resolver never to be called in debug mode, got %d calls", resolver.calls)
+	}
+	if _, ok := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; ok {
+		t.Fatal("did not expect RELEASE_BOT_TOKEN to be set in debug mode")
+	}
+	if !rel.debugCalled {
+		t.Fatal("expected StartDebug to be called for mode=debug")
+	}
+}

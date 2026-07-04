@@ -84,4 +84,11 @@ type Repository interface {
 
 	ListManagedBotsForOwner(ctx context.Context, ownerID uuid.UUID) ([]ManagedBot, error)
 	UpsertManagedBot(ctx context.Context, in UpsertManagedBotInput) (*ManagedBot, error)
+	// GetManagedBotByIDForOwner returns database.ErrNotFound when the bot
+	// does not exist or is not owned by ownerID — the caller (Usecase.
+	// ResolveManagedBotToken) cannot and should not distinguish the two.
+	GetManagedBotByIDForOwner(ctx context.Context, id, ownerID uuid.UUID) (*ManagedBot, error)
+	// MarkManagedBotUsed flips the bot's used flag once its token has been
+	// attached to a project's RELEASE_BOT_TOKEN.
+	MarkManagedBotUsed(ctx context.Context, id uuid.UUID) error
 }

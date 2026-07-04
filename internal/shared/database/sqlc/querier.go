@@ -239,6 +239,11 @@ type Querier interface {
 	GetFileByUUID(ctx context.Context, argUuid uuid.UUID) (File, error)
 	GetFileByUUIDForOwner(ctx context.Context, arg GetFileByUUIDForOwnerParams) (File, error)
 	GetLatestVerificationForUser(ctx context.Context, userID uuid.UUID) (UserVerification, error)
+	// Owner-scoped lookup for resolving a manager-bot-wizard-created bot's
+	// token during project create (see webhook.Usecase.ResolveManagedBotToken).
+	// Zero rows means "not found or not owned by ownerID" — the caller cannot
+	// and should not distinguish the two.
+	GetManagedBotByIDForOwner(ctx context.Context, arg GetManagedBotByIDForOwnerParams) (ManagedBot, error)
 	GetMessageForOwner(ctx context.Context, arg GetMessageForOwnerParams) (Message, error)
 	GetModuleByID(ctx context.Context, id uuid.UUID) (Module, error)
 	GetModuleBySlug(ctx context.Context, slug string) (Module, error)
@@ -367,6 +372,10 @@ type Querier interface {
 	ListTicketsForOwner(ctx context.Context, arg ListTicketsForOwnerParams) ([]ListTicketsForOwnerRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
+	// Marks a managed bot consumed once its token has been attached to a
+	// project's RELEASE_BOT_TOKEN — mirrors Django's
+	// ManagedBotModel.used = True; managed_bot.save(update_fields=["used"]).
+	MarkManagedBotUsed(ctx context.Context, id uuid.UUID) error
 	MarkPaymentOrderCancelled(ctx context.Context, id uuid.UUID) (PaymentOrder, error)
 	// Guarded by status='created' so a retried webhook call is a safe no-op (zero rows returned).
 	MarkPaymentOrderPaid(ctx context.Context, arg MarkPaymentOrderPaidParams) (PaymentOrder, error)

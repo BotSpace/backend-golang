@@ -189,19 +189,31 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	templateUC := template.NewUsecase(template.NewPostgresRepository(s.pool))
 	template.RegisterRoutes(v1, template.NewHandler(templateUC), tokens)
 
+	// webhook endpoints + managed bots. Built ahead of the project module
+	// below (moved up from its former spot further down) so
+	// project.Usecase.Create/CreateFromTemplate can resolve a managed_bot_id
+	// into its decrypted token through it (see webhookUC's use as a
+	// project.ManagedBotTokenResolver just below).
+	webhookUC := webhook.NewUsecase(webhook.NewPostgresRepository(s.pool), cipher)
+	webhook.RegisterRoutes(v1, webhook.NewHandler(webhookUC), tokens)
+
 	// project module — owner-scoped CRUD, requires auth. orch is passed so
 	// Get can live-reconcile the nested debug status (see project.usecase.Get
 	// / release status parity fix) and Delete can stop running containers;
 	// cmsUC lets Create provision default system CMS collections; templateUC/
 	// releaseUC let CreateFromTemplate resolve a template and deploy the
-	// resulting project. NewUsecaseWithBotLinks (over plain NewUsecase) wires
-	// a getMe-backed bot_link/bot_username/bot_mode resolver + the platform's
-	// shared TEST_BOT_TOKEN, so a tokenless (debug) project's GET carries the
+	// resulting project. NewUsecaseWithManagedBotResolver (over plain
+	// NewUsecase/NewUsecaseWithBotLinks) wires a getMe-backed bot_link/
+	// bot_username/bot_mode resolver + the platform's shared TEST_BOT_TOKEN,
+	// so a tokenless (debug) project's GET carries the
 	// ?start=<debug_webhook_uuid> deep-link the dashboard's launch wizard
-	// needs to open the shared test bot (see project.usecase.populateBotLink).
-	projectUC := project.NewUsecaseWithBotLinks(
+	// needs to open the shared test bot (see project.usecase.populateBotLink)
+	// — plus webhookUC as the ManagedBotTokenResolver so Create/
+	// CreateFromTemplate can resolve a managed_bot_id into its decrypted
+	// Telegram token (see project.usecase.resolveManagedBotToken).
+	projectUC := project.NewUsecaseWithManagedBotResolver(
 		project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC,
-		project.NewTelegramUsernameResolver(), s.cfg.Engine.TestBotToken,
+		project.NewTelegramUsernameResolver(), s.cfg.Engine.TestBotToken, webhookUC,
 	)
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
@@ -221,10 +233,6 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		PanelURL:           s.cfg.Google.OAuthPanelURL,
 	})
 	credential.RegisterRoutes(v1, credential.NewHandler(credentialUC, s.cfg.Google.OAuthPanelURL), tokens)
-
-	// webhook endpoints + managed bots.
-	webhookUC := webhook.NewUsecase(webhook.NewPostgresRepository(s.pool), cipher)
-	webhook.RegisterRoutes(v1, webhook.NewHandler(webhookUC), tokens)
 
 	// file / resource / used.
 	fileUC := file.NewUsecase(file.NewPostgresRepository(s.pool))

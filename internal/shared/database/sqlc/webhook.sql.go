@@ -12,6 +12,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const getManagedBotByIDForOwner = `-- name: GetManagedBotByIDForOwner :one
+SELECT id, owner_id, tg_bot_id, username, name, token_encrypted, used, created_at, updated_at FROM managed_bot WHERE id = $1 AND owner_id = $2
+`
+
+type GetManagedBotByIDForOwnerParams struct {
+	ID      uuid.UUID  `json:"id"`
+	OwnerID *uuid.UUID `json:"owner_id"`
+}
+
+// Owner-scoped lookup for resolving a manager-bot-wizard-created bot's
+// token during project create (see webhook.Usecase.ResolveManagedBotToken).
+// Zero rows means "not found or not owned by ownerID" — the caller cannot
+// and should not distinguish the two.
+func (q *Queries) GetManagedBotByIDForOwner(ctx context.Context, arg GetManagedBotByIDForOwnerParams) (ManagedBot, error) {
+	row := q.db.QueryRow(ctx, getManagedBotByIDForOwner, arg.ID, arg.OwnerID)
+	var i ManagedBot
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.TgBotID,
+		&i.Username,
+		&i.Name,
+		&i.TokenEncrypted,
+		&i.Used,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listManagedBotsForOwner = `-- name: ListManagedBotsForOwner :many
 SELECT id, owner_id, tg_bot_id, username, name, token_encrypted, used, created_at, updated_at FROM managed_bot WHERE owner_id = $1 ORDER BY created_at DESC
 `
@@ -44,6 +74,18 @@ func (q *Queries) ListManagedBotsForOwner(ctx context.Context, ownerID *uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const markManagedBotUsed = `-- name: MarkManagedBotUsed :exec
+UPDATE managed_bot SET used = TRUE, updated_at = NOW() WHERE id = $1
+`
+
+// Marks a managed bot consumed once its token has been attached to a
+// project's RELEASE_BOT_TOKEN — mirrors Django's
+// ManagedBotModel.used = True; managed_bot.save(update_fields=["used"]).
+func (q *Queries) MarkManagedBotUsed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markManagedBotUsed, id)
+	return err
 }
 
 const mintWebhookEndpoint = `-- name: MintWebhookEndpoint :one
