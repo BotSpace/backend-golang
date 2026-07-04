@@ -90,6 +90,12 @@ type usecase struct {
 	// deploying the first release/debug container — the project row + flow
 	// + default collections still get created, just not launched.
 	rel ReleaseOrchestrator
+	// botResolver/testBotToken are nil/empty-able, same optional-dependency
+	// convention as orch/cms/tmpl/rel above: nil resolver or an empty
+	// testBotToken simply means Get never populates BotMode/BotUsername/
+	// BotLink (see populateBotLink). Wired via NewUsecaseWithBotLinks.
+	botResolver  BotUsernameResolver
+	testBotToken string
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
@@ -100,6 +106,16 @@ type usecase struct {
 // comments for what CreateFromTemplate then skips.
 func NewUsecase(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner, tmplUC TemplateResolver, relUC ReleaseOrchestrator) Usecase {
 	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC}
+}
+
+// NewUsecaseWithBotLinks is NewUsecase plus BotMode/BotUsername/BotLink
+// resolution on Get — see populateBotLink's doc comment for the release-vs-
+// debug logic. testBotToken is the platform's shared TEST_BOT_TOKEN
+// (config.Engine.TestBotToken / APP_ENGINE_TEST_BOT_TOKEN), used for
+// tokenless (debug) projects — every debug bot is reached through this one
+// shared Telegram bot's ?start=<debug_webhook_uuid> deep-link.
+func NewUsecaseWithBotLinks(repo Repository, orch engine.Orchestrator, cmsUC CollectionProvisioner, tmplUC TemplateResolver, relUC ReleaseOrchestrator, botResolver BotUsernameResolver, testBotToken string) Usecase {
+	return &usecase{repo: repo, orch: orch, cms: cmsUC, tmpl: tmplUC, rel: relUC, botResolver: botResolver, testBotToken: testBotToken}
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
@@ -322,12 +338,47 @@ func (u *usecase) Get(ctx context.Context, id, ownerID uuid.UUID) (*Project, err
 	if p, err = mapErr(p, err); err != nil {
 		return nil, err
 	}
-	dbg, err := u.repo.GetDebugForOwner(ctx, id, ownerID)
-	if err != nil || dbg == nil {
-		return p, nil
+	if dbg, err := u.repo.GetDebugForOwner(ctx, id, ownerID); err == nil && dbg != nil {
+		p.Debug = u.reconcileDebug(ctx, dbg)
 	}
-	p.Debug = u.reconcileDebug(ctx, dbg)
+	u.populateBotLink(ctx, p)
 	return p, nil
+}
+
+// populateBotLink best-effort fills BotMode/BotUsername/BotLink — mirrors
+// Django's create/create_from_template bot_link addition (core/apps/api/
+// views/project.py:210-216, 571-575), extended to the plain GET (see
+// NewUsecaseWithBotLinks's doc comment for why). A RELEASE_BOT_TOKEN takes
+// precedence — the project has its own bot, mode "release", a plain
+// https://t.me/<username> link. Otherwise, when the platform TEST_BOT_TOKEN
+// is configured, mode "debug": the shared test bot's username with the
+// required ?start=<debug_webhook_uuid> deep-link, since a bare t.me link to
+// the shared test bot can't route to any one specific project (Django's
+// comment on the same fix: "bot loyihani tanimaydi" without it). Any
+// resolver/lookup failure just leaves these three fields empty rather than
+// failing the whole Get — same best-effort convention as reconcileDebug.
+func (u *usecase) populateBotLink(ctx context.Context, p *Project) {
+	if u.botResolver == nil {
+		return
+	}
+	if token, err := u.repo.GetReleaseBotToken(ctx, p.ID); err == nil && strings.TrimSpace(token) != "" {
+		if username, uerr := u.botResolver.ResolveUsername(ctx, token); uerr == nil && username != "" {
+			p.BotMode = "release"
+			p.BotUsername = username
+			p.BotLink = fmt.Sprintf("https://t.me/%s", username)
+		}
+		return
+	}
+	if u.testBotToken == "" {
+		return
+	}
+	username, err := u.botResolver.ResolveUsername(ctx, u.testBotToken)
+	if err != nil || username == "" {
+		return
+	}
+	p.BotMode = "debug"
+	p.BotUsername = username
+	p.BotLink = fmt.Sprintf("https://t.me/%s?start=%s", username, p.DebugWebhookUUID.String())
 }
 
 // reconcileDebug is the project-module twin of release.reconcileRelease /

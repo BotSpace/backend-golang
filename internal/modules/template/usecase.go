@@ -136,9 +136,18 @@ func (u *usecase) GetBySlug(ctx context.Context, slug string, viewerID *uuid.UUI
 		return nil, httpx.Internal(err)
 	}
 	t.Views++
-	if err := u.repo.AttachExtras(ctx, []Template{*t}, viewerID); err != nil {
+	// AttachExtras mutates in place through the slice — attach onto a
+	// one-element slice wrapping *t, then copy the result back into t. Passing
+	// []Template{*t} directly and discarding it left IsOrdered (and IsLiked)
+	// on the returned *t always false, even for a viewer who owns the
+	// template: the detail endpoint (GET /template/list/:slug) kept showing
+	// "Bepul olish" instead of the "Sizda bor" state the list already got
+	// right via the same AttachExtras call in List below.
+	items := []Template{*t}
+	if err := u.repo.AttachExtras(ctx, items, viewerID); err != nil {
 		return nil, httpx.Internal(err)
 	}
+	*t = items[0]
 	return t, nil
 }
 
