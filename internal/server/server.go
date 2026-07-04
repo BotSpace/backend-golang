@@ -83,50 +83,41 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 	)
 
 	// Clients (constructor, agent) call almost every endpoint WITH a trailing
-	// slash (Django convention), while every route here is registered WITHOUT
-	// one. gin's default RedirectTrailingSlash issues a 301 to the no-slash
-	// form — and that redirect is written by the router's tree-lookup phase,
-	// BEFORE any middleware (including CORS above) ever runs, so a
-	// cross-origin request following it gets a 301 with NO
-	// Access-Control-Allow-Origin header, which the browser then blocks
-	// outright instead of following. Disabling it and re-dispatching
-	// ourselves from NoRoute (which DOES run the full middleware chain,
-	// gin prepends engine.Handlers to NoRoute same as any other route) means
-	// "/foo/" serves "/foo" directly with a normal 200 + CORS headers, no
-	// redirect ever issued. See internal/server/server_test.go for the
-	// regression test. Routes already dual-registered with an explicit "/"
-	// variant (debug, credentials oauth callback, authbot) keep working
-	// unchanged — this only kicks in when the no-slash form wasn't also
-	// explicitly registered redundant with them but harmless.
+	// slash (Django convention) while routes here are registered WITHOUT one.
+	// gin's default RedirectTrailingSlash 301s to the no-slash form, but that
+	// redirect is written in the tree-lookup phase BEFORE any middleware (incl.
+	// CORS) runs, so a cross-origin request following it gets a 301 with no
+	// Access-Control-Allow-Origin and the browser blocks it. We disable it and
+	// instead strip the trailing slash in Router() BEFORE gin routes, so "/foo/"
+	// matches "/foo" in a SINGLE middleware pass. (The previous approach —
+	// NoRoute + gin.HandleContext re-dispatch — re-ran the whole middleware
+	// chain and double-wrote the response body: two concatenated JSON errors
+	// like `{"error":...missing_token}{"error":...invalid_token}`.)
 	r.RedirectTrailingSlash = false
-	r.NoRoute(trailingSlashFallback(r))
+	r.NoRoute(func(c *gin.Context) {
+		httpx.Error(c, httpx.NotFound("not_found", "route not found"))
+	})
 
 	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens}
 	s.registerRoutes(ctx)
 	return s, nil
 }
 
-// trailingSlashFallback strips exactly one trailing slash and re-dispatches
-// through the SAME engine (gin.Engine.HandleContext re-walks the route tree
-// with the mutated c.Request.URL.Path, reusing the already-matched route's
-// full handler chain — including the CORS/logging/etc. middleware baked in
-// at registration time, since those were prepended to every route's chain
-// when it was registered, not applied ambiently per-request). Falls through
-// to a real 404 for anything else (already slash-less, or still unmatched
-// after stripping).
-func trailingSlashFallback(r *gin.Engine) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		p := c.Request.URL.Path
-		if len(p) > 1 && strings.HasSuffix(p, "/") {
-			c.Request.URL.Path = strings.TrimSuffix(p, "/")
-			r.HandleContext(c)
-			return
+// Router returns the HTTP handler. It wraps the gin engine to strip a trailing
+// slash from the request path BEFORE gin routes, so "/foo/" matches the "/foo"
+// route in a SINGLE middleware pass — avoiding both gin's CORS-less 301 and the
+// double-middleware-execution (duplicate concatenated error bodies) a NoRoute
+// re-dispatch would cause. "/" and already-slash-less paths pass through as-is.
+func (s *Server) Router() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p := r.URL.Path; len(p) > 1 && strings.HasSuffix(p, "/") {
+			if trimmed := strings.TrimRight(p, "/"); trimmed != "" {
+				r.URL.Path = trimmed
+			}
 		}
-		httpx.Error(c, httpx.NotFound("not_found", "route not found"))
-	}
+		s.router.ServeHTTP(w, r)
+	})
 }
-
-func (s *Server) Router() http.Handler { return s.router }
 
 func (s *Server) registerRoutes(ctx context.Context) {
 	// Liveness: process is up. Cheap, never touches the DB.
