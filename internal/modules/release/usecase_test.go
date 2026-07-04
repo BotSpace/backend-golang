@@ -525,8 +525,36 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected releaseStatusPayload, got %T", call.data)
 	}
-	if payload.Project != 1408 || payload.Status != string(rel.Status) || payload.Version != rel.Version {
+	// Room is the legacy id (matches the collab-token), but data.project is the
+	// uuid — the constructor filters on String(data.project) === project.id (uuid).
+	if payload.Project != projectID.String() || payload.Status != string(rel.Status) || payload.Version != rel.Version {
 		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+// A project with NO legacy id (created after the Go cutover) must STILL publish
+// — to its uuid room, matching the collab-token's uuid fallback. The old code
+// skipped these, so template-created bots never got live status on reload.
+func TestPublishStatus_NoLegacyID_UsesUUIDRoom(t *testing.T) {
+	repo := newFakeRepo()
+	pub := &fakePublisher{}
+	uc := NewUsecaseWithEventPublisher(repo, newFakeOrchestrator(), pub)
+	ctx := context.Background()
+
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	if _, err := uc.CreateRelease(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	call, ok := pub.last()
+	if !ok {
+		t.Fatal("no-legacy project must still publish a WS event")
+	}
+	if call.room != "project_"+projectID.String() {
+		t.Fatalf("expected uuid room, got %q", call.room)
+	}
+	if p := call.data.(releaseStatusPayload); p.Project != projectID.String() {
+		t.Fatalf("expected data.project = uuid, got %q", p.Project)
 	}
 }
 
