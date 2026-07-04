@@ -90,10 +90,10 @@ func (g ClickGateway) verifySignature(p clickParams) bool {
 
 // clickResponse is the Click Merchant API's expected JSON reply shape.
 type clickResponse struct {
-	ClickTransID      string `json:"click_trans_id"`
+	ClickTransID      int64  `json:"click_trans_id"`
 	MerchantTransID   string `json:"merchant_trans_id"`
-	MerchantPrepareID string `json:"merchant_prepare_id,omitempty"`
-	MerchantConfirmID string `json:"merchant_confirm_id,omitempty"`
+	MerchantPrepareID *int64 `json:"merchant_prepare_id,omitempty"`
+	MerchantConfirmID *int64 `json:"merchant_confirm_id,omitempty"`
 	Error             int    `json:"error"`
 	ErrorNote         string `json:"error_note"`
 }
@@ -144,27 +144,18 @@ func (h *Handler) ClickWebhook(c *gin.Context) {
 	p := parseClickForm(c)
 
 	if !h.click.verifySignature(p) {
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrSignFailed, ErrorNote: "SIGN CHECK FAILED",
-		})
+		c.JSON(200, newClickResponse(p, clickErrSignFailed, "SIGN CHECK FAILED"))
 		return
 	}
 
 	txnID, err := uuid.Parse(p.MerchantTransID)
 	if err != nil {
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrBadRequest, ErrorNote: "Error in request from click",
-		})
+		c.JSON(200, newClickResponse(p, clickErrBadRequest, "Error in request from click"))
 		return
 	}
 	txn, err := h.uc.GetTransactionByID(c.Request.Context(), txnID)
 	if err != nil {
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrAccountNotFound, ErrorNote: "User does not exist",
-		})
+		c.JSON(200, newClickResponse(p, clickErrAccountNotFound, "User does not exist"))
 		return
 	}
 
@@ -172,26 +163,19 @@ func (h *Handler) ClickWebhook(c *gin.Context) {
 	// on every call (Prepare AND Complete), before dispatching on action —
 	// a mismatched amount must never silently settle the transaction.
 	if !amountsMatch(txn.Amount, p.Amount) {
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrIncorrectAmount, ErrorNote: "Incorrect parameter amount",
-		})
+		c.JSON(200, newClickResponse(p, clickErrIncorrectAmount, "Incorrect parameter amount"))
 		return
 	}
 
 	switch p.Action {
 	case "0": // Prepare
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			MerchantPrepareID: txn.ID.String(), Error: clickErrOK, ErrorNote: "success",
-		})
+		resp := newClickResponse(p, clickErrOK, "success")
+		resp.MerchantPrepareID = int64Ptr(clickTransID(p))
+		c.JSON(200, resp)
 	case "1": // Complete
 		h.clickComplete(c, p, txn.ID)
 	default:
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrActionNotFound, ErrorNote: "Action not found",
-		})
+		c.JSON(200, newClickResponse(p, clickErrActionNotFound, "Action not found"))
 	}
 }
 
@@ -200,32 +184,42 @@ func (h *Handler) clickComplete(c *gin.Context, p clickParams, txnID uuid.UUID) 
 
 	if errCode < 0 {
 		if _, err := h.uc.SettleCancelledTransaction(c.Request.Context(), txnID); err != nil {
-			c.JSON(200, clickResponse{
-				ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-				Error: clickErrTransCancelled, ErrorNote: "Transaction cancelled",
-			})
+			c.JSON(200, newClickResponse(p, clickErrTransCancelled, "Transaction cancelled"))
 			return
 		}
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			MerchantPrepareID: txnID.String(), MerchantConfirmID: txnID.String(),
-			Error: errCode, ErrorNote: p.ErrorNote,
-		})
+		resp := newClickResponse(p, errCode, p.ErrorNote)
+		resp.MerchantPrepareID = int64Ptr(clickTransID(p))
+		resp.MerchantConfirmID = int64Ptr(clickTransID(p))
+		c.JSON(200, resp)
 		return
 	}
 
 	if _, err := h.uc.SettlePaidTransaction(c.Request.Context(), txnID, p.ClickTransID); err != nil {
-		c.JSON(200, clickResponse{
-			ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-			Error: clickErrBadRequest, ErrorNote: "Unable to complete the transaction",
-		})
+		c.JSON(200, newClickResponse(p, clickErrBadRequest, "Unable to complete the transaction"))
 		return
 	}
-	c.JSON(200, clickResponse{
-		ClickTransID: p.ClickTransID, MerchantTransID: p.MerchantTransID,
-		MerchantPrepareID: txnID.String(), MerchantConfirmID: txnID.String(),
-		Error: clickErrOK, ErrorNote: "success",
-	})
+	resp := newClickResponse(p, clickErrOK, "success")
+	resp.MerchantPrepareID = int64Ptr(clickTransID(p))
+	resp.MerchantConfirmID = int64Ptr(clickTransID(p))
+	c.JSON(200, resp)
+}
+
+func newClickResponse(p clickParams, errCode int, note string) clickResponse {
+	return clickResponse{
+		ClickTransID:    clickTransID(p),
+		MerchantTransID: p.MerchantTransID,
+		Error:           errCode,
+		ErrorNote:       note,
+	}
+}
+
+func clickTransID(p clickParams) int64 {
+	id, _ := strconv.ParseInt(p.ClickTransID, 10, 64)
+	return id
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
 
 // envOrDefault reads an env var, falling back to def when unset/empty.
