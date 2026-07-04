@@ -91,52 +91,6 @@ curl -X PATCH http://localhost:8080/api/v1/users/<USER_ID>/role \
 
 > **Rollar (RBAC):** har user `role` ustuniga ega (default `user`). Access token ichida `role` claim bo'ladi; `middleware.RequireRole("admin")` admin-only endpointlarni himoya qiladi. Birinchi adminni DB orqali bering: `UPDATE users SET role='admin' WHERE email='...';`
 
-## WebSocket
-
-`internal/modules/ws/` — bitta **hub** (yagona goroutine, locksiz state) barcha ulanishlarga xabar tarqatadi. Handshake **auth** bilan himoyalangan: access token `?token=` query yoki `Authorization` header orqali tekshiriladi (brauzerlar WS'da header yubora olmaydi), upgrade'dan **oldin** — noto'g'ri token oddiy `401` qaytaradi.
-
-Production xususiyatlari: ping/pong heartbeat + read/write deadline, `maxMessageSize` limit, sekin clientni hub'ni bloklamasdan drop qilish, `CheckOrigin` (HTTP CORS ro'yxatidan), `ctx` orqali graceful shutdown.
-
-```js
-// Brauzer
-const token = "<ACCESS_TOKEN>";
-const ws = new WebSocket(`ws://localhost:8080/api/v1/ws?token=${token}`);
-ws.onmessage = (e) => console.log(JSON.parse(e.data)); // {type:"message", from:"<uid>", body:"..."}
-ws.onopen = () => ws.send("salom");                    // hamma ulangan clientlarga broadcast
-```
-
-```bash
-# CLI (wscat)
-wscat -c "ws://localhost:8080/api/v1/ws?token=<ACCESS_TOKEN>"
-```
-
-### Rooms (guruhlar)
-
-Hub uch xil ko'lamda yuboradi: **hammaga**, **bitta userga**, va **room**ga (ko'p user qo'shiladigan guruh). Client kichik JSON protokol bilan boshqaradi:
-
-```js
-ws.send(JSON.stringify({ type: "join",  room: "general" }));            // guruhga qo'shilish
-ws.send(JSON.stringify({ type: "leave", room: "general" }));            // chiqish
-ws.send(JSON.stringify({ type: "message", room: "general", body: "hi" })); // guruhga xabar
-ws.send(JSON.stringify({ type: "message", body: "hi" }));               // hammaga (room yo'q)
-ws.send("salom");                                                       // JSON bo'lmasa -> hammaga broadcast
-```
-
-Kelgan xabar a'zolarga `{type:"message", from:"<uid>", room:"general", body:"hi"}` ko'rinishida yetadi. Uzilganda client barcha roomlardan avtomatik chiqariladi.
-
-**Server tomondan** (kod ichidan) — app logikasi bilan boshqarish:
-```go
-hub.JoinUser(userID, "order-42")          // userning barcha ulanishlarini room'ga qo'sh
-hub.LeaveUser(userID, "order-42")
-hub.BroadcastToRoom("order-42", payload)   // room a'zolariga yubor
-hub.SendToUser(userID, payload)            // bitta userga
-hub.Broadcast(payload)                      // hammaga
-```
-
-> **Xavfsizlik:** hozir client-side `join` ochiq — istalgan user istalgan room'ga kira oladi. Yopiq guruhlar uchun `hub.go` dagi `readPump` ichidagi `"join"` joyiga **ruxsat tekshiruvini** qo'shing (bu user shu room a'zosimi?), yoki client join'ni o'chirib faqat server-side `hub.JoinUser` bilan boshqaring. Joy `// ponytail:` komment bilan belgilangan.
-
-O'zingizning routingingiz uchun `hub.go` dagi `handleInbound` ni o'zgartiring.
-
 ## Yangi modul qo'shish
 
 1. `internal/modules/<name>/` papka yarat.
@@ -224,7 +178,6 @@ make cover             # coverage.html
 │   ├── modules/
 │   │   ├── user/                 # CRUD + me + admin (RBAC) endpoints
 │   │   ├── auth/                 # JWT register/login/refresh/logout
-│   │   └── ws/                   # authenticated WebSocket hub
 │   ├── shared/
 │   │   ├── config/               # viper loader
 │   │   ├── database/             # pgxpool + migrate
