@@ -402,7 +402,11 @@ func TestReconcileStatus(t *testing.T) {
 		{"initializing+still initializing->initializing", StatusInitializing, StatusInitializing, StatusInitializing},
 		{"terminal running is never touched", StatusRunning, StatusFailed, StatusRunning},
 		{"terminal stopped is never touched", StatusStopped, StatusRunning, StatusStopped},
-		{"terminal failed is never touched", StatusFailed, StatusRunning, StatusFailed},
+		// "failed" is recoverable: a pod that came up after a transient/slow-start
+		// failure gets promoted; a still-not-running one stays failed.
+		{"failed+running->running (recovery)", StatusFailed, StatusRunning, StatusRunning},
+		{"failed+failed stays failed", StatusFailed, StatusFailed, StatusFailed},
+		{"failed+stopped stays failed", StatusFailed, StatusStopped, StatusFailed},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
