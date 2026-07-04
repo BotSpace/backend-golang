@@ -8,10 +8,12 @@
 SELECT id FROM projects WHERE legacy_id = sqlc.arg('legacy_id') AND deleted_at IS NULL;
 
 -- name: DebugResolveProjectByUUID :one
--- Mirrors resolve_project()'s UUID branch: Django's `project.uuid` field —
--- copied verbatim into this table's `uuid` column by the ETL — NOT this
--- table's `id` (which is a uuid5 hash of the legacy pk, not the same value).
-SELECT id FROM projects WHERE uuid = sqlc.arg('uuid') AND deleted_at IS NULL;
+-- The engine's PROJECT_ID env is THIS backend's projects.id (a uuid5 hash of
+-- the legacy pk — orchestrator sets env["PROJECT_ID"]=spec.ProjectID), while
+-- older/Django-origin events pass projects.uuid (the ETL-copied Django field).
+-- Match EITHER column so both resolve — node/context events were failing with
+-- project.not_found because only `uuid` was checked and the engine sends `id`.
+SELECT id FROM projects WHERE (id = sqlc.arg('ref') OR uuid = sqlc.arg('ref')) AND deleted_at IS NULL LIMIT 1;
 
 -- name: DebugInsertErrorEvent :one
 INSERT INTO debug_error_event (id, project_id, chat_id, node_id, node_type, level, message, detail, event_ts)

@@ -193,14 +193,16 @@ func (q *Queries) DebugResolveProjectByLegacyID(ctx context.Context, legacyID *i
 }
 
 const debugResolveProjectByUUID = `-- name: DebugResolveProjectByUUID :one
-SELECT id FROM projects WHERE uuid = $1 AND deleted_at IS NULL
+SELECT id FROM projects WHERE (id = $1 OR uuid = $1) AND deleted_at IS NULL LIMIT 1
 `
 
-// Mirrors resolve_project()'s UUID branch: Django's `project.uuid` field —
-// copied verbatim into this table's `uuid` column by the ETL — NOT this
-// table's `id` (which is a uuid5 hash of the legacy pk, not the same value).
-func (q *Queries) DebugResolveProjectByUUID(ctx context.Context, argUuid uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, debugResolveProjectByUUID, argUuid)
+// The engine's PROJECT_ID env is THIS backend's projects.id (a uuid5 hash of
+// the legacy pk — orchestrator sets env["PROJECT_ID"]=spec.ProjectID), while
+// older/Django-origin events pass projects.uuid (the ETL-copied Django field).
+// Match EITHER column so both resolve — node/context events were failing with
+// project.not_found because only `uuid` was checked and the engine sends `id`.
+func (q *Queries) DebugResolveProjectByUUID(ctx context.Context, ref uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, debugResolveProjectByUUID, ref)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
