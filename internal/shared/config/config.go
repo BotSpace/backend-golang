@@ -213,6 +213,7 @@ func Load() (*Config, error) {
 		"engine.mode", "engine.image_repository", "engine.image_tag",
 		"engine.redis_host", "engine.redis_port", "engine.redis_password",
 		"engine.test_bot_token", "engine.mongo_addr", "engine.mongo_db_name",
+		"engine.api_url",
 	} {
 		_ = v.BindEnv(key)
 	}
