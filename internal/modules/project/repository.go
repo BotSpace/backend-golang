@@ -142,6 +142,23 @@ func (r *pgRepo) ActiveReleaseServiceIDsForOwner(ctx context.Context, projectID,
 	return out, nil
 }
 
+// GetReleaseBotToken reuses the release module's generated
+// ListEnviromentsByProject query (same cross-module SQL-only convention as
+// GetDebugForOwner above) rather than adding a dedicated single-row query —
+// project env lists are small (a handful of KEY=VALUE rows per project).
+func (r *pgRepo) GetReleaseBotToken(ctx context.Context, projectID uuid.UUID) (string, error) {
+	envs, err := r.queries.ListEnviromentsByProject(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("list environment: %w", err)
+	}
+	for _, e := range envs {
+		if e.Key == releaseBotTokenKey {
+			return e.Value, nil
+		}
+	}
+	return "", nil
+}
+
 func strVal(s *string) string {
 	if s == nil {
 		return ""

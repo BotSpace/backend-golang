@@ -23,6 +23,16 @@ type ProjectResponse struct {
 	// Django's RetrieveProjectSerializer nesting RetrieveDebugSerializer. The
 	// dashboard's launch-status poll reads project.debug.status directly.
 	Debug *DebugResponse `json:"debug,omitempty"`
+	// BotMode/BotUsername/BotLink are only set on the single-project fetch
+	// (Usecase.Get, and therefore CreateFromTemplate's response, which
+	// re-fetches via Get) — see Project.BotMode's doc comment. BotLink is
+	// what the dashboard's launch wizard shows as "Botga kirish": for a
+	// debug (tokenless) project it already carries the required
+	// ?start=<debug_webhook_uuid> deep-link, since the shared test bot can't
+	// route a bare t.me link to one specific project.
+	BotMode     string `json:"bot_mode,omitempty"`
+	BotUsername string `json:"bot_username,omitempty"`
+	BotLink     string `json:"bot_link,omitempty"`
 }
 
 // DebugResponse is the debug-container projection nested in ProjectResponse.
@@ -52,6 +62,9 @@ func toResponse(p *Project) ProjectResponse {
 		DebugWebhookUUID:   p.DebugWebhookUUID.String(),
 		CreatedAt:          p.CreatedAt,
 		UpdatedAt:          p.UpdatedAt,
+		BotMode:            p.BotMode,
+		BotUsername:        p.BotUsername,
+		BotLink:            p.BotLink,
 	}
 	if p.Debug != nil {
 		resp.Debug = &DebugResponse{

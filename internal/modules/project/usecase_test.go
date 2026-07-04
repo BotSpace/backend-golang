@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/botspace/backend/internal/modules/cms"
@@ -153,6 +154,10 @@ func (r *fakeRepo) ActiveReleaseServiceIDsForOwner(_ context.Context, projectID,
 		return nil, database.ErrNotFound
 	}
 	return r.releaseServiceIDs[projectID], nil
+}
+
+func (r *fakeRepo) GetReleaseBotToken(_ context.Context, projectID uuid.UUID) (string, error) {
+	return r.envs[projectID.String()+"|RELEASE_BOT_TOKEN"], nil
 }
 
 // TestCreate_WithToken_StoresReleaseBotToken ports the fix for the
@@ -322,6 +327,141 @@ func TestGet_NoDebugRow_LeavesDebugNil(t *testing.T) {
 	}
 	if got.Debug != nil {
 		t.Fatalf("expected nil Debug, got %+v", got.Debug)
+	}
+}
+
+// ===================== bot_link (debug vs release) =====================
+
+// fakeBotUsernameResolver is a scripted BotUsernameResolver test double: it
+// maps a token to a canned username (or error), and records every token it
+// was asked to resolve so tests can assert which token (RELEASE_BOT_TOKEN vs
+// the platform TEST_BOT_TOKEN) populateBotLink actually used.
+type fakeBotUsernameResolver struct {
+	usernames map[string]string
+	err       error
+	calls     []string
+}
+
+func (f *fakeBotUsernameResolver) ResolveUsername(_ context.Context, token string) (string, error) {
+	f.calls = append(f.calls, token)
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.usernames[token], nil
+}
+
+// TestGet_DebugMode_BotLinkHasStartParam is the deliverable regression test
+// for gap 1: a tokenless (no RELEASE_BOT_TOKEN) project must get bot_mode
+// "debug" and a bot_link built from the platform TEST_BOT_TOKEN's username
+// PLUS the required ?start=<debug_webhook_uuid> deep-link — a bare t.me link
+// to the shared test bot can't route to any one specific project.
+func TestGet_DebugMode_BotLinkHasStartParam(t *testing.T) {
+	repo := newFakeRepo()
+	resolver := &fakeBotUsernameResolver{usernames: map[string]string{"test-bot-token": "botmother_test_robot"}}
+	uc := NewUsecaseWithBotLinks(repo, nil, nil, nil, nil, resolver, "test-bot-token")
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "Debug bot"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := uc.Get(ctx, p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BotMode != "debug" {
+		t.Fatalf("BotMode = %q, want debug", got.BotMode)
+	}
+	if got.BotUsername != "botmother_test_robot" {
+		t.Fatalf("BotUsername = %q, want botmother_test_robot", got.BotUsername)
+	}
+	want := fmt.Sprintf("https://t.me/botmother_test_robot?start=%s", got.DebugWebhookUUID.String())
+	if got.BotLink != want {
+		t.Fatalf("BotLink = %q, want %q", got.BotLink, want)
+	}
+	if len(resolver.calls) != 1 || resolver.calls[0] != "test-bot-token" {
+		t.Fatalf("expected resolver called with the platform test bot token, got %v", resolver.calls)
+	}
+}
+
+// TestGet_ReleaseMode_BotLinkHasNoStartParam mirrors Django's release branch:
+// a project with its own RELEASE_BOT_TOKEN gets bot_mode "release" and a
+// plain https://t.me/<username> link (no ?start=, since a release bot is
+// dedicated to this one project already).
+func TestGet_ReleaseMode_BotLinkHasNoStartParam(t *testing.T) {
+	repo := newFakeRepo()
+	resolver := &fakeBotUsernameResolver{usernames: map[string]string{
+		"123:ABC":        "my_own_bot",
+		"test-bot-token": "botmother_test_robot",
+	}}
+	uc := NewUsecaseWithBotLinks(repo, nil, nil, nil, nil, resolver, "test-bot-token")
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "Release bot", Token: "123:ABC"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := uc.Get(ctx, p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BotMode != "release" {
+		t.Fatalf("BotMode = %q, want release", got.BotMode)
+	}
+	if got.BotLink != "https://t.me/my_own_bot" {
+		t.Fatalf("BotLink = %q, want https://t.me/my_own_bot (no ?start=)", got.BotLink)
+	}
+	if len(resolver.calls) != 1 || resolver.calls[0] != "123:ABC" {
+		t.Fatalf("expected resolver called with the project's own token, got %v", resolver.calls)
+	}
+}
+
+// TestGet_NoResolver_LeavesBotLinkEmpty: a usecase built via plain NewUsecase
+// (no bot resolver wired) must leave bot_mode/bot_username/bot_link empty —
+// same optional-dependency convention as a nil orch/cms/tmpl/rel.
+func TestGet_NoResolver_LeavesBotLinkEmpty(t *testing.T) {
+	repo := newFakeRepo()
+	uc := NewUsecase(repo, nil, nil, nil, nil)
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "My bot"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := uc.Get(ctx, p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BotLink != "" || got.BotMode != "" || got.BotUsername != "" {
+		t.Fatalf("expected empty bot fields with no resolver wired, got %+v", got)
+	}
+}
+
+// TestGet_ResolverError_LeavesBotLinkEmpty: a getMe failure (bad/rotated
+// token, Telegram unreachable) must never fail the whole Get — best-effort,
+// same convention as reconcileDebug swallowing an orchestrator error.
+func TestGet_ResolverError_LeavesBotLinkEmpty(t *testing.T) {
+	repo := newFakeRepo()
+	resolver := &fakeBotUsernameResolver{err: errors.New("telegram unreachable")}
+	uc := NewUsecaseWithBotLinks(repo, nil, nil, nil, nil, resolver, "test-bot-token")
+	ctx := context.Background()
+	ownerID := uuid.New()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "My bot"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := uc.Get(ctx, p.ID, ownerID)
+	if err != nil {
+		t.Fatalf("Get should still succeed despite a resolver error: %v", err)
+	}
+	if got.BotLink != "" {
+		t.Fatalf("expected empty BotLink on resolver error, got %q", got.BotLink)
 	}
 }
 

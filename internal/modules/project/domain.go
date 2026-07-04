@@ -32,6 +32,19 @@ type Project struct {
 	// never create a Release row — nil here means "no debug container ever
 	// started for this project".
 	Debug *ProjectDebug
+
+	// BotMode/BotUsername/BotLink are only populated by Get (and therefore
+	// CreateFromTemplate, which re-fetches via Get) — same "single-fetch
+	// only" convention as Debug above. Mirrors Django's create/
+	// create_from_template bot_link addition (core/apps/api/views/
+	// project.py:210-216, 571-575), extended here to the plain GET so the
+	// dashboard's launch wizard can read project.bot_link after a
+	// StartDebug/CreateRelease call without re-parsing the create response.
+	// Empty when no resolver is wired (see usecase.populateBotLink) or when
+	// the project has neither a RELEASE_BOT_TOKEN nor a configured test bot.
+	BotMode     string // "release" or "debug"
+	BotUsername string
+	BotLink     string
 }
 
 // ProjectDebug is the minimal debug-container projection embedded in
@@ -165,4 +178,11 @@ type Repository interface {
 	// convention as GetDebugForOwner. Used by Delete to stop each release's
 	// k8s deployment before the project's rows disappear behind deleted_at.
 	ActiveReleaseServiceIDsForOwner(ctx context.Context, projectID, ownerID uuid.UUID) ([]string, error)
+
+	// GetReleaseBotToken returns the project's RELEASE_BOT_TOKEN environment
+	// value (unscoped by owner — same convention as ListEnviromentsByProject
+	// in the release module's envMap), or "" with a nil error when no such
+	// env var is set yet. Used by populateBotLink to tell a "release" bot
+	// (has its own token) from a tokenless "debug" one.
+	GetReleaseBotToken(ctx context.Context, projectID uuid.UUID) (string, error)
 }

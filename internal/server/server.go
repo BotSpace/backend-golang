@@ -194,8 +194,15 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// / release status parity fix) and Delete can stop running containers;
 	// cmsUC lets Create provision default system CMS collections; templateUC/
 	// releaseUC let CreateFromTemplate resolve a template and deploy the
-	// resulting project.
-	projectUC := project.NewUsecase(project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC)
+	// resulting project. NewUsecaseWithBotLinks (over plain NewUsecase) wires
+	// a getMe-backed bot_link/bot_username/bot_mode resolver + the platform's
+	// shared TEST_BOT_TOKEN, so a tokenless (debug) project's GET carries the
+	// ?start=<debug_webhook_uuid> deep-link the dashboard's launch wizard
+	// needs to open the shared test bot (see project.usecase.populateBotLink).
+	projectUC := project.NewUsecaseWithBotLinks(
+		project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC,
+		project.NewTelegramUsernameResolver(), s.cfg.Engine.TestBotToken,
+	)
 	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
