@@ -401,6 +401,13 @@ type Querier interface {
 	ReencryptUpdateCredentialData(ctx context.Context, arg ReencryptUpdateCredentialDataParams) (int64, error)
 	RejectPaymentWithdrawal(ctx context.Context, arg RejectPaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
 	RejectVerification(ctx context.Context, arg RejectVerificationParams) (UserVerification, error)
+	// Internal (not owner-checked): resolves a project's Django legacy integer pk
+	// for real-time WS room naming ("project_<legacy-id>" — see
+	// internal/shared/wsevents.ProjectRoom). Nullable: a project created after
+	// the Go cutover has no legacy_id (migration 000033). Callers must have
+	// already verified ownership via whatever row (release/debug) carried this
+	// project_id.
+	ReleaseGetProjectLegacyID(ctx context.Context, id uuid.UUID) (*int32, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
 	// info plus the owning project's release/debug uuids.
 	ResolveWebhookToken(ctx context.Context, token uuid.UUID) (ResolveWebhookTokenRow, error)

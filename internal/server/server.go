@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/botspace/backend/internal/modules/administration"
@@ -29,14 +30,15 @@ import (
 	"github.com/botspace/backend/internal/modules/ticket"
 	"github.com/botspace/backend/internal/modules/user"
 	"github.com/botspace/backend/internal/modules/webhook"
-	"github.com/botspace/backend/internal/modules/ws"
 	"github.com/botspace/backend/internal/shared/buildinfo"
 	"github.com/botspace/backend/internal/shared/config"
 	"github.com/botspace/backend/internal/shared/crypto"
 	"github.com/botspace/backend/internal/shared/engine"
+	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/logger"
 	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/redisq"
+	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -80,9 +82,48 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 		middleware.Timeout(cfg.HTTP.RequestTimeout),
 	)
 
+	// Clients (constructor, agent) call almost every endpoint WITH a trailing
+	// slash (Django convention), while every route here is registered WITHOUT
+	// one. gin's default RedirectTrailingSlash issues a 301 to the no-slash
+	// form — and that redirect is written by the router's tree-lookup phase,
+	// BEFORE any middleware (including CORS above) ever runs, so a
+	// cross-origin request following it gets a 301 with NO
+	// Access-Control-Allow-Origin header, which the browser then blocks
+	// outright instead of following. Disabling it and re-dispatching
+	// ourselves from NoRoute (which DOES run the full middleware chain,
+	// gin prepends engine.Handlers to NoRoute same as any other route) means
+	// "/foo/" serves "/foo" directly with a normal 200 + CORS headers, no
+	// redirect ever issued. See internal/server/server_test.go for the
+	// regression test. Routes already dual-registered with an explicit "/"
+	// variant (debug, credentials oauth callback, authbot) keep working
+	// unchanged — this only kicks in when the no-slash form wasn't also
+	// explicitly registered redundant with them but harmless.
+	r.RedirectTrailingSlash = false
+	r.NoRoute(trailingSlashFallback(r))
+
 	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens}
 	s.registerRoutes(ctx)
 	return s, nil
+}
+
+// trailingSlashFallback strips exactly one trailing slash and re-dispatches
+// through the SAME engine (gin.Engine.HandleContext re-walks the route tree
+// with the mutated c.Request.URL.Path, reusing the already-matched route's
+// full handler chain — including the CORS/logging/etc. middleware baked in
+// at registration time, since those were prepended to every route's chain
+// when it was registered, not applied ambiently per-request). Falls through
+// to a real 404 for anything else (already slash-less, or still unmatched
+// after stripping).
+func trailingSlashFallback(r *gin.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := c.Request.URL.Path
+		if len(p) > 1 && strings.HasSuffix(p, "/") {
+			c.Request.URL.Path = strings.TrimSuffix(p, "/")
+			r.HandleContext(c)
+			return
+		}
+		httpx.Error(c, httpx.NotFound("not_found", "route not found"))
+	}
 }
 
 func (s *Server) Router() http.Handler { return s.router }
@@ -174,13 +215,30 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		cms.RegisterRoutes(v1, cms.NewHandler(cmsUC), tokens)
 	}
 
+	// Real-time WS events (release_status/debug_status/node_execution/
+	// context/error) are relayed to the constructor by the SEPARATE
+	// `websocket` service (JscorpTech/websocket) — this backend only
+	// PUBLISHes to the Redis channel it Watches (see internal/shared/
+	// wsevents's doc comment). Reuses the same engine Redis the redisq
+	// consumer below already talks to (APP_ENGINE_REDIS_*); nil (nothing
+	// published, no-op) when that Redis isn't configured — same
+	// degrade-gracefully convention as the rest of this function.
+	var wsPub wsevents.Publisher
+	if addr := s.cfg.Engine.RedisAddr(); addr != "" {
+		wsPub = wsevents.NewRedisPublisher(addr, s.cfg.Engine.RedisPassword, s.log)
+	} else {
+		s.log.Warn("wsevents: engine.redis_host not configured — release/debug WS events disabled")
+	}
+
 	// release / environment / debug — deploys via the engine orchestrator.
 	// Built ahead of the project module below so
 	// project.Usecase.CreateFromTemplate can apply envs + deploy the first
 	// release/debug container through it (nil would just mean
 	// CreateFromTemplate skips that deploy step, same degrade-gracefully
-	// convention as cmsUC above).
-	releaseUC := release.NewUsecase(release.NewPostgresRepository(s.pool), orch)
+	// convention as cmsUC above). NewUsecaseWithEventPublisher (over plain
+	// NewUsecase) wires wsPub so every release/debug status transition
+	// broadcasts to the constructor — see release/ws_events.go.
+	releaseUC := release.NewUsecaseWithEventPublisher(release.NewPostgresRepository(s.pool), orch, wsPub)
 	release.RegisterRoutes(v1, release.NewHandler(releaseUC), tokens)
 
 	// template marketplace. Built ahead of the project module below so
@@ -338,19 +396,17 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	}
 	debugmod.RegisterRoutes(v1, debugmod.NewHandler(debugUC), tokens)
 
-	// websocket module — hub runs until ctx is cancelled.
-	hub := ws.NewHub()
-	go hub.Run(ctx)
-	ws.RegisterRoutes(v1, ws.NewHandler(hub, tokens, s.cfg.HTTP.CORSOrigins))
-
 	// Redis Stream consumer — engine-golang -> backend WRITE path (bot-user
 	// upsert, flow/debug errors, token usage, ...). Reuses the same
 	// engine.redis_host/port/password config already used to inject
 	// REDIS_ADDR into release/debug engine pods, since it's the exact same
 	// Redis. Skipped (not fatal) when Redis isn't reachable, same defensive
 	// pattern as the Mongo/Kubernetes wiring above — see
-	// docs/redis-stream-events.md for the full contract.
-	s.startEventConsumer(ctx, debugUC)
+	// docs/redis-stream-events.md for the full contract. wsPub (same
+	// publisher wired into releaseUC above) lets this also forward
+	// node_execution/context/error events to the constructor's WS room —
+	// see the consumer.Register bodies below.
+	s.startEventConsumer(ctx, debugUC, wsPub)
 }
 
 const (
@@ -360,8 +416,14 @@ const (
 
 // startEventConsumer runs the redisq consumer in a background goroutine
 // until ctx is cancelled. See docs/redis-stream-events.md for the event
-// contract (XADD shape, registered "task" names, JSON args per task).
-func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase) {
+// contract (XADD shape, registered "task" names, JSON args per task). wsPub
+// is nil-able (see wsevents.Publisher) — every consumer.Register body below
+// forwards its event to the constructor's "project_<ref>" WS room AFTER the
+// Postgres/Redis persistence succeeds, using the engine's raw project_id
+// reference as-is (no legacy-id resolution needed: IssueCollabToken's room
+// naming already accepts either an int or a string ref verbatim — see
+// wsevents.ProjectRoom).
+func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, wsPub wsevents.Publisher) {
 	addr := s.cfg.Engine.RedisAddr()
 	if addr == "" {
 		s.log.Warn("redisq: engine.redis_host not configured — engine event consumer disabled")
@@ -379,7 +441,7 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			t := time.Unix(payload.TS, 0).UTC()
 			eventTS = &t
 		}
-		return debugUC.RecordError(ctx, debugmod.RecordErrorInput{
+		if err := debugUC.RecordError(ctx, debugmod.RecordErrorInput{
 			ProjectRef: payload.ProjectID,
 			ChatID:     payload.ChatID,
 			NodeID:     payload.NodeID,
@@ -388,7 +450,26 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			Message:    payload.Message,
 			Detail:     payload.Detail,
 			EventTS:    eventTS,
-		})
+		}); err != nil {
+			return err
+		}
+		if wsPub != nil {
+			level := payload.Level
+			if level == "" {
+				level = "error" // core/domain/ws.py ErrorEvent's default
+			}
+			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventError, map[string]any{
+				"project":   payload.ProjectID,
+				"chat_id":   payload.ChatID,
+				"node_id":   payload.NodeID,
+				"node_type": payload.NodeType,
+				"level":     level,
+				"message":   payload.Message,
+				"detail":    payload.Detail,
+				"ts":        payload.TS,
+			})
+		}
+		return nil
 	})
 
 	consumer.Register("debug.node_event", func(ctx context.Context, args json.RawMessage) error {
@@ -401,7 +482,7 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			t := time.Unix(payload.TS, 0).UTC()
 			eventTS = &t
 		}
-		return debugUC.RecordNodeEvent(ctx, debugmod.RecordNodeEventInput{
+		if err := debugUC.RecordNodeEvent(ctx, debugmod.RecordNodeEventInput{
 			ProjectRef: payload.ProjectID,
 			ChatID:     payload.ChatID,
 			NodeID:     payload.NodeID,
@@ -411,7 +492,23 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			RunID:      payload.RunID,
 			Seq:        payload.Seq,
 			EventTS:    eventTS,
-		})
+		}); err != nil {
+			return err
+		}
+		if wsPub != nil {
+			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventNodeExecution, map[string]any{
+				"project":   payload.ProjectID,
+				"chat_id":   payload.ChatID,
+				"node_id":   payload.NodeID,
+				"node_type": payload.NodeType,
+				"status":    payload.Status,
+				"error":     payload.Error,
+				"ts":        payload.TS,
+				"run_id":    payload.RunID,
+				"seq":       payload.Seq,
+			})
+		}
+		return nil
 	})
 
 	consumer.Register("debug.context_event", func(ctx context.Context, args json.RawMessage) error {
@@ -424,12 +521,23 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			t := time.Unix(payload.TS, 0).UTC()
 			eventTS = &t
 		}
-		return debugUC.RecordContext(ctx, debugmod.RecordContextEventInput{
+		if err := debugUC.RecordContext(ctx, debugmod.RecordContextEventInput{
 			ProjectRef: payload.ProjectID,
 			ChatID:     payload.ChatID,
 			Variables:  payload.Variables,
 			EventTS:    eventTS,
-		})
+		}); err != nil {
+			return err
+		}
+		if wsPub != nil {
+			wsPub.Publish(ctx, wsevents.ProjectRoom(payload.ProjectID), wsevents.EventContext, map[string]any{
+				"project":   payload.ProjectID,
+				"chat_id":   payload.ChatID,
+				"variables": payload.Variables,
+				"ts":        payload.TS,
+			})
+		}
+		return nil
 	})
 
 	go func() {
