@@ -457,13 +457,13 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
 				level := payload.Level
 				if level == "" {
 					level = "error" // core/domain/ws.py ErrorEvent's default
 				}
 				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventError, map[string]any{
-					"project":   payload.ProjectID,
+					"project":   projectID.String(),
 					"chat_id":   payload.ChatID,
 					"node_id":   payload.NodeID,
 					"node_type": payload.NodeType,
@@ -501,9 +501,9 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
 				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventNodeExecution, map[string]any{
-					"project":   payload.ProjectID,
+					"project":   projectID.String(),
 					"chat_id":   payload.ChatID,
 					"node_id":   payload.NodeID,
 					"node_type": payload.NodeType,
@@ -537,9 +537,9 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if ownerID, err := resolveDebugEventOwner(ctx, debugUC, payload.ProjectID); err == nil {
+			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
 				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventContext, map[string]any{
-					"project":   payload.ProjectID,
+					"project":   projectID.String(),
 					"chat_id":   payload.ChatID,
 					"variables": payload.Variables,
 					"ts":        payload.TS,
@@ -566,12 +566,19 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 // Best-effort: any resolution failure (unknown ref, project gone) is
 // returned as-is so callers just skip the WS forward, matching the
 // try/except-swallowing convention of every other WS publish in this repo.
-func resolveDebugEventOwner(ctx context.Context, debugUC debugmod.Usecase, projectRef string) (uuid.UUID, error) {
-	projectID, err := debugUC.ResolveProjectRef(ctx, projectRef)
+// resolveDebugEvent maps an engine event's raw project ref (the Django `uuid`
+// column) to BOTH this backend's internal project id (the `id` column — what
+// the constructor knows as project.id and filters WS events on) and the owner
+// id (the ws-hub's room is user_<owner>). Returning the resolved id is what
+// lets the "project" field in the forwarded payload match project.id, instead
+// of leaking the raw uuid-column ref which the client would filter out.
+func resolveDebugEvent(ctx context.Context, debugUC debugmod.Usecase, projectRef string) (projectID, ownerID uuid.UUID, err error) {
+	projectID, err = debugUC.ResolveProjectRef(ctx, projectRef)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, uuid.Nil, err
 	}
-	return debugUC.GetProjectOwner(ctx, projectID)
+	ownerID, err = debugUC.GetProjectOwner(ctx, projectID)
+	return projectID, ownerID, err
 }
 
 // debugErrorEventPayload is the "args" shape for the "debug.error_event"
