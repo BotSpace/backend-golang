@@ -56,12 +56,15 @@ func TestResolveDebugEventOwner_HappyPath(t *testing.T) {
 		owners:   map[uuid.UUID]uuid.UUID{projectID: ownerID},
 	}
 
-	got, err := resolveDebugEventOwner(context.Background(), uc, "1408")
+	gotPID, got, err := resolveDebugEvent(context.Background(), uc, "1408")
 	if err != nil {
-		t.Fatalf("resolveDebugEventOwner: %v", err)
+		t.Fatalf("resolveDebugEvent: %v", err)
 	}
 	if got != ownerID {
 		t.Fatalf("expected owner %s, got %s", ownerID, got)
+	}
+	if gotPID != projectID {
+		t.Fatalf("expected resolved project id %s (the id column, = constructor's project.id), got %s", projectID, gotPID)
 	}
 }
 
@@ -72,7 +75,7 @@ func TestResolveDebugEventOwner_HappyPath(t *testing.T) {
 func TestResolveDebugEventOwner_UnknownRef(t *testing.T) {
 	uc := &fakeDebugUsecase{resolved: map[string]uuid.UUID{}, owners: map[uuid.UUID]uuid.UUID{}}
 
-	if _, err := resolveDebugEventOwner(context.Background(), uc, "does-not-exist"); err == nil {
+	if _, _, err := resolveDebugEvent(context.Background(), uc, "does-not-exist"); err == nil {
 		t.Fatal("expected an error for an unresolvable project ref")
 	}
 }
@@ -87,7 +90,7 @@ func TestResolveDebugEventOwner_OwnerLookupFails(t *testing.T) {
 		owners:   map[uuid.UUID]uuid.UUID{},
 	}
 
-	if _, err := resolveDebugEventOwner(context.Background(), uc, "1408"); err == nil {
+	if _, _, err := resolveDebugEvent(context.Background(), uc, "1408"); err == nil {
 		t.Fatal("expected an error when the owner lookup fails")
 	}
 }
