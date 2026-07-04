@@ -1,7 +1,10 @@
 package ticket
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
@@ -90,7 +93,20 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 	var req CreateTicketRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if isMultipart(c) {
+		// The dashboard's new-ticket form posts multipart/form-data (it carries
+		// an optional file attachment), not JSON — read the fields and save the
+		// uploaded file if present.
+		req.Subject = strings.TrimSpace(c.PostForm("subject"))
+		req.Message = strings.TrimSpace(c.PostForm("message"))
+		req.AttachmentURL = c.PostForm("attachment_url")
+		if url, err := saveTicketAttachment(c); err != nil {
+			httpx.Error(c, err)
+			return
+		} else if url != "" {
+			req.AttachmentURL = url
+		}
+	} else if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
 		return
 	}
@@ -158,7 +174,16 @@ func (h *Handler) Reply(c *gin.Context) {
 		return
 	}
 	var req ReplyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if isMultipart(c) {
+		req.Message = strings.TrimSpace(c.PostForm("message"))
+		req.AttachmentURL = c.PostForm("attachment_url")
+		if url, err := saveTicketAttachment(c); err != nil {
+			httpx.Error(c, err)
+			return
+		} else if url != "" {
+			req.AttachmentURL = url
+		}
+	} else if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
 		return
 	}
@@ -316,4 +341,34 @@ func (h *Handler) AdminClose(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toResponse(t))
+}
+
+// isMultipart reports whether the request body is a multipart form (the
+// dashboard posts ticket create/reply as multipart because of the optional
+// file attachment) rather than JSON.
+func isMultipart(c *gin.Context) bool {
+	return strings.HasPrefix(c.ContentType(), "multipart/form-data")
+}
+
+// saveTicketAttachment stores the optional "attachment" file (if any) under the
+// media dir and returns its relative path. No file present => ("", nil).
+// Mirrors the file module's local-disk save (internal/modules/file).
+func saveTicketAttachment(c *gin.Context) (string, error) {
+	fh, err := c.FormFile("attachment")
+	if err != nil || fh == nil {
+		return "", nil // optional
+	}
+	dir := os.Getenv("APP_MEDIA_DIR")
+	if dir == "" {
+		dir = "./media"
+	}
+	rel := filepath.Join("tickets", uuid.New().String()+filepath.Ext(fh.Filename))
+	abs := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return "", httpx.Internal(err)
+	}
+	if err := c.SaveUploadedFile(fh, abs); err != nil {
+		return "", httpx.Internal(err)
+	}
+	return rel, nil
 }

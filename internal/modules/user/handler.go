@@ -91,6 +91,13 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
 		return
 	}
+	// Frontends (esp. a Google-registered user with an empty profile) submit the
+	// whole form, sending "" for untouched optional fields. A non-nil ""
+	// pointer would then fail min=1/email validation, so treat empty as omitted.
+	req.FirstName = blankToNil(req.FirstName)
+	req.LastName = blankToNil(req.LastName)
+	req.Username = blankToNil(req.Username)
+	req.Email = blankToNil(req.Email)
 	if details, err := validator.Struct(req); err != nil {
 		httpx.ErrorWithDetails(c, httpx.BadRequest("request.invalid", "validation failed"), details)
 		return
@@ -297,4 +304,13 @@ func (h *Handler) AdjustBalance(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toResponse(u))
+}
+
+// blankToNil treats an empty-string pointer as "field not provided" so a
+// partial profile update doesn't validate/overwrite untouched fields.
+func blankToNil(s *string) *string {
+	if s != nil && *s == "" {
+		return nil
+	}
+	return s
 }
