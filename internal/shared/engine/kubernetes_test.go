@@ -398,7 +398,7 @@ func TestReconcileStatus(t *testing.T) {
 		{"initializing+running->running", StatusInitializing, StatusRunning, StatusRunning},
 		{"pending+running->running", StatusPending, StatusRunning, StatusRunning},
 		{"initializing+failed->failed", StatusInitializing, StatusFailed, StatusFailed},
-		{"initializing+stopped(vanished)->failed", StatusInitializing, StatusStopped, StatusFailed},
+		{"initializing+stopped(scheduling gap)->initializing", StatusInitializing, StatusStopped, StatusInitializing},
 		{"initializing+still initializing->initializing", StatusInitializing, StatusInitializing, StatusInitializing},
 		{"terminal running is never touched", StatusRunning, StatusFailed, StatusRunning},
 		{"terminal stopped is never touched", StatusStopped, StatusRunning, StatusStopped},

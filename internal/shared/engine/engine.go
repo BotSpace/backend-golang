@@ -80,9 +80,12 @@ func ReconcileStatus(dbStatus Status, live Status) Status {
 		case StatusFailed:
 			return StatusFailed
 		case StatusStopped:
-			// The orchestrator has no record of this deployment (or it died)
-			// while we still think it's launching — it isn't coming up.
-			return StatusFailed
+			// No pod yet backs the deployment. Right after a deploy this is just
+			// the scheduling gap (esp. for bigger template flows), NOT a failure
+			// — stay initializing and keep polling. A genuinely crash-looping pod
+			// reports StatusFailed (handled above); the worker's crash cleanup
+			// handles anything that never comes up.
+			return StatusInitializing
 		default:
 			return StatusInitializing
 		}
