@@ -448,13 +448,13 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
+			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.error_event", payload.ProjectID); ok {
 				level := payload.Level
 				if level == "" {
 					level = "error" // core/domain/ws.py ErrorEvent's default
 				}
-				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventError, map[string]any{
-					"project":   projectID.String(),
+				wsPub.Publish(ctx, room, wsevents.EventError, map[string]any{
+					"project":   project,
 					"chat_id":   payload.ChatID,
 					"node_id":   payload.NodeID,
 					"node_type": payload.NodeType,
@@ -492,9 +492,9 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
-				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventNodeExecution, map[string]any{
-					"project":   projectID.String(),
+			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
+				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, map[string]any{
+					"project":   project,
 					"chat_id":   payload.ChatID,
 					"node_id":   payload.NodeID,
 					"node_type": payload.NodeType,
@@ -528,9 +528,9 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			return err
 		}
 		if wsPub != nil {
-			if projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, payload.ProjectID); err == nil {
-				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), wsevents.EventContext, map[string]any{
-					"project":   projectID.String(),
+			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.context_event", payload.ProjectID); ok {
+				wsPub.Publish(ctx, room, wsevents.EventContext, map[string]any{
+					"project":   project,
 					"chat_id":   payload.ChatID,
 					"variables": payload.Variables,
 					"ts":        payload.TS,
@@ -570,6 +570,30 @@ func resolveDebugEvent(ctx context.Context, debugUC debugmod.Usecase, projectRef
 	}
 	ownerID, err = debugUC.GetProjectOwner(ctx, projectID)
 	return projectID, ownerID, err
+}
+
+// wsForwardTarget resolves the engine's raw project ref to the WS room
+// (user_<owner>) + the project-id string for the payload, LOGGING the outcome
+// so the engine→backend:events→WS path is fully observable end to end. On a
+// resolve failure it logs the reason and returns ok=false — the forward is
+// skipped explicitly, never silently swallowed (which is what used to hide
+// "project.not_found" while node colors / variables / errors never arrived).
+func (s *Server) wsForwardTarget(ctx context.Context, debugUC debugmod.Usecase, task, projectRef string) (room, project string, ok bool) {
+	projectID, ownerID, err := resolveDebugEvent(ctx, debugUC, projectRef)
+	if err != nil {
+		s.log.Warn("ws forward skipped: project resolve failed",
+			logger.String("task", task),
+			logger.String("project_ref", projectRef),
+			logger.Err(err))
+		return "", "", false
+	}
+	room = wsevents.UserRoom(ownerID)
+	project = projectID.String()
+	s.log.Info("ws forward",
+		logger.String("task", task),
+		logger.String("room", room),
+		logger.String("project", project))
+	return room, project, true
 }
 
 // debugErrorEventPayload is the "args" shape for the "debug.error_event"
