@@ -86,6 +86,15 @@ func ReconcileStatus(dbStatus Status, live Status) Status {
 		default:
 			return StatusInitializing
 		}
+	case StatusFailed:
+		// "failed" is NOT terminal: a deploy that recorded a transient failure
+		// (slow first start — schemas/flow load — or a best-effort Service
+		// error) while the pod actually came up must recover. Re-check live:
+		// promote to running only if the pod is genuinely Ready, else stay failed.
+		if live == StatusRunning {
+			return StatusRunning
+		}
+		return StatusFailed
 	default:
 		return dbStatus
 	}
