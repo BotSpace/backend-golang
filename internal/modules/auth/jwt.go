@@ -28,7 +28,7 @@ func NewTokenIssuer(priv *rsa.PrivateKey, pub *rsa.PublicKey, cfg config.JWTConf
 
 // Claims mirrors Django SIMPLE_JWT's claim shape so tokens are interchangeable
 // between the Go and Django issuers for the lifetime of the migration: other
-// services (agent, webhook, worker-golang) that decode Django-issued tokens
+// services (agent, webhook, backend worker) that decode Django-issued tokens
 // read `user_id` and `token_type` (config/conf/jwt.py: USER_ID_CLAIM,
 // TOKEN_TYPE_CLAIM). `sub`/`jti`/`iat`/`exp` come from jwt.RegisteredClaims
 // and already match (JTI_CLAIM="jti" on the Django side too).

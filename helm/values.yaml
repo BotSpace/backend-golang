@@ -1,5 +1,5 @@
 # ArgoCD backend-golang app shu faylni $values sifatida o'qiydi.
-# CI har push'da tag'ni yangilaydi (worker-golang/engine-golang pattern).
+# CI har push'da tag'ni yangilaydi (engine-golang pattern).
 image:
   repository: registry.iprogrammer.uz/botspace/backend-golang
   tag: "99cae5d"

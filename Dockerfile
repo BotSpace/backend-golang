@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -15,6 +15,9 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X github.com/botspace/backend/internal/shared/buildinfo.Version=${VERSION}" \
     -o /out/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/botspace/backend/internal/shared/buildinfo.Version=${VERSION}" \
+    -o /out/worker ./cmd/worker
 
 FROM alpine:3.20
 
@@ -24,6 +27,7 @@ RUN apk add --no-cache ca-certificates tzdata wget && \
 WORKDIR /app
 
 COPY --from=builder /out/api /app/api
+COPY --from=builder /out/worker /app/worker
 COPY --chown=app:app configs ./configs
 COPY --chown=app:app migrations ./migrations
 

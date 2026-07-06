@@ -5,8 +5,8 @@ fire-and-forget persistence) go over a Redis Stream, not a synchronous
 internal HTTP API. Reads (credentials, config, chat history, template
 catalog, release/debug logs) stay HTTP — see the main task's item 2.
 
-This mirrors `worker-golang`'s existing Django-web → worker consumer
-(`worker-golang/internal/shared/redisq/stream.go`) byte-for-byte, so
+This mirrors the backend worker's existing Django-web → worker consumer
+(`internal/shared/redisq/stream.go`) byte-for-byte, so
 engine-golang only needs one `XADD` helper shared by every Go consumer it
 talks to.
 

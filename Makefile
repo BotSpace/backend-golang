@@ -17,6 +17,10 @@ help: ## Show this help
 run: ## Run the API (no hot reload)
 	go run ./cmd/api
 
+.PHONY: run-worker
+run-worker: ## Run the worker
+	go run ./cmd/worker
+
 .PHONY: gen-keys
 gen-keys: ## Generate a fresh RS256 key pair into keys/ (run per environment)
 	@mkdir -p keys
@@ -32,6 +36,10 @@ dev: ## Run with hot reload (requires `air`)
 .PHONY: build
 build: ## Build static binary
 	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BIN_DIR)/$(APP_NAME) ./cmd/api
+
+.PHONY: build-worker
+build-worker: ## Build static worker binary
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BIN_DIR)/worker ./cmd/worker
 
 .PHONY: tidy
 tidy: ## go mod tidy
