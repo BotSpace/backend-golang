@@ -28,6 +28,40 @@ func TestEnvOverridesYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_MapsSharedEnvToEngineConfig(t *testing.T) {
+	t.Setenv("APP_INTERNAL_TOKEN", "shared-token")
+	t.Setenv("APP_MONGO_URL", "mongodb://mongo:27017")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Engine.InternalToken != "shared-token" {
+		t.Fatalf("Engine.InternalToken = %q, want shared-token", cfg.Engine.InternalToken)
+	}
+	if cfg.Engine.MongoAddr != "mongodb://mongo:27017" {
+		t.Fatalf("Engine.MongoAddr = %q, want mongodb://mongo:27017", cfg.Engine.MongoAddr)
+	}
+}
+
+func TestLoad_EngineSpecificEnvWinsOverSharedFallback(t *testing.T) {
+	t.Setenv("APP_INTERNAL_TOKEN", "shared-token")
+	t.Setenv("APP_ENGINE_INTERNAL_TOKEN", "engine-token")
+	t.Setenv("APP_MONGO_URL", "mongodb://shared:27017")
+	t.Setenv("APP_ENGINE_MONGO_ADDR", "mongodb://engine:27017")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Engine.InternalToken != "engine-token" {
+		t.Fatalf("Engine.InternalToken = %q, want engine-token", cfg.Engine.InternalToken)
+	}
+	if cfg.Engine.MongoAddr != "mongodb://engine:27017" {
+		t.Fatalf("Engine.MongoAddr = %q, want mongodb://engine:27017", cfg.Engine.MongoAddr)
+	}
+}
+
 func TestValidate_RequiresKeyPaths(t *testing.T) {
 	// missing key paths fail
 	missing := &Config{DB: DBConfig{Host: "db"}}

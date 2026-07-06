@@ -355,7 +355,7 @@ func (h *Handler) AdminGet(c *gin.Context) {
 func (h *Handler) AdminMonitoring(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
-	items, total, err := h.uc.AdminMonitoring(c.Request.Context(), AdminListFilter{
+	page, err := h.uc.AdminMonitoring(c.Request.Context(), AdminListFilter{
 		Search: c.Query("search"),
 		Limit:  int32(limit),
 		Offset: int32(offset),
@@ -364,5 +364,5 @@ func (h *Handler) AdminMonitoring(c *gin.Context) {
 		httpx.Error(c, err)
 		return
 	}
-	httpx.OK(c, 200, toMonitoringListResponse(items, total, int32(limit), int32(offset)))
+	httpx.OK(c, 200, toMonitoringListResponse(page, int32(limit), int32(offset)))
 }

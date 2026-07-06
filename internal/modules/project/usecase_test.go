@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/botspace/backend/internal/modules/cms"
@@ -24,6 +27,7 @@ type fakeRepo struct {
 	envs              map[string]string // "<projectID>|<key>" -> value
 	debugs            map[uuid.UUID]*ProjectDebug
 	releaseServiceIDs map[uuid.UUID][]string // projectID -> every release's service_id
+	monitoring        []MonitoringProject
 }
 
 func newFakeRepo() *fakeRepo {
@@ -120,7 +124,7 @@ func (r *fakeRepo) GetAdmin(_ context.Context, _ uuid.UUID) (*AdminProjectDetail
 	return nil, database.ErrNotFound
 }
 func (r *fakeRepo) ListMonitoring(_ context.Context, _ AdminListFilter) ([]MonitoringProject, error) {
-	return nil, nil
+	return r.monitoring, nil
 }
 
 func (r *fakeRepo) SetReleaseBotToken(_ context.Context, projectID, ownerID uuid.UUID, token string) error {
@@ -1128,5 +1132,104 @@ func TestIssueCollabToken_FallsBackToUUIDWithoutLegacyID(t *testing.T) {
 	claims := verifyLikeWebsocketService(t, token, pub)
 	if pid, ok := claims["project_id"].(string); !ok || pid != p.ID.String() {
 		t.Fatalf("expected project_id %s (string), got %#v", p.ID, claims["project_id"])
+	}
+}
+
+type fakeMetricsProvider struct {
+	values map[uuid.UUID]LiveMetrics
+	ok     bool
+	err    error
+}
+
+func (p fakeMetricsProvider) ProjectMetrics(context.Context) (map[uuid.UUID]LiveMetrics, bool, error) {
+	return p.values, p.ok, p.err
+}
+
+func TestAdminMonitoring_MergesPrometheusMetrics(t *testing.T) {
+	repo := newFakeRepo()
+	projectID := uuid.New()
+	repo.monitoring = []MonitoringProject{{
+		Project:     Project{ID: projectID, OwnerID: uuid.New(), Name: "bot"},
+		CPUCores:    1,
+		MemoryBytes: 2,
+		DiskBytes:   3,
+	}}
+	uc := NewUsecase(repo, nil, nil, nil, nil)
+	uc = NewUsecaseWithMetrics(uc, fakeMetricsProvider{
+		ok: true,
+		values: map[uuid.UUID]LiveMetrics{
+			projectID: {CPUMilli: 42, MemoryBytes: 123456},
+		},
+	})
+
+	page, err := uc.AdminMonitoring(context.Background(), AdminListFilter{})
+	if err != nil {
+		t.Fatalf("AdminMonitoring: %v", err)
+	}
+	if !page.PrometheusAvailable {
+		t.Fatal("PrometheusAvailable = false, want true")
+	}
+	if got := page.Items[0].CPUCores; got != 42 {
+		t.Fatalf("CPUCores = %d, want 42", got)
+	}
+	if got := page.Items[0].MemoryBytes; got != 123456 {
+		t.Fatalf("MemoryBytes = %d, want 123456", got)
+	}
+	if got := page.Items[0].DiskBytes; got != 3 {
+		t.Fatalf("DiskBytes = %d, want DB value 3", got)
+	}
+}
+
+func TestAdminMonitoring_PrometheusErrorFallsBackToSnapshots(t *testing.T) {
+	repo := newFakeRepo()
+	projectID := uuid.New()
+	repo.monitoring = []MonitoringProject{{
+		Project:     Project{ID: projectID, OwnerID: uuid.New(), Name: "bot"},
+		CPUCores:    7,
+		MemoryBytes: 8,
+	}}
+	uc := NewUsecaseWithMetrics(NewUsecase(repo, nil, nil, nil, nil), fakeMetricsProvider{err: errors.New("prom down")})
+
+	page, err := uc.AdminMonitoring(context.Background(), AdminListFilter{})
+	if err != nil {
+		t.Fatalf("AdminMonitoring: %v", err)
+	}
+	if page.PrometheusAvailable {
+		t.Fatal("PrometheusAvailable = true, want false")
+	}
+	if page.Items[0].CPUCores != 7 || page.Items[0].MemoryBytes != 8 {
+		t.Fatalf("snapshot values not preserved: %#v", page.Items[0])
+	}
+}
+
+func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
+	projectID := uuid.New()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		switch {
+		case strings.Contains(query, "container_cpu_usage_seconds_total"):
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"label_project_id":"%s"},"value":[1,"0.025"]}]}}`, projectID)
+		case strings.Contains(query, "container_memory_working_set_bytes"):
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"label_project_id":"%s"},"value":[1,"10485760"]}]}}`, projectID)
+		default:
+			t.Fatalf("unexpected query: %s", query)
+		}
+	}))
+	defer srv.Close()
+
+	provider := NewPrometheusMetricsProvider(srv.URL)
+	metrics, ok, err := provider.ProjectMetrics(context.Background())
+	if err != nil {
+		t.Fatalf("ProjectMetrics: %v", err)
+	}
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	got := metrics[projectID]
+	if got.CPUMilli != 25 {
+		t.Fatalf("CPUMilli = %d, want 25", got.CPUMilli)
+	}
+	if got.MemoryBytes != 10485760 {
+		t.Fatalf("MemoryBytes = %d, want 10485760", got.MemoryBytes)
 	}
 }

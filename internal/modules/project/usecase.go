@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -16,7 +15,9 @@ import (
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/httpx"
+	"github.com/botspace/backend/internal/shared/logger"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // Usecase exposes owner-scoped project operations, plus admin-wide
@@ -33,7 +34,7 @@ type Usecase interface {
 
 	AdminList(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
-	AdminMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, int64, error)
+	AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error)
 
 	// IssueCollabToken mints the short-lived RS256 token the constructor
 	// presents to the standalone `websocket` service to join this project's
@@ -88,6 +89,10 @@ type ManagedBotTokenResolver interface {
 	ResolveManagedBotToken(ctx context.Context, managedBotID, ownerID uuid.UUID) (string, error)
 }
 
+type MetricsProvider interface {
+	ProjectMetrics(ctx context.Context) (map[uuid.UUID]LiveMetrics, bool, error)
+}
+
 type usecase struct {
 	repo Repository
 	// orch is nil-able: an "" orchestrator (e.g. engine.NewStub()) or nil
@@ -126,6 +131,7 @@ type usecase struct {
 	// silently minting a token the websocket service can never verify — see
 	// collab_token.go. Wired via NewUsecaseWithCollabSigner.
 	collabSigner *CollabTokenSigner
+	metrics      MetricsProvider
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
@@ -177,6 +183,16 @@ func NewUsecaseWithCollabSigner(uc Usecase, signer *CollabTokenSigner) Usecase {
 	}
 	clone := *u
 	clone.collabSigner = signer
+	return &clone
+}
+
+func NewUsecaseWithMetrics(uc Usecase, metrics MetricsProvider) Usecase {
+	u, ok := uc.(*usecase)
+	if !ok {
+		panic("project: NewUsecaseWithMetrics requires a Usecase built by this package's own constructors")
+	}
+	clone := *u
+	clone.metrics = metrics
 	return &clone
 }
 
@@ -299,7 +315,11 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 		if _, envErr := u.rel.UpsertEnvironment(ctx, release.UpsertEnvironmentInput{
 			ProjectID: p.ID, OwnerID: in.OwnerID, UserID: in.OwnerID, Key: key, Value: value,
 		}); envErr != nil {
-			log.Printf("project: create-from-template env %q for project %s failed: %v", key, p.ID, envErr)
+			zap.L().Warn("project create-from-template env failed",
+				logger.String("key", key),
+				logger.String("project_id", p.ID.String()),
+				logger.Err(envErr),
+			)
 		}
 	}
 
@@ -405,7 +425,11 @@ func (u *usecase) provisionDefaultCollections(ctx context.Context, p *Project) {
 			PrimaryField: def.primaryField,
 			System:       true,
 		}); err != nil {
-			log.Printf("project: create default collection %q for project %s failed: %v", def.name, p.ID, err)
+			zap.L().Warn("project create default collection failed",
+				logger.String("collection", def.name),
+				logger.String("project_id", p.ID.String()),
+				logger.Err(err),
+			)
 			continue
 		}
 		for i, f := range def.fields {
@@ -416,7 +440,12 @@ func (u *usecase) provisionDefaultCollections(ctx context.Context, p *Project) {
 				Required: f.required,
 				Order:    int32(i),
 			}); err != nil {
-				log.Printf("project: add field %q to default collection %q for project %s failed: %v", f.name, def.name, p.ID, err)
+				zap.L().Warn("project add default collection field failed",
+					logger.String("field", f.name),
+					logger.String("collection", def.name),
+					logger.String("project_id", p.ID.String()),
+					logger.Err(err),
+				)
 			}
 		}
 	}
@@ -589,17 +618,17 @@ func setReleaseWebhook(token string, releaseWebhookUUID uuid.UUID) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest(http.MethodPost, telegramURL, nil)
 	if err != nil {
-		log.Printf("project: build setWebhook request failed: %v", err)
+		zap.L().Warn("project build setWebhook request failed", logger.Err(err))
 		return
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("project: setWebhook call failed (will retry on release deploy): %v", err)
+		zap.L().Warn("project setWebhook call failed", logger.Err(err))
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("project: setWebhook returned status %d", resp.StatusCode)
+		zap.L().Warn("project setWebhook returned non-200", logger.Int("status", resp.StatusCode))
 	}
 }
 
@@ -705,17 +734,30 @@ func (u *usecase) AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDeta
 
 // AdminMonitoring returns a page of every project across every owner with
 // its latest reported resource usage (admin-only).
-func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, int64, error) {
+func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error) {
 	f.Limit, f.Offset = clampPage(f.Limit, f.Offset)
 	items, err := u.repo.ListMonitoring(ctx, f)
 	if err != nil {
-		return nil, 0, httpx.Internal(err)
+		return nil, httpx.Internal(err)
 	}
 	total, err := u.repo.CountAdmin(ctx, f.Search)
 	if err != nil {
-		return nil, 0, httpx.Internal(err)
+		return nil, httpx.Internal(err)
 	}
-	return items, total, nil
+	available := false
+	if u.metrics != nil {
+		live, ok, err := u.metrics.ProjectMetrics(ctx)
+		if err == nil && ok {
+			available = true
+			for i := range items {
+				if m, exists := live[items[i].ID]; exists {
+					items[i].CPUCores = m.CPUMilli
+					items[i].MemoryBytes = m.MemoryBytes
+				}
+			}
+		}
+	}
+	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available}, nil
 }
 
 // mapErr translates a not-found into a 404 and any other error into a 500.

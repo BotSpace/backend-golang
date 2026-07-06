@@ -32,11 +32,17 @@ type Usecase interface {
 
 type usecase struct {
 	repo  Repository
-	mongo *MongoDB
+	mongo mongoReader
 }
 
 func NewUsecase(repo Repository, mongo *MongoDB) Usecase {
 	return &usecase{repo: repo, mongo: mongo}
+}
+
+type mongoReader interface {
+	findAll(ctx context.Context, coll string, tenant any, maxRows int64) ([]map[string]any, int64, error)
+	chatStatsByChatID(ctx context.Context, coll string, tenant any) (map[any]chatStats, error)
+	findByChatID(ctx context.Context, coll string, tenant, chatID any, limit, skip int64) ([]map[string]any, int64, error)
 }
 
 // ListUsers ports ChatViewSet.get_users_with_messages: every "users"

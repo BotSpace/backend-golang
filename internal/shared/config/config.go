@@ -12,15 +12,16 @@ import (
 )
 
 type Config struct {
-	Env     string        `mapstructure:"env"`
-	HTTP    HTTPConfig    `mapstructure:"http"`
-	DB      DBConfig      `mapstructure:"db"`
-	JWT     JWTConfig     `mapstructure:"jwt"`
-	OTP     OTPConfig     `mapstructure:"otp"`
-	Log     LogConfig     `mapstructure:"log"`
-	Engine  EngineConfig  `mapstructure:"engine"`
-	Google  GoogleConfig  `mapstructure:"google"`
-	Storage StorageConfig `mapstructure:"storage"`
+	Env     string           `mapstructure:"env"`
+	HTTP    HTTPConfig       `mapstructure:"http"`
+	DB      DBConfig         `mapstructure:"db"`
+	JWT     JWTConfig        `mapstructure:"jwt"`
+	OTP     OTPConfig        `mapstructure:"otp"`
+	Log     LogConfig        `mapstructure:"log"`
+	Engine  EngineConfig     `mapstructure:"engine"`
+	Google  GoogleConfig     `mapstructure:"google"`
+	Storage StorageConfig    `mapstructure:"storage"`
+	Monitor MonitoringConfig `mapstructure:"monitoring"`
 }
 
 // GoogleConfig configures Google sign-in (POST /api/v1/auth/google) and the
@@ -33,6 +34,10 @@ type Config struct {
 type StorageConfig struct {
 	URL         string `mapstructure:"url"`          // APP_STORAGE_URL
 	BucketMedia string `mapstructure:"bucket_media"` // APP_STORAGE_BUCKET_MEDIA
+}
+
+type MonitoringConfig struct {
+	PrometheusURL string `mapstructure:"prometheus_url"` // APP_MONITORING_PROMETHEUS_URL
 }
 
 type GoogleConfig struct {
@@ -219,12 +224,13 @@ func Load() (*Config, error) {
 	for _, key := range []string{
 		"google.client_id", "google.oauth_client_id", "google.oauth_client_secret",
 		"google.oauth_callback_base", "google.oauth_panel_url",
-		"crypto.key", "internal.token",
+		"crypto.key", "internal.token", "mongo.url",
 		"engine.mode", "engine.image_repository", "engine.image_tag",
-		"engine.redis_host", "engine.redis_port", "engine.redis_password",
+		"engine.internal_token", "engine.redis_host", "engine.redis_port", "engine.redis_password",
 		"engine.test_bot_token", "engine.mongo_addr", "engine.mongo_db_name",
 		"engine.api_url",
 		"storage.url", "storage.bucket_media",
+		"monitoring.prometheus_url",
 	} {
 		_ = v.BindEnv(key)
 	}
@@ -239,6 +245,12 @@ func Load() (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+	if cfg.Engine.InternalToken == "" {
+		cfg.Engine.InternalToken = v.GetString("internal.token")
+	}
+	if cfg.Engine.MongoAddr == "" {
+		cfg.Engine.MongoAddr = v.GetString("mongo.url")
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -320,4 +332,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("engine.redis_host", "redis")
 	v.SetDefault("engine.redis_port", "6379")
 	v.SetDefault("engine.mongo_db_name", "botspace_cms")
+
+	v.SetDefault("monitoring.prometheus_url", "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090")
 }

@@ -157,6 +157,17 @@ type MonitoringProject struct {
 	DiskBytes     int64
 }
 
+type LiveMetrics struct {
+	CPUMilli    int32
+	MemoryBytes int32
+}
+
+type MonitoringPage struct {
+	Items               []MonitoringProject
+	Total               int64
+	PrometheusAvailable bool
+}
+
 // Repository is the persistence port; owner-scoped methods never return or
 // mutate another user's projects. The Admin*/Monitoring methods are
 // intentionally unscoped and only reachable behind an admin-only route.
