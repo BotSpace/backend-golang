@@ -198,7 +198,7 @@ make cover             # coverage.html
 ## Xavfsizlik & operatsion eslatmalar
 
 - **JWT kalitlari (RS256)** — private key imzolaydi, public key tekshiradi. Production'da kalitlar majburiy (auto-gen yo'q). Kalit **bir marta** yaratilib barcha deploylarda qayta ishlatiladi (secret manager'da). Batafsil: yuqoridagi "JWT kalitlari" bo'limi.
-- **Refresh token revocation + rotation** — refresh tokenlar `jti` bo'yicha `refresh_tokens` jadvalida saqlanadi. `Refresh` har chaqirilganda eski token revoke qilinadi (rotation — replay himoyasi), `/auth/logout` esa tokenni darhol bekor qiladi. Access tokenlar stateless (15m), shuning uchun rol o'zgarishi keyingi refreshda kuchga kiradi. Eskirgan tokenlarni tozalash — bu backend'ning ishi emas: `worker-golang`'ning `auth_cleanup_expired_refresh_tokens` cron job'i (soatiga bir marta) bajaradi.
+- **Refresh token revocation + rotation** — refresh tokenlar `jti` bo'yicha `refresh_tokens` jadvalida saqlanadi. `Refresh` har chaqirilganda eski token revoke qilinadi (rotation — replay himoyasi), `/auth/logout` esa tokenni darhol bekor qiladi. Access tokenlar stateless (15m), shuning uchun rol o'zgarishi keyingi refreshda kuchga kiradi. Eskirgan tokenlarni tozalash — backend worker'ning `auth_cleanup_expired_refresh_tokens` cron job'i (soatiga bir marta) bajaradi.
 - **Rate limiting** — `APP_HTTP_RATE_LIMIT_RPS` orqali per-IP token bucket (0 = o'chiq). Bu **instance-local** — bir nechta replica orqasida har biri alohida cheklaydi; global limit kerak bo'lsa Redis'ga ko'chiring.
 - **CORS** — `APP_HTTP_CORS_ORIGINS` (default `*`). Production'da aniq originlar yozing.
 - **Body limit** — `APP_HTTP_MAX_BODY_BYTES` (default 1 MiB) so'rov tanasini cheklaydi; `MaxHeaderBytes` ham qo'yilgan.

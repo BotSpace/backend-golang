@@ -1,0 +1,6 @@
+# Default sozlamalar — APP_* env o'zgaruvchilar USTUN.
+# Hozirgi Kubernetes secretlari uchun legacy REDIS_URL/MONGO_URL/STORAGE_* va
+# K8S_NAMESPACE nomlari ham fallback sifatida o'qiladi.
+k8s_namespace: botmother
+task_stream: "goworker:tasks"
+task_consumer_group: goworker

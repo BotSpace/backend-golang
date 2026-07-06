@@ -196,6 +196,10 @@ type Querier interface {
 	DeleteAuthbotCode(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteBlogPost(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEnviromentForOwner(ctx context.Context, arg DeleteEnviromentForOwnerParams) (int64, error)
+	// Codes nobody ever redeemed.
+	DeleteExpiredAuthbotCodes(ctx context.Context) (int64, error)
+	DeleteExpiredRefreshTokens(ctx context.Context) (int64, error)
+	DeleteFile(ctx context.Context, id uuid.UUID) error
 	// Returns the deleted row (not :execrows) so the caller can unlink the blob
 	// on disk using its file_path.
 	DeleteFileByUUIDForOwner(ctx context.Context, arg DeleteFileByUUIDForOwnerParams) (File, error)
@@ -213,6 +217,13 @@ type Querier interface {
 	EnsureProjectModuleForOwner(ctx context.Context, arg EnsureProjectModuleForOwnerParams) (ProjectModule, error)
 	// excludeID = uuid.Nil (never a real post id) when checking for a brand new post.
 	ExistsBlogPostSlug(ctx context.Context, arg ExistsBlogPostSlugParams) (bool, error)
+	// Net-new Go-side janitors that never existed in Django (checked
+	// core/apps/api/tasks/*.py + CELERY_BEAT_SCHEDULE + SIMPLE_JWT settings —
+	// backend-golang's internal/server/scheduler.go doc comments have the full
+	// reasoning). Moved here from backend-golang because periodic jobs belong in
+	// the worker, not the API process.
+	// active -> grace_period once expires_at passes.
+	ExpireActiveSubscriptions(ctx context.Context) ([]uuid.UUID, error)
 	// Lets the "used" usecase 404 on a project the caller does not own instead
 	// of silently returning zeroed totals.
 	FileProjectOwnedByOwner(ctx context.Context, arg FileProjectOwnedByOwnerParams) (bool, error)
@@ -240,12 +251,14 @@ type Querier interface {
 	// end users open unauthenticated.
 	GetFileByUUID(ctx context.Context, argUuid uuid.UUID) (File, error)
 	GetFileByUUIDForOwner(ctx context.Context, arg GetFileByUUIDForOwnerParams) (File, error)
+	GetFilePath(ctx context.Context, id uuid.UUID) (string, error)
 	GetLatestVerificationForUser(ctx context.Context, userID uuid.UUID) (UserVerification, error)
 	// Owner-scoped lookup for resolving a manager-bot-wizard-created bot's
 	// token during project create (see webhook.Usecase.ResolveManagedBotToken).
 	// Zero rows means "not found or not owned by ownerID" — the caller cannot
 	// and should not distinguish the two.
 	GetManagedBotByIDForOwner(ctx context.Context, arg GetManagedBotByIDForOwnerParams) (ManagedBot, error)
+	GetMessage(ctx context.Context, id uuid.UUID) (GetMessageRow, error)
 	GetMessageForOwner(ctx context.Context, arg GetMessageForOwnerParams) (Message, error)
 	GetModuleByID(ctx context.Context, id uuid.UUID) (Module, error)
 	GetModuleBySlug(ctx context.Context, slug string) (Module, error)
@@ -266,6 +279,7 @@ type Querier interface {
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
 	GetProject(ctx context.Context, id uuid.UUID) (Project, error)
 	GetProjectAdmin(ctx context.Context, id uuid.UUID) (GetProjectAdminRow, error)
+	GetProjectEnv(ctx context.Context, arg GetProjectEnvParams) (string, error)
 	// Owner-scoped read of the project's current draft flow — used to deploy a
 	// debug container (which, unlike a release, always runs the live draft).
 	GetProjectFlowForOwner(ctx context.Context, arg GetProjectFlowForOwnerParams) ([]byte, error)
@@ -297,8 +311,10 @@ type Querier interface {
 	GetUserSubscriptionDetail(ctx context.Context, userID uuid.UUID) (GetUserSubscriptionDetailRow, error)
 	GetVerificationWithReviewer(ctx context.Context, id uuid.UUID) (GetVerificationWithReviewerRow, error)
 	HasPendingVerificationForUser(ctx context.Context, userID uuid.UUID) (bool, error)
+	HasUsersCollection(ctx context.Context, projectID uuid.UUID) (bool, error)
 	IncrSmsConfirmTry(ctx context.Context, arg IncrSmsConfirmTryParams) (SmsConfirm, error)
 	IncrementSubscriptionUsage(ctx context.Context, arg IncrementSubscriptionUsageParams) (int64, error)
+	InsertDiskSnapshot(ctx context.Context, arg InsertDiskSnapshotParams) error
 	IsUserKYCVerified(ctx context.Context, id uuid.UUID) (bool, error)
 	LatestReleaseVersion(ctx context.Context, arg LatestReleaseVersionParams) (int32, error)
 	// One row per distinct hostname (its most recent report within the window),
@@ -325,6 +341,8 @@ type Querier interface {
 	// (e.g. inside a release/debug deploy that just loaded the project row).
 	ListEnviromentsByProject(ctx context.Context, projectID uuid.UUID) ([]Enviroment, error)
 	ListEnviromentsForOwner(ctx context.Context, arg ListEnviromentsForOwnerParams) ([]Enviroment, error)
+	ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, error)
+	ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error)
 	// project_id/filetype nargs let the caller optionally narrow the listing;
 	// NULL means "no filter" on that dimension.
 	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)
@@ -354,6 +372,7 @@ type Querier interface {
 	ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]ListProjectsAdminRow, error)
 	ListProjectsForOwner(ctx context.Context, arg ListProjectsForOwnerParams) ([]Project, error)
 	ListProjectsForUserBrief(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserBriefRow, error)
+	ListProjectsWithReleaseToken(ctx context.Context) ([]ListProjectsWithReleaseTokenRow, error)
 	// Public list — lightweight, no author info (mirrors BlogPostListSerializer).
 	ListPublishedBlogPosts(ctx context.Context, arg ListPublishedBlogPostsParams) ([]BlogPost, error)
 	// Owner-scoped list of every release's service_id that still has a live k8s
@@ -364,6 +383,10 @@ type Querier interface {
 	// disappears behind deleted_at — after that point GetDebugForOwner/
 	// ListReleasesForProject can no longer see the project's rows at all.
 	ListReleaseServiceIDsForOwner(ctx context.Context, arg ListReleaseServiceIDsForOwnerParams) ([]*string, error)
+	// Reliz QILINGAN yoki debug ishlatilgan loyihalar — tokensiz (debug-only)
+	// botlarning ham disk charti chiqishi kerak.
+	ListReleasedProjectIDs(ctx context.Context) ([]uuid.UUID, error)
+	ListReleasedProjectsForDisk(ctx context.Context) ([]ListReleasedProjectsForDiskRow, error)
 	ListReleasesForProject(ctx context.Context, arg ListReleasesForProjectParams) ([]Relase, error)
 	ListReleasesForProjectAdmin(ctx context.Context, projectID uuid.UUID) ([]Relase, error)
 	ListResources(ctx context.Context, arg ListResourcesParams) ([]Resource, error)
@@ -374,13 +397,17 @@ type Querier interface {
 	ListTicketsForOwner(ctx context.Context, arg ListTicketsForOwnerParams) ([]ListTicketsForOwnerRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
+	MarkDebugFailedByService(ctx context.Context, serviceID *string) (int64, error)
+	MarkDebugStopping(ctx context.Context, id uuid.UUID) error
 	// Marks a managed bot consumed once its token has been attached to a
 	// project's RELEASE_BOT_TOKEN — mirrors Django's
 	// ManagedBotModel.used = True; managed_bot.save(update_fields=["used"]).
 	MarkManagedBotUsed(ctx context.Context, id uuid.UUID) error
+	MarkMessageFailed(ctx context.Context, id uuid.UUID) error
 	MarkPaymentOrderCancelled(ctx context.Context, id uuid.UUID) (PaymentOrder, error)
 	// Guarded by status='created' so a retried webhook call is a safe no-op (zero rows returned).
 	MarkPaymentOrderPaid(ctx context.Context, arg MarkPaymentOrderPaidParams) (PaymentOrder, error)
+	MarkReleaseFailedByService(ctx context.Context, serviceID *string) (int64, error)
 	MarkUserValidated(ctx context.Context, id uuid.UUID) (User, error)
 	// Owner-scoped get-or-create: a row is only inserted when the caller owns the
 	// project (EXISTS gate below); a (project_id, node_id, chat_id) conflict just
@@ -439,11 +466,15 @@ type Querier interface {
 	// Total bot-earned net income across all projects (withdrawal eligibility base).
 	SumPaidPaymentOrderNetForOwner(ctx context.Context, ownerID uuid.UUID) (pgtype.Numeric, error)
 	SumPaymentEarningsForOwner(ctx context.Context, ownerID uuid.UUID) (SumPaymentEarningsForOwnerRow, error)
+	SumProjectFileBytes(ctx context.Context, projectID uuid.UUID) (int64, error)
 	// pending + approved withdrawals reserve bot income until reviewed/paid out.
 	SumReservedPaymentWithdrawals(ctx context.Context, userID uuid.UUID) (pgtype.Numeric, error)
 	// Botspace's 20% cut of confirmed template marketplace sales (author keeps
 	// template.AuthorCommissionPercent = 80%, see internal/modules/template).
 	SumTemplateCommissionSince(ctx context.Context, since time.Time) (pgtype.Numeric, error)
+	// grace_period -> suspended a further 3 days after expires_at (matches
+	// PlanStatus.GRACE_PERIOD's "3 kun" comment, backend-golang enums/plan.py).
+	SuspendGracePeriodSubscriptions(ctx context.Context) ([]uuid.UUID, error)
 	TemplateAdminCreate(ctx context.Context, arg TemplateAdminCreateParams) (Template, error)
 	TemplateAdminDelete(ctx context.Context, id uuid.UUID) (int64, error)
 	TemplateAdminUpdate(ctx context.Context, arg TemplateAdminUpdateParams) (Template, error)
@@ -555,11 +586,15 @@ type Querier interface {
 	UpdateDebugDeployResult(ctx context.Context, arg UpdateDebugDeployResultParams) (Debug, error)
 	UpdateDebugStatusForOwner(ctx context.Context, arg UpdateDebugStatusForOwnerParams) (Debug, error)
 	UpdateFileByUUIDForOwner(ctx context.Context, arg UpdateFileByUUIDForOwnerParams) (File, error)
+	UpdateMessageFileID(ctx context.Context, arg UpdateMessageFileIDParams) error
 	UpdateMessageForOwner(ctx context.Context, arg UpdateMessageForOwnerParams) (Message, error)
+	UpdateMessageResult(ctx context.Context, arg UpdateMessageResultParams) error
+	UpdateMessageTotal(ctx context.Context, arg UpdateMessageTotalParams) error
 	UpdateModule(ctx context.Context, arg UpdateModuleParams) (Module, error)
 	UpdateModuleManifest(ctx context.Context, arg UpdateModuleManifestParams) (Module, error)
 	UpdatePlanAdmin(ctx context.Context, arg UpdatePlanAdminParams) (Plan, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
+	UpdateProjectBotInfo(ctx context.Context, arg UpdateProjectBotInfoParams) error
 	// Called after the orchestrator confirms the shared pod (or a self-hosted
 	// endpoint) is reachable; id was already owner-validated by the ensure step.
 	UpdateProjectModuleDeployState(ctx context.Context, arg UpdateProjectModuleDeployStateParams) (ProjectModule, error)

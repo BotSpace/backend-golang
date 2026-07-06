@@ -5,10 +5,9 @@
 // them with a consumer group so a backend restart never drops in-flight
 // events (XREADGROUP re-delivers anything left unacked as "pending").
 //
-// Contract (matches worker-golang's internal/shared/redisq/stream.go, which
-// already consumes Django's web→worker stream with this exact shape — reuse
-// it verbatim so engine-golang only needs one XADD helper for every Go
-// consumer it talks to):
+// Contract (matches the backend worker's Django-web→worker stream with this
+// exact shape — reuse it verbatim so engine-golang only needs one XADD helper
+// for every Go consumer it talks to):
 //
 //	XADD <stream> * payload '{"task":"<event.type>","args":{...}}'
 //
@@ -64,6 +63,33 @@ func NewConsumer(addr, password, stream, group, consumerName string, log *logger
 		handlers: map[string]Handler{},
 		log:      log,
 	}
+}
+
+// NewURLConsumer dials Redis using a redis:// URL. It is used by the worker
+// deployment, whose env comes from the legacy REDIS_URL secret.
+func NewURLConsumer(redisURL, stream, group, consumerName string, log *logger.Logger) (*Consumer, error) {
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Consumer{
+		rdb:      redis.NewClient(opts),
+		stream:   stream,
+		group:    group,
+		consumer: consumerName,
+		handlers: map[string]Handler{},
+		log:      log,
+	}, nil
+}
+
+// NewURLClient returns a plain Redis client from a redis:// URL for worker
+// usecases that need Redis outside the stream consumer.
+func NewURLClient(redisURL string) (*redis.Client, error) {
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, err
+	}
+	return redis.NewClient(opts), nil
 }
 
 // Register binds a Handler to a "task" name. Call before Run.
