@@ -528,50 +528,6 @@ func (q *Queries) CmsListFieldsForCollectionForOwner(ctx context.Context, arg Cm
 	return items, nil
 }
 
-const cmsListProjectIDsWithoutLegacyID = `-- name: CmsListProjectIDsWithoutLegacyID :many
-SELECT id FROM projects WHERE legacy_id IS NULL AND deleted_at IS NULL
-`
-
-// Used only by scripts/backfill_legacy_project_id to enumerate candidates.
-func (q *Queries) CmsListProjectIDsWithoutLegacyID(ctx context.Context) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, cmsListProjectIDsWithoutLegacyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []uuid.UUID{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const cmsSetProjectLegacyID = `-- name: CmsSetProjectLegacyID :execrows
-UPDATE projects SET legacy_id = $1
-WHERE id = $2 AND legacy_id IS NULL
-`
-
-type CmsSetProjectLegacyIDParams struct {
-	LegacyID *int32    `json:"legacy_id"`
-	ID       uuid.UUID `json:"id"`
-}
-
-// Used only by scripts/backfill_legacy_project_id (one-shot data migration).
-func (q *Queries) CmsSetProjectLegacyID(ctx context.Context, arg CmsSetProjectLegacyIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, cmsSetProjectLegacyID, arg.LegacyID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const cmsSoftDeleteCollection = `-- name: CmsSoftDeleteCollection :execrows
 UPDATE collection c
 SET deleted_at = NOW(), updated_at = NOW()

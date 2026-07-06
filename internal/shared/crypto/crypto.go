@@ -1,6 +1,6 @@
 // Package crypto provides authenticated symmetric encryption for secrets at
-// rest (credential data, bot tokens) — the Go counterpart to Django's Fernet
-// usage. AES-256-GCM with a random nonce per message; output is base64.
+// rest (credential data, bot tokens). AES-256-GCM with a random nonce per
+// message; output is base64.
 package crypto
 
 import (

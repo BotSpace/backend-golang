@@ -75,10 +75,6 @@ type Querier interface {
 	CmsListCollectionsForProject(ctx context.Context, arg CmsListCollectionsForProjectParams) ([]Collection, error)
 	CmsListFieldsForCollection(ctx context.Context, collectionID uuid.UUID) ([]Field, error)
 	CmsListFieldsForCollectionForOwner(ctx context.Context, arg CmsListFieldsForCollectionForOwnerParams) ([]Field, error)
-	// Used only by scripts/backfill_legacy_project_id to enumerate candidates.
-	CmsListProjectIDsWithoutLegacyID(ctx context.Context) ([]uuid.UUID, error)
-	// Used only by scripts/backfill_legacy_project_id (one-shot data migration).
-	CmsSetProjectLegacyID(ctx context.Context, arg CmsSetProjectLegacyIDParams) (int64, error)
 	CmsSoftDeleteCollection(ctx context.Context, arg CmsSoftDeleteCollectionParams) (int64, error)
 	CmsUpdateCollection(ctx context.Context, arg CmsUpdateCollectionParams) (Collection, error)
 	CmsUpdateExportTaskStatus(ctx context.Context, arg CmsUpdateExportTaskStatusParams) (CmsExportTask, error)
@@ -392,15 +388,6 @@ type Querier interface {
 	MintWebhookEndpoint(ctx context.Context, arg MintWebhookEndpointParams) (WebhookEndpoint, error)
 	// Bot-by-bot income breakdown for the earnings dashboard (by_bot payload).
 	PaymentEarningsByProject(ctx context.Context, ownerID uuid.UUID) ([]PaymentEarningsByProjectRow, error)
-	// ===================== one-shot Fernet->AES re-encryption migration =====
-	// (cmd/reencrypt-credentials) — unscoped by owner AND includes soft-deleted
-	// rows (deleted_at IS NOT NULL): a soft-deleted credential can still be
-	// restored/inspected by an admin later, so it needs the same at-rest cipher
-	// as everything else, not a stale Fernet blob nobody can ever decrypt again.
-	ReencryptListAllCredentials(ctx context.Context) ([]ReencryptListAllCredentialsRow, error)
-	// Deliberately does NOT touch updated_at — re-encryption is a storage-format
-	// change, not a user-visible edit.
-	ReencryptUpdateCredentialData(ctx context.Context, arg ReencryptUpdateCredentialDataParams) (int64, error)
 	RejectPaymentWithdrawal(ctx context.Context, arg RejectPaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
 	RejectVerification(ctx context.Context, arg RejectVerificationParams) (UserVerification, error)
 	// Internal (not owner-checked): resolves a project's owner_id for real-time

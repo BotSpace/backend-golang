@@ -496,8 +496,7 @@ func (u *usecase) loadContext(
 // resolveMongoTenant resolves the shared Mongo database name (see
 // mongo.go/domain.go) and the `_project_id` scoping value for a project:
 //   - if the project was imported from Django (projects.legacy_id set —
-//     backfilled by scripts/backfill_legacy_project_id from the ETL's
-//     uuid5(NS,"project:<pk>") mapping), the value is that legacy int, since
+//     recovered during the cutover), the value is that legacy int, since
 //     that's what the real production documents already carry;
 //   - otherwise (a project created after the Go cutover, never existed in
 //     Django) the value is the project's own UUID string — self-consistent

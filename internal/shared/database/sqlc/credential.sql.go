@@ -199,60 +199,6 @@ func (q *Queries) ListCredentialsForOwner(ctx context.Context, arg ListCredentia
 	return items, nil
 }
 
-const reencryptListAllCredentials = `-- name: ReencryptListAllCredentials :many
-
-SELECT id, data_encrypted FROM credential ORDER BY created_at
-`
-
-type ReencryptListAllCredentialsRow struct {
-	ID            uuid.UUID `json:"id"`
-	DataEncrypted string    `json:"data_encrypted"`
-}
-
-// ===================== one-shot Fernet->AES re-encryption migration =====
-// (cmd/reencrypt-credentials) — unscoped by owner AND includes soft-deleted
-// rows (deleted_at IS NOT NULL): a soft-deleted credential can still be
-// restored/inspected by an admin later, so it needs the same at-rest cipher
-// as everything else, not a stale Fernet blob nobody can ever decrypt again.
-func (q *Queries) ReencryptListAllCredentials(ctx context.Context) ([]ReencryptListAllCredentialsRow, error) {
-	rows, err := q.db.Query(ctx, reencryptListAllCredentials)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ReencryptListAllCredentialsRow{}
-	for rows.Next() {
-		var i ReencryptListAllCredentialsRow
-		if err := rows.Scan(&i.ID, &i.DataEncrypted); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const reencryptUpdateCredentialData = `-- name: ReencryptUpdateCredentialData :execrows
-UPDATE credential SET data_encrypted = $1 WHERE id = $2
-`
-
-type ReencryptUpdateCredentialDataParams struct {
-	DataEncrypted string    `json:"data_encrypted"`
-	ID            uuid.UUID `json:"id"`
-}
-
-// Deliberately does NOT touch updated_at — re-encryption is a storage-format
-// change, not a user-visible edit.
-func (q *Queries) ReencryptUpdateCredentialData(ctx context.Context, arg ReencryptUpdateCredentialDataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reencryptUpdateCredentialData, arg.DataEncrypted, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const softDeleteCredential = `-- name: SoftDeleteCredential :execrows
 UPDATE credential SET deleted_at = NOW()
 WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
