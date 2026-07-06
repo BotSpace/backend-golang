@@ -57,3 +57,6 @@ log:
 # (secret) in real environments — left empty here on purpose.
 google:
   client_id: ""
+
+monitoring:
+  prometheus_url: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090

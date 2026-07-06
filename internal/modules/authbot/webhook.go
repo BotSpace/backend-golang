@@ -3,8 +3,10 @@ package authbot
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/botspace/backend/internal/shared/logger"
+	"go.uber.org/zap"
 )
 
 // TelegramUpdate is the subset of Telegram's Update object this module
@@ -98,7 +100,7 @@ func (h *Handler) processUpdate(ctx context.Context, update TelegramUpdate) {
 // handleStart ports Django's handlers.auth.start_handler.
 func (h *Handler) handleStart(ctx context.Context, chatID int64) {
 	if _, err := h.bot.SendMessage(ctx, chatID, startWelcomeText, SendOptions{ReplyMarkup: sendPhoneKeyboard}); err != nil {
-		log.Printf("authbot: send /start reply failed: %v", err)
+		zap.L().Warn("authbot send start reply failed", logger.Int64("chat_id", chatID), logger.Err(err))
 	}
 }
 
@@ -119,7 +121,7 @@ func (h *Handler) handleContact(ctx context.Context, msg *TelegramMessage) {
 		Username:   msg.From.Username,
 	})
 	if err != nil {
-		log.Printf("authbot: issue code failed: %v", err)
+		zap.L().Warn("authbot issue code failed", logger.Int64("telegram_id", msg.From.ID), logger.Err(err))
 		h.sendPlainError(ctx, msg.Chat.ID, err)
 		return
 	}
@@ -137,13 +139,17 @@ func (h *Handler) handleContact(ctx context.Context, msg *TelegramMessage) {
 		ReplyMarkup: markup,
 	})
 	if err != nil {
-		log.Printf("authbot: send otp message failed: %v", err)
+		zap.L().Warn("authbot send otp message failed", logger.Int64("chat_id", msg.Chat.ID), logger.Err(err))
 		h.sendPlainError(ctx, msg.Chat.ID, err)
 		return
 	}
 
 	if err := h.uc.SetMessageID(ctx, issued.CodeID, messageID); err != nil {
-		log.Printf("authbot: set message id failed: %v", err)
+		zap.L().Warn("authbot set message id failed",
+			logger.String("code_id", issued.CodeID.String()),
+			logger.Int64("message_id", messageID),
+			logger.Err(err),
+		)
 	}
 }
 
@@ -152,6 +158,6 @@ func (h *Handler) handleContact(ctx context.Context, msg *TelegramMessage) {
 // str(e))). Best-effort: a failure here is only logged.
 func (h *Handler) sendPlainError(ctx context.Context, chatID int64, cause error) {
 	if _, err := h.bot.SendMessage(ctx, chatID, cause.Error(), SendOptions{}); err != nil {
-		log.Printf("authbot: send error notice failed: %v", err)
+		zap.L().Warn("authbot send error notice failed", logger.Int64("chat_id", chatID), logger.Err(err))
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/botspace/backend/internal/shared/config"
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/logger"
+	"go.uber.org/zap"
 )
 
 // @title           jst-go API
@@ -44,6 +45,8 @@ func main() {
 	if err != nil {
 		panic("logger init: " + err.Error())
 	}
+	undoGlobalLog := zap.ReplaceGlobals(log)
+	defer undoGlobalLog()
 	defer func() { _ = log.Sync() }()
 
 	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

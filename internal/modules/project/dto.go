@@ -308,9 +308,8 @@ func toMonitoringProjectResponse(p *MonitoringProject) MonitoringProjectResponse
 }
 
 // MonitoringListResponse is a paginated envelope for the admin monitoring
-// listing. PrometheusAvailable is always false — this backend has no live
-// metrics scraper wired in; the listing is built from the last reported
-// resource/snapshot rows instead (see AdminMonitoringProjects in
+// listing. CPU/RAM are filled from Prometheus when it is reachable, otherwise
+// from the latest resource snapshot rows (see AdminMonitoringProjects in
 // queries/projects.sql).
 type MonitoringListResponse struct {
 	Items               []MonitoringProjectResponse `json:"items"`
@@ -320,10 +319,14 @@ type MonitoringListResponse struct {
 	PrometheusAvailable bool                        `json:"prometheus_available"`
 }
 
-func toMonitoringListResponse(items []MonitoringProject, total int64, limit, offset int32) MonitoringListResponse {
+func toMonitoringListResponse(page *MonitoringPage, limit, offset int32) MonitoringListResponse {
+	items := page.Items
 	out := make([]MonitoringProjectResponse, len(items))
 	for i := range items {
 		out[i] = toMonitoringProjectResponse(&items[i])
 	}
-	return MonitoringListResponse{Items: out, Total: total, Limit: limit, Offset: offset, PrometheusAvailable: false}
+	return MonitoringListResponse{
+		Items: out, Total: page.Total, Limit: limit, Offset: offset,
+		PrometheusAvailable: page.PrometheusAvailable,
+	}
 }
