@@ -35,6 +35,7 @@ type Usecase interface {
 	AdminList(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error)
+	AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error)
 
 	// IssueCollabToken mints the short-lived RS256 token the constructor
 	// presents to the standalone `websocket` service to join this project's
@@ -91,6 +92,10 @@ type ManagedBotTokenResolver interface {
 
 type MetricsProvider interface {
 	ProjectMetrics(ctx context.Context) (map[uuid.UUID]LiveMetrics, bool, error)
+}
+
+type MetricsHistoryProvider interface {
+	ProjectHistory(ctx context.Context, projectID uuid.UUID, window string) (*MonitoringHistory, bool, error)
 }
 
 type usecase struct {
@@ -758,6 +763,19 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 		}
 	}
 	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available}, nil
+}
+
+func (u *usecase) AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error) {
+	provider, ok := u.metrics.(MetricsHistoryProvider)
+	if !ok || provider == nil {
+		return &MonitoringHistory{}, nil
+	}
+	history, available, err := provider.ProjectHistory(ctx, id, window)
+	if err != nil {
+		return &MonitoringHistory{}, nil
+	}
+	history.PrometheusAvailable = available
+	return history, nil
 }
 
 // mapErr translates a not-found into a 404 and any other error into a 500.

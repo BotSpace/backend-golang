@@ -1208,9 +1208,9 @@ func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
 		query := r.URL.Query().Get("query")
 		switch {
 		case strings.Contains(query, "container_cpu_usage_seconds_total"):
-			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"label_project_id":"%s"},"value":[1,"0.025"]}]}}`, projectID)
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"0.025"]}]}}`, projectID)
 		case strings.Contains(query, "container_memory_working_set_bytes"):
-			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"label_project_id":"%s"},"value":[1,"10485760"]}]}}`, projectID)
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"10485760"]}]}}`, projectID)
 		default:
 			t.Fatalf("unexpected query: %s", query)
 		}

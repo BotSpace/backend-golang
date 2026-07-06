@@ -1,0 +1,7687 @@
+basePath: /api/v1
+definitions:
+  github_com_botspace_backend_internal_shared_httpx.ErrorBody:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties: {}
+        type: object
+      message:
+        type: string
+    type: object
+  github_com_botspace_backend_internal_shared_httpx.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorBody'
+    type: object
+  internal_modules_administration.AuditLogListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_administration.AuditLogResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_administration.AuditLogResponse:
+    properties:
+      action:
+        type: string
+      actor_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      ip:
+        type: string
+      metadata:
+        items:
+          type: integer
+        type: array
+      target:
+        type: string
+    type: object
+  internal_modules_administration.DailyCountResponse:
+    properties:
+      count:
+        type: integer
+      day:
+        type: string
+    type: object
+  internal_modules_administration.DashboardStatsResponse:
+    properties:
+      daily_orders:
+        items:
+          $ref: '#/definitions/internal_modules_administration.DailyCountResponse'
+        type: array
+      daily_signups:
+        items:
+          $ref: '#/definitions/internal_modules_administration.DailyCountResponse'
+        type: array
+      projects:
+        properties:
+          total:
+            type: integer
+          with_release:
+            type: integer
+        type: object
+      revenue_30d:
+        type: string
+      templates:
+        properties:
+          pending_verify:
+            type: integer
+          total:
+            type: integer
+        type: object
+      users:
+        properties:
+          active:
+            type: integer
+          new_7d:
+            type: integer
+          new_30d:
+            type: integer
+          new_today:
+            type: integer
+          total:
+            type: integer
+        type: object
+      withdrawals:
+        properties:
+          pending:
+            type: integer
+        type: object
+    type: object
+  internal_modules_auth.APITokenResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+    type: object
+  internal_modules_auth.ConfirmRequest:
+    properties:
+      code:
+        type: string
+      phone:
+        type: string
+    required:
+    - code
+    - phone
+    type: object
+  internal_modules_auth.CreateAPITokenRequest:
+    properties:
+      name:
+        maxLength: 100
+        type: string
+    type: object
+  internal_modules_auth.CreateAPITokenResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      token:
+        type: string
+    type: object
+  internal_modules_auth.ExchangeResponse:
+    properties:
+      access:
+        type: string
+      refresh:
+        type: string
+    type: object
+  internal_modules_auth.GoogleLoginRequest:
+    properties:
+      id_token:
+        type: string
+    required:
+    - id_token
+    type: object
+  internal_modules_auth.LoginRequest:
+    properties:
+      password:
+        type: string
+      phone:
+        type: string
+    required:
+    - password
+    - phone
+    type: object
+  internal_modules_auth.MessageResponse:
+    properties:
+      detail:
+        type: string
+    type: object
+  internal_modules_auth.PhoneRequest:
+    properties:
+      phone:
+        maxLength: 32
+        minLength: 5
+        type: string
+    required:
+    - phone
+    type: object
+  internal_modules_auth.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  internal_modules_auth.RegisterRequest:
+    properties:
+      first_name:
+        maxLength: 150
+        minLength: 1
+        type: string
+      last_name:
+        maxLength: 150
+        minLength: 1
+        type: string
+      password:
+        description: bcrypt truncates past 72 bytes
+        maxLength: 72
+        minLength: 8
+        type: string
+      phone:
+        maxLength: 32
+        minLength: 5
+        type: string
+    required:
+    - first_name
+    - last_name
+    - password
+    - phone
+    type: object
+  internal_modules_auth.ResetSetRequest:
+    properties:
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      token:
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  internal_modules_auth.ResetTokenResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  internal_modules_auth.TokenExchangeRequest:
+    properties:
+      token:
+        type: string
+    required:
+    - token
+    type: object
+  internal_modules_auth.TokenResponse:
+    properties:
+      access_expires_at:
+        type: string
+      access_token:
+        type: string
+      refresh_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
+  internal_modules_authbot.IssueCodeRequest:
+    properties:
+      first_name:
+        maxLength: 1000
+        type: string
+      last_name:
+        maxLength: 1000
+        type: string
+      phone:
+        maxLength: 32
+        minLength: 5
+        type: string
+      telegram_id:
+        type: integer
+      username:
+        maxLength: 255
+        type: string
+    required:
+    - phone
+    - telegram_id
+    type: object
+  internal_modules_authbot.IssueCodeResponse:
+    properties:
+      code:
+        type: string
+      code_id:
+        type: string
+      expires_at:
+        type: string
+    type: object
+  internal_modules_authbot.LoginRequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
+  internal_modules_authbot.LoginResponse:
+    properties:
+      token:
+        $ref: '#/definitions/internal_modules_authbot.TokenResponse'
+      user:
+        $ref: '#/definitions/internal_modules_authbot.UserSummary'
+    type: object
+  internal_modules_authbot.SetMessageIDRequest:
+    properties:
+      message_id:
+        type: integer
+    required:
+    - message_id
+    type: object
+  internal_modules_authbot.TokenResponse:
+    properties:
+      access_expires_at:
+        type: string
+      access_token:
+        type: string
+      refresh_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
+  internal_modules_authbot.UserSummary:
+    properties:
+      first_name:
+        type: string
+      id:
+        type: string
+      last_name:
+        type: string
+      phone:
+        type: string
+      role:
+        type: string
+    type: object
+  internal_modules_blog.AdminBlogPostResponse:
+    properties:
+      author:
+        type: string
+      author_name:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      excerpt:
+        type: string
+      id:
+        type: string
+      is_published:
+        type: boolean
+      published_at:
+        type: string
+      reading_time:
+        type: integer
+      slug:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_blog.AdminListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_blog.AdminBlogPostResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_blog.CreateRequest:
+    properties:
+      content:
+        type: string
+      excerpt:
+        maxLength: 500
+        type: string
+      is_published:
+        type: boolean
+      title:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  internal_modules_blog.PublicDetailResponse:
+    properties:
+      author_name:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      excerpt:
+        type: string
+      id:
+        type: string
+      published_at:
+        type: string
+      reading_time:
+        type: integer
+      slug:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_blog.PublicListItemResponse:
+    properties:
+      excerpt:
+        type: string
+      id:
+        type: string
+      published_at:
+        type: string
+      reading_time:
+        type: integer
+      slug:
+        type: string
+      title:
+        type: string
+    type: object
+  internal_modules_blog.PublicListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_blog.PublicListItemResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_blog.UpdateRequest:
+    properties:
+      content:
+        type: string
+      excerpt:
+        maxLength: 500
+        type: string
+      is_published:
+        type: boolean
+      title:
+        maxLength: 255
+        minLength: 1
+        type: string
+    type: object
+  internal_modules_chat.ListMessagesResponse:
+    properties:
+      count:
+        type: integer
+      limit:
+        type: integer
+      messages:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+      page_size:
+        type: integer
+      results:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+      skip:
+        type: integer
+      total:
+        type: integer
+      total_items:
+        type: integer
+    type: object
+  internal_modules_chat.ListUsersResponse:
+    properties:
+      count:
+        type: integer
+      limit:
+        type: integer
+      page_size:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/internal_modules_chat.UserWithStats'
+        type: array
+      skip:
+        type: integer
+      total:
+        type: integer
+      total_items:
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/internal_modules_chat.UserWithStats'
+        type: array
+    type: object
+  internal_modules_chat.UserWithStats:
+    properties:
+      last_message:
+        additionalProperties: {}
+        type: object
+      total_messages:
+        type: integer
+      unread_count:
+        type: integer
+      user:
+        additionalProperties: {}
+        type: object
+    type: object
+  internal_modules_config.ConfigResponse:
+    properties:
+      key:
+        type: string
+      updated_at:
+        type: string
+      value:
+        items:
+          type: integer
+        type: array
+    type: object
+  internal_modules_config.builtinNodeManifestsResponse:
+    properties:
+      manifests:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+    type: object
+  internal_modules_credential.CreateRequest:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+      name:
+        maxLength: 120
+        minLength: 1
+        type: string
+      type_key:
+        maxLength: 40
+        type: string
+    required:
+    - data
+    - name
+    - type_key
+    type: object
+  internal_modules_credential.CredentialResponse:
+    properties:
+      created_at:
+        type: string
+      data:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      label:
+        type: string
+      mode:
+        type: string
+      name:
+        type: string
+      owner_id:
+        type: string
+      type_key:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_credential.Field:
+    properties:
+      default: {}
+      label:
+        type: string
+      name:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/internal_modules_credential.FieldOption'
+        type: array
+      required:
+        type: boolean
+      secret:
+        type: boolean
+      type:
+        description: text|password|number|textarea|select|url|switch
+        type: string
+    type: object
+  internal_modules_credential.FieldOption:
+    properties:
+      label:
+        type: string
+      value:
+        type: string
+    type: object
+  internal_modules_credential.InternalResponse:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      mode:
+        type: string
+      name:
+        type: string
+      type_key:
+        type: string
+    type: object
+  internal_modules_credential.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_credential.CredentialResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_credential.OAuthStartRequest:
+    properties:
+      type_key:
+        maxLength: 40
+        type: string
+    required:
+    - type_key
+    type: object
+  internal_modules_credential.OAuthStartResponse:
+    properties:
+      authorize_url:
+        type: string
+    type: object
+  internal_modules_credential.TypeDef:
+    properties:
+      color:
+        type: string
+      editable:
+        description: always false — code types are immutable
+        type: boolean
+      fields:
+        items:
+          $ref: '#/definitions/internal_modules_credential.Field'
+        type: array
+      icon:
+        type: string
+      key:
+        type: string
+      label:
+        type: string
+      mode:
+        description: bearer|apikey|basic|header|oauth2|none
+        type: string
+      provider:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      source:
+        description: always "code" — admin/module sources are not ported
+        type: string
+    type: object
+  internal_modules_credential.UpdateRequest:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+      name:
+        maxLength: 120
+        minLength: 1
+        type: string
+    type: object
+  internal_modules_file.ChartSeries:
+    properties:
+      dates:
+        items:
+          type: string
+        type: array
+      values:
+        items:
+          type: number
+        type: array
+    type: object
+  internal_modules_file.CreateResourceRequest:
+    properties:
+      cpu:
+        minimum: 0
+        type: integer
+      hostname:
+        maxLength: 255
+        minLength: 1
+        type: string
+      net_rx:
+        minimum: 0
+        type: integer
+      net_tx:
+        minimum: 0
+        type: integer
+      project_id:
+        type: string
+      ram:
+        minimum: 0
+        type: integer
+    required:
+    - hostname
+    - project_id
+    type: object
+  internal_modules_file.FileListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_file.FileResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_file.FileResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      filetype:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      project_id:
+        type: string
+      size:
+        type: integer
+      updated_at:
+        type: string
+      url:
+        type: string
+      uuid:
+        type: string
+    type: object
+  internal_modules_file.ResourceListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_file.ResourceResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_file.ResourceResponse:
+    properties:
+      cpu:
+        type: integer
+      created_at:
+        type: string
+      hostname:
+        type: string
+      id:
+        type: string
+      net_rx:
+        type: integer
+      net_tx:
+        type: integer
+      project_id:
+        type: string
+      ram:
+        type: integer
+    type: object
+  internal_modules_file.UpdateFileRequest:
+    properties:
+      filetype:
+        enum:
+        - file
+        - photo
+        - video
+        - audio
+        type: string
+    type: object
+  internal_modules_file.UsedChart:
+    properties:
+      cpu:
+        $ref: '#/definitions/internal_modules_file.ChartSeries'
+      net_rx:
+        $ref: '#/definitions/internal_modules_file.ChartSeries'
+      net_tx:
+        $ref: '#/definitions/internal_modules_file.ChartSeries'
+      ram:
+        $ref: '#/definitions/internal_modules_file.ChartSeries'
+      storage:
+        $ref: '#/definitions/internal_modules_file.ChartSeries'
+    type: object
+  internal_modules_file.UsedResponse:
+    properties:
+      chart:
+        $ref: '#/definitions/internal_modules_file.UsedChart'
+      used_cpu:
+        type: integer
+      used_net_rx:
+        type: integer
+      used_net_tx:
+        type: integer
+      used_ram:
+        type: integer
+      used_storage:
+        type: integer
+    type: object
+  internal_modules_kyc.AdminListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_kyc.AdminVerificationResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_kyc.AdminVerificationResponse:
+    properties:
+      created_at:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      passport_image:
+        type: string
+      rejection_reason:
+        type: string
+      residence_reference:
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: string
+      reviewed_by_phone:
+        type: string
+      selfie_image:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+      user_phone:
+        type: string
+    type: object
+  internal_modules_kyc.ApproveRequest:
+    properties:
+      note:
+        maxLength: 255
+        type: string
+    type: object
+  internal_modules_kyc.RejectRequest:
+    properties:
+      rejection_reason:
+        maxLength: 500
+        type: string
+    required:
+    - rejection_reason
+    type: object
+  internal_modules_kyc.StatusResponse:
+    properties:
+      is_verified:
+        type: boolean
+      verification:
+        $ref: '#/definitions/internal_modules_kyc.VerificationResponse'
+    type: object
+  internal_modules_kyc.VerificationResponse:
+    properties:
+      created_at:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      passport_image:
+        type: string
+      rejection_reason:
+        type: string
+      residence_reference:
+        type: string
+      reviewed_at:
+        type: string
+      selfie_image:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_message.CreateRequest:
+    properties:
+      button_type:
+        enum:
+        - inline
+        - reply
+        type: string
+      buttons:
+        items:
+          type: integer
+        type: array
+      caption:
+        maxLength: 4096
+        type: string
+      file_id:
+        maxLength: 255
+        type: string
+      message_type:
+        enum:
+        - text
+        - photo
+        - video
+        type: string
+      project_id:
+        type: string
+    required:
+    - project_id
+    type: object
+  internal_modules_message.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_message.MessageResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_message.MessageResponse:
+    properties:
+      button_type:
+        type: string
+      buttons:
+        items:
+          type: integer
+        type: array
+      caption:
+        type: string
+      created_at:
+        type: string
+      done:
+        type: integer
+      fail:
+        type: integer
+      file_id:
+        type: string
+      id:
+        type: string
+      message_type:
+        type: string
+      project_id:
+        type: string
+      status:
+        type: string
+      total:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_modules_message.UpdateRequest:
+    properties:
+      button_type:
+        enum:
+        - inline
+        - reply
+        type: string
+      buttons:
+        items:
+          type: integer
+        type: array
+      caption:
+        maxLength: 4096
+        type: string
+      file_id:
+        maxLength: 255
+        type: string
+      message_type:
+        enum:
+        - text
+        - photo
+        - video
+        type: string
+    type: object
+  internal_modules_payment.AdminRejectWithdrawalRequest:
+    properties:
+      rejection_reason:
+        maxLength: 500
+        type: string
+    required:
+    - rejection_reason
+    type: object
+  internal_modules_payment.CreateOrderRequest:
+    properties:
+      amount:
+        type: string
+      comment:
+        maxLength: 512
+        type: string
+      idempotency_key:
+        maxLength: 128
+        type: string
+      is_debug:
+        type: boolean
+      payer_chat_id:
+        type: integer
+      payer_first_name:
+        maxLength: 255
+        type: string
+      payer_last_name:
+        maxLength: 255
+        type: string
+      payer_username:
+        maxLength: 255
+        type: string
+      project_id:
+        type: string
+      provider:
+        enum:
+        - click
+        - paycue
+        - payme
+        - paynet
+        - uzum
+        type: string
+    required:
+    - amount
+    - payer_chat_id
+    - project_id
+    type: object
+  internal_modules_payment.CreatePaymentLinkRequest:
+    properties:
+      amount:
+        type: string
+      method:
+        enum:
+        - click
+        - payme
+        type: string
+    required:
+    - amount
+    - method
+    type: object
+  internal_modules_payment.CreateWithdrawalRequest:
+    properties:
+      amount:
+        type: string
+      card_number:
+        type: string
+      card_owner:
+        maxLength: 255
+        type: string
+      project_id:
+        type: string
+    required:
+    - amount
+    - card_number
+    - card_owner
+    type: object
+  internal_modules_payment.EarningsResponse:
+    properties:
+      balance:
+        type: integer
+      by_bot:
+        items:
+          $ref: '#/definitions/internal_modules_payment.ProjectEarningResponse'
+        type: array
+      count:
+        type: integer
+      limit:
+        type: integer
+      offset:
+        type: integer
+      orders:
+        items:
+          $ref: '#/definitions/internal_modules_payment.OrderResponse'
+        type: array
+      total_commission:
+        type: string
+      total_earned:
+        type: string
+      withdrawable:
+        type: string
+    type: object
+  internal_modules_payment.HistoryListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_payment.HistoryResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_payment.HistoryResponse:
+    properties:
+      amount:
+        type: string
+      comment:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  internal_modules_payment.OrderCreateResponse:
+    properties:
+      amount:
+        type: string
+      commission:
+        type: string
+      net_amount:
+        type: string
+      order_id:
+        type: string
+      pay_instruction:
+        type: string
+      pay_url:
+        type: string
+    type: object
+  internal_modules_payment.OrderListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_payment.OrderResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_payment.OrderResponse:
+    properties:
+      amount:
+        type: string
+      comment:
+        type: string
+      commission:
+        type: string
+      created_at:
+        type: string
+      external_id:
+        type: string
+      id:
+        type: string
+      net_amount:
+        type: string
+      owner:
+        type: string
+      owner_phone:
+        type: string
+      paid_at:
+        type: string
+      payer_chat_id:
+        type: integer
+      payer_first_name:
+        type: string
+      payer_last_name:
+        type: string
+      payer_username:
+        type: string
+      project_id:
+        type: string
+      project_name:
+        type: string
+      provider:
+        type: string
+      status:
+        type: string
+    type: object
+  internal_modules_payment.PaymentLinkResponse:
+    properties:
+      link:
+        type: string
+    type: object
+  internal_modules_payment.ProjectEarningResponse:
+    properties:
+      count:
+        type: integer
+      project_id:
+        type: string
+      project_name:
+        type: string
+      total_earned:
+        type: string
+    type: object
+  internal_modules_payment.TransactionListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_payment.TransactionResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_payment.TransactionResponse:
+    properties:
+      amount:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      status:
+        type: boolean
+      updated_at:
+        type: string
+      user:
+        type: string
+      user_phone:
+        type: string
+    type: object
+  internal_modules_payment.WithdrawalListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_payment.WithdrawalResponse:
+    properties:
+      amount:
+        type: string
+      card_number:
+        type: string
+      card_owner:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      project_name:
+        type: string
+      rejection_reason:
+        type: string
+      reviewed_at:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      user:
+        type: string
+      user_phone:
+        type: string
+    type: object
+  internal_modules_plan.CreatePlanRequest:
+    properties:
+      cached_token_rate:
+        type: string
+      description:
+        type: string
+      features:
+        items:
+          type: integer
+        type: array
+      is_active:
+        type: boolean
+      is_top:
+        type: boolean
+      max_bots:
+        minimum: 0
+        type: integer
+      max_tokens:
+        minimum: 0
+        type: integer
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      price:
+        type: string
+      sort_order:
+        type: integer
+    required:
+    - name
+    type: object
+  internal_modules_plan.PlanResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      features:
+        items:
+          type: integer
+        type: array
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_top:
+        type: boolean
+      max_bots:
+        type: integer
+      max_tokens:
+        type: integer
+      name:
+        type: string
+      name_display:
+        type: string
+      price:
+        type: string
+    type: object
+  internal_modules_plan.ReportUsageRequest:
+    properties:
+      cache_read_tokens:
+        minimum: 0
+        type: integer
+      input_tokens:
+        minimum: 0
+        type: integer
+      output_tokens:
+        minimum: 0
+        type: integer
+      project_id:
+        type: string
+      user_id:
+        type: string
+    required:
+    - user_id
+    type: object
+  internal_modules_plan.ReportUsageResponse:
+    properties:
+      input_tokens_added:
+        type: integer
+      output_tokens_added:
+        type: integer
+      project_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  internal_modules_plan.SubscriptionResponse:
+    properties:
+      bots_count:
+        type: integer
+      can_create_bot:
+        type: boolean
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_token_limit_exceeded:
+        type: boolean
+      plan:
+        type: string
+      plan_details:
+        $ref: '#/definitions/internal_modules_plan.PlanResponse'
+      started_at:
+        type: string
+      status:
+        type: string
+      status_display:
+        type: string
+      token_reset_at:
+        type: string
+      tokens_remaining:
+        type: integer
+      tokens_used_input:
+        type: integer
+      tokens_used_output:
+        type: integer
+    type: object
+  internal_modules_plan.UpdatePlanRequest:
+    properties:
+      cached_token_rate:
+        type: string
+      description:
+        type: string
+      features:
+        items:
+          type: integer
+        type: array
+      is_active:
+        type: boolean
+      is_top:
+        type: boolean
+      max_bots:
+        minimum: 0
+        type: integer
+      max_tokens:
+        minimum: 0
+        type: integer
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      price:
+        type: string
+      sort_order:
+        type: integer
+    type: object
+  internal_modules_plan.UpgradeRequest:
+    properties:
+      months:
+        enum:
+        - 1
+        - 3
+        - 6
+        - 12
+        type: integer
+      plan_id:
+        type: string
+    required:
+    - plan_id
+    type: object
+  internal_modules_plan.UpgradeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_modules_plan.SubscriptionResponse'
+      message:
+        type: string
+      new_plan:
+        type: string
+      previous_plan:
+        type: string
+    type: object
+  internal_modules_plan.UsageResponse:
+    properties:
+      ai_token_usage:
+        $ref: '#/definitions/internal_modules_plan.aiTokenUsageDTO'
+      bots:
+        $ref: '#/definitions/internal_modules_plan.botsDTO'
+      bots_count:
+        type: integer
+      expires_at:
+        type: string
+      max_bots:
+        type: integer
+      plan:
+        type: string
+      plan_name:
+        type: string
+      status:
+        type: string
+      token_reset_at:
+        type: string
+      tokens:
+        $ref: '#/definitions/internal_modules_plan.tokensDTO'
+      tokens_limit:
+        type: integer
+      tokens_remaining:
+        type: integer
+      tokens_used_input:
+        type: integer
+      tokens_used_output:
+        type: integer
+      usage_percentage:
+        type: number
+    type: object
+  internal_modules_plan.aiTokenUsageDTO:
+    properties:
+      input_used:
+        type: integer
+      limit:
+        type: integer
+      output_used:
+        type: integer
+      plan:
+        $ref: '#/definitions/internal_modules_plan.aiTokenUsagePlan'
+      remaining:
+        type: integer
+      status:
+        type: string
+      token_reset_at:
+        type: string
+      used:
+        type: integer
+    type: object
+  internal_modules_plan.aiTokenUsagePlan:
+    properties:
+      display:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_modules_plan.botsDTO:
+    properties:
+      can_create:
+        type: boolean
+      count:
+        type: integer
+      limit:
+        type: integer
+    type: object
+  internal_modules_plan.tokensDTO:
+    properties:
+      input_used:
+        type: integer
+      output_used:
+        type: integer
+      total:
+        $ref: '#/definitions/internal_modules_plan.tokensTotalDTO'
+    type: object
+  internal_modules_plan.tokensTotalDTO:
+    properties:
+      limit:
+        type: integer
+      limit_exceeded:
+        type: boolean
+      remaining:
+        type: integer
+      usage_percentage:
+        type: number
+      used:
+        type: integer
+    type: object
+  internal_modules_project.AdminProjectDetailResponse:
+    properties:
+      created_at:
+        type: string
+      debug_webhook_uuid:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_template:
+        type: boolean
+      name:
+        type: string
+      owner:
+        $ref: '#/definitions/internal_modules_project.AdminProjectOwnerResponse'
+      owner_id:
+        type: string
+      release_webhook_uuid:
+        type: string
+      releases:
+        items:
+          $ref: '#/definitions/internal_modules_project.AdminProjectReleaseResponse'
+        type: array
+      releases_count:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  internal_modules_project.AdminProjectListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_project.AdminProjectResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_project.AdminProjectOwnerResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      phone:
+        type: string
+    type: object
+  internal_modules_project.AdminProjectReleaseResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      service_id:
+        type: string
+      status:
+        type: string
+      version:
+        type: integer
+    type: object
+  internal_modules_project.AdminProjectResponse:
+    properties:
+      created_at:
+        type: string
+      debug_webhook_uuid:
+        type: string
+      description:
+        type: string
+      has_release:
+        type: boolean
+      id:
+        type: string
+      is_template:
+        type: boolean
+      name:
+        type: string
+      owner_id:
+        type: string
+      owner_phone:
+        type: string
+      release_status:
+        type: string
+      release_webhook_uuid:
+        type: string
+      releases_count:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  internal_modules_project.CollabTokenResponse:
+    properties:
+      room:
+        type: string
+      token:
+        type: string
+    type: object
+  internal_modules_project.CreateFromTemplateRequest:
+    properties:
+      credentials:
+        additionalProperties: {}
+        type: object
+      envs:
+        additionalProperties:
+          type: string
+        type: object
+      managed_bot_id:
+        type: string
+      mode:
+        enum:
+        - release
+        - debug
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      template:
+        description: Template is the template's id (UUID) or slug.
+        type: string
+      token:
+        maxLength: 255
+        type: string
+    required:
+    - name
+    - template
+    type: object
+  internal_modules_project.CreateRequest:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      flow:
+        items:
+          type: integer
+        type: array
+      is_template:
+        type: boolean
+      managed_bot_id:
+        description: |-
+          ManagedBotID is an alternative to Token: a bot created through the
+          manager-bot wizard (mirrors Django's CreateProjectSerializer.
+          managed_bot_id). Ignored when Token is also given.
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      token:
+        description: |-
+          Token is the Telegram bot token (optional — mirrors Django's
+          CreateProjectSerializer.token). Blank is fine: the dashboard falls back
+          to its bot_token_required flow on the first /relase call.
+        maxLength: 255
+        type: string
+      username:
+        maxLength: 255
+        type: string
+    required:
+    - name
+    type: object
+  internal_modules_project.DebugResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      service_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_project.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_project.ProjectResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_project.MonitoringHistoryResponse:
+    properties:
+      prometheus_available:
+        type: boolean
+      series:
+        $ref: '#/definitions/internal_modules_project.MonitoringSeriesResponse'
+    type: object
+  internal_modules_project.MonitoringListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_project.MonitoringProjectResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      prometheus_available:
+        type: boolean
+      total:
+        type: integer
+    type: object
+  internal_modules_project.MonitoringProjectResponse:
+    properties:
+      cpu_cores:
+        type: integer
+      created_at:
+        type: string
+      disk_bytes:
+        type: integer
+      id:
+        type: string
+      memory_bytes:
+        type: integer
+      name:
+        type: string
+      owner_id:
+        type: string
+      owner_phone:
+        type: string
+      release_status:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_modules_project.MonitoringSeriesResponse:
+    properties:
+      cpu_cores:
+        items:
+          items:
+            format: float64
+            type: number
+          type: array
+        type: array
+      disk_bytes:
+        items:
+          items:
+            format: float64
+            type: number
+          type: array
+        type: array
+      memory_bytes:
+        items:
+          items:
+            format: float64
+            type: number
+          type: array
+        type: array
+      net_rx_bps:
+        items:
+          items:
+            format: float64
+            type: number
+          type: array
+        type: array
+      net_tx_bps:
+        items:
+          items:
+            format: float64
+            type: number
+          type: array
+        type: array
+    type: object
+  internal_modules_project.ProjectResponse:
+    properties:
+      bot_link:
+        type: string
+      bot_mode:
+        description: |-
+          BotMode/BotUsername/BotLink are only set on the single-project fetch
+          (Usecase.Get, and therefore CreateFromTemplate's response, which
+          re-fetches via Get) — see Project.BotMode's doc comment. BotLink is
+          what the dashboard's launch wizard shows as "Botga kirish": for a
+          debug (tokenless) project it already carries the required
+          ?start=<debug_webhook_uuid> deep-link, since the shared test bot can't
+          route a bare t.me link to one specific project.
+        type: string
+      bot_username:
+        type: string
+      created_at:
+        type: string
+      debug:
+        allOf:
+        - $ref: '#/definitions/internal_modules_project.DebugResponse'
+        description: |-
+          Debug is only set on the single-project fetch (Usecase.Get) — mirrors
+          Django's RetrieveProjectSerializer nesting RetrieveDebugSerializer. The
+          dashboard's launch-status poll reads project.debug.status directly.
+      debug_webhook_uuid:
+        type: string
+      description:
+        type: string
+      flow:
+        items:
+          type: integer
+        type: array
+      id:
+        type: string
+      is_template:
+        type: boolean
+      name:
+        type: string
+      owner_id:
+        type: string
+      release_webhook_uuid:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  internal_modules_project.UpdateRequest:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      flow:
+        items:
+          type: integer
+        type: array
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      token:
+        maxLength: 255
+        type: string
+      username:
+        maxLength: 255
+        type: string
+    type: object
+  internal_modules_release.CreateReleaseRequest:
+    properties:
+      project_id:
+        type: string
+    required:
+    - project_id
+    type: object
+  internal_modules_release.DebugResponse:
+    properties:
+      created_at:
+        type: string
+      flow_hash:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      service_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_release.EnvironmentResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      secret:
+        type: boolean
+      updated_at:
+        type: string
+      value:
+        type: string
+    type: object
+  internal_modules_release.LogSnapshotResponse:
+    properties:
+      lines:
+        items:
+          type: string
+        type: array
+      pod_name:
+        type: string
+      truncated:
+        type: boolean
+    type: object
+  internal_modules_release.ReleaseResponse:
+    properties:
+      created_at:
+        type: string
+      flow:
+        items:
+          type: integer
+        type: array
+      id:
+        type: string
+      project_id:
+        type: string
+      service_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  internal_modules_release.UpsertEnvironmentRequest:
+    properties:
+      key:
+        maxLength: 255
+        minLength: 1
+        type: string
+      project_id:
+        type: string
+      secret:
+        type: boolean
+      value:
+        type: string
+    required:
+    - key
+    - project_id
+    - value
+    type: object
+  internal_modules_template.AdminTemplateActionResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/internal_modules_template.CategoryResponse'
+        type: array
+      created_at:
+        type: string
+      demo_url:
+        type: string
+      description:
+        type: string
+      discount:
+        type: string
+      discount_type:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeatureResponse'
+        type: array
+      id:
+        type: string
+      image:
+        type: string
+      is_liked:
+        type: boolean
+      is_ordered:
+        type: boolean
+      is_verify:
+        type: boolean
+      likes_count:
+        type: integer
+      name:
+        type: string
+      original_price:
+        type: string
+      price:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      video:
+        type: string
+      views:
+        type: integer
+    type: object
+  internal_modules_template.AdminTemplateDetailResponse:
+    properties:
+      author_id:
+        type: string
+      author_name:
+        type: string
+      author_phone:
+        type: string
+      categories:
+        items:
+          $ref: '#/definitions/internal_modules_template.CategoryResponse'
+        type: array
+      created_at:
+        type: string
+      demo_url:
+        type: string
+      description:
+        type: string
+      discount:
+        type: string
+      discount_type:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeatureResponse'
+        type: array
+      id:
+        type: string
+      image:
+        type: string
+      is_verify:
+        type: boolean
+      likes_count:
+        type: integer
+      name:
+        type: string
+      original_price:
+        type: string
+      price:
+        type: string
+      project_id:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      video:
+        type: string
+      views:
+        type: integer
+    type: object
+  internal_modules_template.AdminTemplateListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_template.AdminTemplateResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_template.AdminTemplateResponse:
+    properties:
+      author_id:
+        type: string
+      author_name:
+        type: string
+      author_phone:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      image:
+        type: string
+      is_verify:
+        type: boolean
+      name:
+        type: string
+      original_price:
+        type: string
+      price:
+        type: string
+      slug:
+        type: string
+      status:
+        description: '"verified" | "pending"'
+        type: string
+      updated_at:
+        type: string
+      views:
+        type: integer
+    type: object
+  internal_modules_template.ApproveSubmissionRequest:
+    properties:
+      discount:
+        type: string
+      discount_type:
+        enum:
+        - percent
+        - amount
+        type: string
+    type: object
+  internal_modules_template.CategoryResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_modules_template.CreateAdminTemplateRequest:
+    properties:
+      author_id:
+        type: string
+      category_ids:
+        items:
+          type: string
+        type: array
+      demo_url:
+        type: string
+      description:
+        type: string
+      discount:
+        type: string
+      discount_type:
+        enum:
+        - percent
+        - amount
+        type: string
+      feature_ids:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      is_verify:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      original_price:
+        type: string
+      project_id:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      slug:
+        maxLength: 255
+        type: string
+      video:
+        type: string
+    required:
+    - name
+    type: object
+  internal_modules_template.CreateCategoryRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  internal_modules_template.CreateFeatureRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      value:
+        type: string
+    required:
+    - name
+    type: object
+  internal_modules_template.CreateOrderRequest:
+    properties:
+      template_id:
+        type: string
+    required:
+    - template_id
+    type: object
+  internal_modules_template.CreateSubmissionRequest:
+    properties:
+      category_ids:
+        items:
+          type: string
+        type: array
+      demo_url:
+        type: string
+      description:
+        type: string
+      feature_ids:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      original_price:
+        type: string
+      project_id:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      video:
+        type: string
+    required:
+    - description
+    - name
+    - original_price
+    - project_id
+    - short_description
+    type: object
+  internal_modules_template.CreateWithdrawalRequest:
+    properties:
+      amount:
+        type: string
+      card_number:
+        type: string
+      card_owner:
+        type: string
+    required:
+    - amount
+    - card_number
+    - card_owner
+    type: object
+  internal_modules_template.FeatureResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      value:
+        type: string
+    type: object
+  internal_modules_template.FeedFeatureTag:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      value:
+        type: string
+    type: object
+  internal_modules_template.FeedItem:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeedTag'
+        type: array
+      description:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeedFeatureTag'
+        type: array
+      flow:
+        items:
+          type: integer
+        type: array
+      id:
+        type: string
+      is_verify:
+        type: boolean
+      name:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      slug:
+        type: string
+    type: object
+  internal_modules_template.FeedListResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeedItem'
+        type: array
+    type: object
+  internal_modules_template.FeedTag:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_modules_template.LikeResponse:
+    properties:
+      liked:
+        type: boolean
+    type: object
+  internal_modules_template.OrderListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_template.OrderResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_template.OrderResponse:
+    properties:
+      amount:
+        type: string
+      commission_paid:
+        type: boolean
+      created_at:
+        type: string
+      id:
+        type: string
+      payment_status:
+        type: boolean
+      status:
+        type: string
+      template_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_template.RejectRequest:
+    properties:
+      rejection_reason:
+        type: string
+    required:
+    - rejection_reason
+    type: object
+  internal_modules_template.SubmissionListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_template.SubmissionResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/internal_modules_template.CategoryResponse'
+        type: array
+      created_at:
+        type: string
+      demo_url:
+        type: string
+      description:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeatureResponse'
+        type: array
+      id:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      original_price:
+        type: string
+      project_id:
+        type: string
+      rejection_reason:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: string
+      short_description:
+        type: string
+      status:
+        type: string
+      template_id:
+        type: string
+      updated_at:
+        type: string
+      video:
+        type: string
+    type: object
+  internal_modules_template.TemplateListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_template.TemplateResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_template.TemplateResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/internal_modules_template.CategoryResponse'
+        type: array
+      created_at:
+        type: string
+      demo_url:
+        type: string
+      description:
+        type: string
+      discount:
+        type: string
+      discount_type:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/internal_modules_template.FeatureResponse'
+        type: array
+      id:
+        type: string
+      image:
+        type: string
+      is_liked:
+        type: boolean
+      is_ordered:
+        type: boolean
+      likes_count:
+        type: integer
+      name:
+        type: string
+      original_price:
+        type: string
+      price:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      slug:
+        type: string
+      updated_at:
+        type: string
+      video:
+        type: string
+      views:
+        type: integer
+    type: object
+  internal_modules_template.UpdateAdminTemplateRequest:
+    properties:
+      category_ids:
+        items:
+          type: string
+        type: array
+      demo_url:
+        type: string
+      description:
+        type: string
+      discount:
+        type: string
+      discount_type:
+        enum:
+        - percent
+        - amount
+        type: string
+      feature_ids:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      is_verify:
+        type: boolean
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      original_price:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      video:
+        type: string
+    type: object
+  internal_modules_template.UpdateSubmissionRequest:
+    properties:
+      category_ids:
+        items:
+          type: string
+        type: array
+      demo_url:
+        type: string
+      description:
+        type: string
+      feature_ids:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      original_price:
+        type: string
+      required_envs:
+        items:
+          type: integer
+        type: array
+      short_description:
+        type: string
+      video:
+        type: string
+    type: object
+  internal_modules_template.WithdrawalListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_template.WithdrawalResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_template.WithdrawalResponse:
+    properties:
+      amount:
+        type: string
+      card_number:
+        type: string
+      card_owner:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      rejection_reason:
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      user:
+        type: string
+      user_phone:
+        type: string
+    type: object
+  internal_modules_ticket.CreateTicketRequest:
+    properties:
+      attachment_url:
+        maxLength: 2048
+        type: string
+      message:
+        minLength: 1
+        type: string
+      subject:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - message
+    - subject
+    type: object
+  internal_modules_ticket.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_ticket.ReplyRequest:
+    properties:
+      attachment_url:
+        maxLength: 2048
+        type: string
+      message:
+        minLength: 1
+        type: string
+    required:
+    - message
+    type: object
+  internal_modules_ticket.TicketLastMessageResponse:
+    properties:
+      message:
+        type: string
+      sender:
+        type: string
+    type: object
+  internal_modules_ticket.TicketMessageResponse:
+    properties:
+      attachment_url:
+        type: string
+      author_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      sender:
+        type: string
+    type: object
+  internal_modules_ticket.TicketResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      last_message:
+        $ref: '#/definitions/internal_modules_ticket.TicketLastMessageResponse'
+      messages:
+        items:
+          $ref: '#/definitions/internal_modules_ticket.TicketMessageResponse'
+        type: array
+      status:
+        type: string
+      subject:
+        type: string
+      updated_at:
+        type: string
+      user:
+        type: string
+      user_phone:
+        type: string
+    type: object
+  internal_modules_user.AdminDetailResponse:
+    properties:
+      authored_count:
+        type: integer
+      authored_templates:
+        items:
+          type: object
+        type: array
+      balance:
+        type: integer
+      created_at:
+        type: string
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_kyc_verified:
+        type: boolean
+      last_name:
+        type: string
+      phone:
+        type: string
+      projects:
+        items:
+          $ref: '#/definitions/internal_modules_user.ProjectBriefResponse'
+        type: array
+      projects_count:
+        type: integer
+      purchased_count:
+        type: integer
+      purchased_templates:
+        items:
+          type: object
+        type: array
+      role:
+        type: string
+      subscription:
+        $ref: '#/definitions/internal_modules_user.SubscriptionResponse'
+      template_balance:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+      validated_at:
+        type: string
+    type: object
+  internal_modules_user.BalanceAdjustRequest:
+    properties:
+      delta:
+        type: integer
+      reason:
+        maxLength: 500
+        type: string
+    required:
+    - delta
+    type: object
+  internal_modules_user.BalanceResponse:
+    properties:
+      balance:
+        type: integer
+      template_balance:
+        type: string
+    type: object
+  internal_modules_user.ChangePasswordRequest:
+    properties:
+      new_password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  internal_modules_user.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_modules_user.UserResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_modules_user.ProjectBriefResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      is_template:
+        type: boolean
+      name:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_modules_user.SetRoleRequest:
+    properties:
+      role:
+        enum:
+        - user
+        - admin
+        - superuser
+        type: string
+    required:
+    - role
+    type: object
+  internal_modules_user.SubscriptionResponse:
+    properties:
+      bots_count:
+        type: integer
+      expires_at:
+        type: string
+      max_bots:
+        type: integer
+      plan:
+        type: string
+      plan_name:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+      token_limit:
+        type: integer
+      token_reset_at:
+        type: string
+      tokens_used_input:
+        type: integer
+      tokens_used_output:
+        type: integer
+      tokens_used_total:
+        type: integer
+    type: object
+  internal_modules_user.UpdateMeRequest:
+    properties:
+      email:
+        type: string
+      first_name:
+        maxLength: 150
+        minLength: 1
+        type: string
+      last_name:
+        maxLength: 150
+        minLength: 1
+        type: string
+      username:
+        maxLength: 150
+        type: string
+    type: object
+  internal_modules_user.UserResponse:
+    properties:
+      balance:
+        type: integer
+      created_at:
+        type: string
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_kyc_verified:
+        type: boolean
+      last_name:
+        type: string
+      phone:
+        type: string
+      role:
+        type: string
+      template_balance:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+      validated_at:
+        type: string
+    type: object
+  internal_modules_webhook.ManagedBotClaimRequest:
+    properties:
+      username:
+        type: string
+    required:
+    - username
+    type: object
+  internal_modules_webhook.ManagedBotConfigResponse:
+    properties:
+      deep_link_template:
+        type: string
+      enabled:
+        type: boolean
+      manager_username:
+        type: string
+    type: object
+  internal_modules_webhook.ManagedBotResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      tg_bot_id:
+        type: integer
+      used:
+        type: boolean
+      username:
+        type: string
+    type: object
+  internal_modules_webhook.MintRequest:
+    properties:
+      chat_id:
+        type: integer
+      node_id:
+        maxLength: 255
+        type: string
+      project:
+        type: string
+    required:
+    - node_id
+    - project
+    type: object
+  internal_modules_webhook.MintResponse:
+    properties:
+      chat_id:
+        type: integer
+      token:
+        type: string
+      url:
+        type: string
+    type: object
+  internal_modules_webhook.ResolveResponse:
+    properties:
+      chat_id:
+        type: integer
+      debug_webhook_uuid:
+        type: string
+      node_id:
+        type: string
+      project_id:
+        type: string
+      release_webhook_uuid:
+        type: string
+      token:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: UzStack
+    url: https://github.com/botspace/backend
+  description: Go clean architecture template — gin + pgx + sqlc + JWT auth.
+  license:
+    name: MIT
+  termsOfService: http://swagger.io/terms/
+  title: jst-go API
+  version: "1.0"
+paths:
+  /admin/audit-log:
+    get:
+      parameters:
+      - description: Filter by action (substring match)
+        in: query
+        name: action
+        type: string
+      - description: Filter by target (substring match)
+        in: query
+        name: target
+        type: string
+      - description: Filter by actor user id
+        in: query
+        name: actor_id
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_administration.AuditLogListResponse'
+      security:
+      - BearerAuth: []
+      summary: List admin audit log entries (admin)
+      tags:
+      - admin
+  /admin/audit-log/{id}:
+    get:
+      parameters:
+      - description: Audit log id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_administration.AuditLogResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an audit log entry by id (admin)
+      tags:
+      - admin
+  /admin/blog:
+    get:
+      parameters:
+      - description: Filter by title/slug/excerpt
+        in: query
+        name: search
+        type: string
+      - description: Filter by publication state
+        in: query
+        name: is_published
+        type: boolean
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_blog.AdminListResponse'
+      security:
+      - BearerAuth: []
+      summary: List blog posts (admin, drafts included)
+      tags:
+      - admin-blog
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Post payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_blog.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_blog.AdminBlogPostResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a blog post (admin)
+      tags:
+      - admin-blog
+  /admin/blog/{id}:
+    delete:
+      parameters:
+      - description: Post id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a blog post (admin)
+      tags:
+      - admin-blog
+    get:
+      parameters:
+      - description: Post id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_blog.AdminBlogPostResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a blog post by id (admin)
+      tags:
+      - admin-blog
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Post id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_blog.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_blog.AdminBlogPostResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a blog post (admin)
+      tags:
+      - admin-blog
+  /admin/credential-types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_credential.TypeDef'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List credential types (admin, "Credential turlari" page)
+      tags:
+      - credentials-admin
+  /admin/monitoring:
+    get:
+      parameters:
+      - description: Filter by name
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.MonitoringListResponse'
+      security:
+      - BearerAuth: []
+      summary: Per-project resource usage snapshot across every owner (admin)
+      tags:
+      - projects-admin
+  /admin/monitoring/{id}/history:
+    get:
+      parameters:
+      - description: Project ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Time range: 1h, 6h, 24h, 7d'
+        in: query
+        name: range
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.MonitoringHistoryResponse'
+      security:
+      - BearerAuth: []
+      summary: Per-project resource usage history (admin)
+      tags:
+      - projects-admin
+  /admin/payment/orders:
+    get:
+      parameters:
+      - description: Filter by status (created/paid/cancelled/refunded)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.OrderListResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] List all bot payment orders (all owners)'
+      tags:
+      - payment-admin
+  /admin/payment/transactions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.TransactionListResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] List all gateway transactions (all users)'
+      tags:
+      - payment-admin
+  /admin/payment/withdrawals:
+    get:
+      parameters:
+      - description: Filter by status (pending/approved/rejected)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalListResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] List all bot-income withdrawal requests'
+      tags:
+      - payment-admin
+  /admin/payment/withdrawals/{id}:
+    get:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] Get one withdrawal request'
+      tags:
+      - payment-admin
+  /admin/payment/withdrawals/{id}/approve:
+    patch:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] Approve a withdrawal — deducts users.balance'
+      tags:
+      - payment-admin
+  /admin/payment/withdrawals/{id}/reject:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rejection reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_payment.AdminRejectWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: '[admin] Reject a withdrawal'
+      tags:
+      - payment-admin
+  /admin/plans:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_plan.PlanResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List every plan, active and inactive (admin)
+      tags:
+      - plans-admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Plan payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_plan.CreatePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_plan.PlanResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a pricing plan (admin)
+      tags:
+      - plans-admin
+  /admin/plans/{id}:
+    delete:
+      parameters:
+      - description: Plan id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a pricing plan (admin)
+      tags:
+      - plans-admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Plan id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_plan.UpdatePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_plan.PlanResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a pricing plan (admin)
+      tags:
+      - plans-admin
+  /admin/projects:
+    get:
+      parameters:
+      - description: Filter by name
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.AdminProjectListResponse'
+      security:
+      - BearerAuth: []
+      summary: List all projects across every owner (admin)
+      tags:
+      - projects-admin
+  /admin/projects/{id}:
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.AdminProjectDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get any project's detail regardless of owner (admin)
+      tags:
+      - projects-admin
+  /admin/settings/{key}:
+    get:
+      parameters:
+      - description: Config key (general, ai)
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_config.ConfigResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a platform config entry (admin)
+      tags:
+      - admin-settings
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Config key (general, ai)
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Arbitrary JSON config value
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_config.ConfigResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a platform config entry (admin)
+      tags:
+      - admin-settings
+  /admin/stats/dashboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_administration.DashboardStatsResponse'
+      security:
+      - BearerAuth: []
+      summary: Admin dashboard KPIs (admin)
+      tags:
+      - admin
+  /admin/templates:
+    get:
+      parameters:
+      - description: Filter by name/slug/description
+        in: query
+        name: search
+        type: string
+      - description: 'Filter by status: verified|pending'
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateListResponse'
+      security:
+      - BearerAuth: []
+      summary: List all templates across every author (admin)
+      tags:
+      - template-admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateAdminTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateActionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a template directly (admin, bypasses submission review)
+      tags:
+      - template-admin
+  /admin/templates/{id}:
+    delete:
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a template (admin)
+      tags:
+      - template-admin
+    get:
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get any template's full detail regardless of status (admin)
+      tags:
+      - template-admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.UpdateAdminTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateActionResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a template (admin)
+      tags:
+      - template-admin
+  /admin/templates/{id}/reject:
+    patch:
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateActionResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Unverify/unpublish a template (admin)
+      tags:
+      - template-admin
+  /admin/templates/{id}/verify:
+    patch:
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.AdminTemplateActionResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark a template verified/published (admin)
+      tags:
+      - template-admin
+  /admin/tickets:
+    get:
+      parameters:
+      - description: Filter by status (open, pending, closed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by ticket owner
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by subject
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List all tickets (admin)
+      tags:
+      - tickets-admin
+  /admin/tickets/{id}:
+    get:
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get any ticket with its full conversation (admin)
+      tags:
+      - tickets-admin
+  /admin/tickets/{id}/close:
+    post:
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Close any ticket (admin)
+      tags:
+      - tickets-admin
+  /admin/tickets/{id}/respond:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_ticket.ReplyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Respond to a ticket as support (admin)
+      tags:
+      - tickets-admin
+  /admin/users/{id}/balance:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Signed delta + reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_user.BalanceAdjustRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Adjust a user's balance by a signed delta (admin), writing an audit
+        history row
+      tags:
+      - users-admin
+  /admin/users/{id}/ban:
+    post:
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ban a user (admin) — sets is_active = false
+      tags:
+      - users-admin
+  /admin/users/{id}/unban:
+    post:
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Unban a user (admin) — sets is_active = true
+      tags:
+      - users-admin
+  /auth/api-tokens:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_auth.APITokenResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List my personal access tokens (never the raw token)
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Token name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.CreateAPITokenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_auth.CreateAPITokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a personal access token ("bsp_...", shown once)
+      tags:
+      - auth
+  /auth/api-tokens/{id}:
+    delete:
+      parameters:
+      - description: Token id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke a personal access token
+      tags:
+      - auth
+  /auth/confirm:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Phone + code
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.ConfirmRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Confirm registration (step 2) — verify OTP, return tokens
+      tags:
+      - auth
+  /auth/google:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Google ID token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.GoogleLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Login (or sign up) with a Google ID token
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Login by phone + password
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.RefreshRequest'
+      responses:
+        "204":
+          description: No Content
+      summary: Logout — revoke a refresh token
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_modules_auth.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Register (step 1) — create pending user and send OTP
+      tags:
+      - auth
+  /auth/resend:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Phone
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.PhoneRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_modules_auth.MessageResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Resend the confirmation code
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Phone
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.PhoneRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_modules_auth.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Password reset (step 1) — send OTP to a known phone
+      tags:
+      - auth
+  /auth/reset-password/confirm:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Phone + code
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.ConfirmRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.ResetTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Password reset (step 2) — verify OTP, return reset token
+      tags:
+      - auth
+  /auth/reset-password/set:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset token + new password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.ResetSetRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Password reset (step 3) — set new password with reset token
+      tags:
+      - auth
+  /auth/token/exchange:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Personal access token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_auth.TokenExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_auth.ExchangeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Exchange a "bsp_..." personal access token for a JWT pair
+      tags:
+      - auth
+  /authbot/code:
+    post:
+      consumes:
+      - application/json
+      description: Called by the Telegram bot service after a user shares their phone
+        number, not by end users.
+      parameters:
+      - description: Telegram contact-share payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_authbot.IssueCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_authbot.IssueCodeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Issue a one-time login code for a Telegram identity
+      tags:
+      - authbot
+  /authbot/codes/{id}/message-id:
+    patch:
+      consumes:
+      - application/json
+      description: Called by the Telegram bot service right after it sends the code
+        message.
+      parameters:
+      - description: Code id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Telegram message id
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_authbot.SetMessageIDRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Record the Telegram message id that displays a code
+      tags:
+      - authbot
+  /authbot/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: One-time code
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_authbot.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_authbot.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Exchange a Telegram one-time code for app JWT tokens
+      tags:
+      - authbot
+  /authbot/webhook:
+    post:
+      consumes:
+      - application/json
+      description: Called by Telegram itself (not a client of this API). Unauthenticated,
+        matching Django's TelegramWebhookView (AllowAny, no secret token check). Always
+        acks 200 so Telegram doesn't retry-storm a transient failure; errors are logged
+        and, where Django did the same, echoed back to the chat.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Telegram webhook for the botmother_authbot login bot
+      tags:
+      - authbot
+  /blog:
+    get:
+      parameters:
+      - description: Filter by title/excerpt
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_blog.PublicListResponse'
+      summary: List published blog posts
+      tags:
+      - blog
+  /blog/{slug}:
+    get:
+      parameters:
+      - description: Post slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_blog.PublicDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Get a published blog post by slug
+      tags:
+      - blog
+  /chat/messages/{project_id}/{chat_id}:
+    get:
+      parameters:
+      - description: Project id (Django legacy pk or uuid)
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Telegram chat id
+        in: path
+        name: chat_id
+        required: true
+        type: integer
+      - description: default 50
+        in: query
+        name: limit
+        type: integer
+      - description: default 0
+        in: query
+        name: skip
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_chat.ListMessagesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a chat_id's message history for a project
+      tags:
+      - chat
+  /chat/users/{project_id}:
+    get:
+      parameters:
+      - description: Project id (Django legacy pk or uuid)
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: default 50
+        in: query
+        name: limit
+        type: integer
+      - description: default 0
+        in: query
+        name: skip
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_chat.ListUsersResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a project's chat users with last-message stats
+      tags:
+      - chat
+  /cms/projects/{project_id}/collections:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: List a project's CMS collections
+      tags:
+      - cms
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Create a CMS collection (schema)
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}:
+    delete:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Delete a CMS collection and its Mongo documents
+      tags:
+      - cms
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Get a CMS collection (schema + fields)
+      tags:
+      - cms
+    patch:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Update a CMS collection's label/description
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents:
+    get:
+      parameters:
+      - description: JSON filter object
+        in: query
+        name: filter
+        type: string
+      - description: comma-separated fields, '-' prefix for desc
+        in: query
+        name: sort
+        type: string
+      - description: page size (default 50, max 500)
+        in: query
+        name: limit
+        type: integer
+      - description: rows to skip
+        in: query
+        name: skip
+        type: integer
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: List/find documents (filter, sort, pagination)
+      tags:
+      - cms
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Insert a document, validated against the collection's fields
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents/{doc_id}:
+    delete:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Soft-delete a document
+      tags:
+      - cms
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Get a single document by id
+      tags:
+      - cms
+    patch:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Partially update a document, validated against the schema
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents/{doc_id}/restore:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Undo a document soft-delete
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents/aggregate:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Run an aggregation pipeline scoped to this project's documents
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents/bulk:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Insert many documents in one call, each validated against the schema
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/documents/count:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Count documents matching a filter
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/export:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Queue an Excel export of a collection's documents
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/export/{task_id}:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Poll an export task's status/progress/download url
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/fields:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Add a field to a collection's schema
+      tags:
+      - cms
+  /cms/projects/{project_id}/collections/{slug}/fields/{field_name}:
+    delete:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Remove a field from a collection's schema
+      tags:
+      - cms
+    patch:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Update a field's definition
+      tags:
+      - cms
+  /credentials:
+    get:
+      parameters:
+      - description: Filter by credential type
+        in: query
+        name: type_key
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my credentials
+      tags:
+      - credentials
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credential payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_credential.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_credential.CredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a credential
+      tags:
+      - credentials
+  /credentials/{id}:
+    delete:
+      parameters:
+      - description: Credential id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a credential (soft delete)
+      tags:
+      - credentials
+    get:
+      parameters:
+      - description: Credential id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.CredentialResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a credential (masked data)
+      tags:
+      - credentials
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credential id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_credential.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.CredentialResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a credential
+      tags:
+      - credentials
+  /credentials/oauth/{provider}/callback:
+    get:
+      parameters:
+      - description: OAuth provider (e.g. google)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Authorization code
+        in: query
+        name: code
+        type: string
+      - description: Signed state token minted by OAuthStart
+        in: query
+        name: state
+        type: string
+      - description: Provider-reported error (e.g. access_denied)
+        in: query
+        name: error
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: tiny HTML page that postMessages the opener and closes
+          schema:
+            type: string
+        "400":
+          description: tiny HTML error page
+          schema:
+            type: string
+      summary: Complete an OAuth2 consent flow (Google redirects here)
+      tags:
+      - credentials
+  /credentials/oauth/{provider}/start:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: OAuth provider (e.g. google)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Target credential type_key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_credential.OAuthStartRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.OAuthStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Begin an OAuth2 consent flow for an oauth2-mode credential type
+      tags:
+      - credentials
+  /credentials/types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_credential.TypeDef'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List credential types
+      tags:
+      - credentials
+  /debug/context:
+    get:
+      parameters:
+      - description: project id
+        in: query
+        name: project_id
+        required: true
+        type: string
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Latest flow-context (variables) snapshot per active debug chat
+      tags:
+      - debug
+  /debug/errors:
+    get:
+      parameters:
+      - description: project id
+        in: query
+        name: project_id
+        required: true
+        type: string
+      - description: max rows (default 100, max 500)
+        in: query
+        name: limit
+        type: integer
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: List recent flow/node debug errors for a project
+      tags:
+      - debug
+  /enviroment:
+    get:
+      parameters:
+      - description: Project id
+        in: query
+        name: project
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_release.EnvironmentResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List environment variables for a project
+      tags:
+      - enviroment
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Environment payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_release.UpsertEnvironmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.EnvironmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create or update an environment variable (upsert on key+project)
+      tags:
+      - enviroment
+  /enviroment/{key}:
+    delete:
+      parameters:
+      - description: Environment key
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Project id
+        in: query
+        name: project
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete an environment variable
+      tags:
+      - enviroment
+  /file:
+    get:
+      parameters:
+      - description: Filter by project
+        in: query
+        name: project_id
+        type: string
+      - description: 'Filter by type: file|photo|video|audio'
+        in: query
+        name: filetype
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.FileListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my files
+      tags:
+      - file
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Blob to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Owning project id
+        in: formData
+        name: project_id
+        required: true
+        type: string
+      - description: file|photo|video|audio (default file)
+        in: formData
+        name: filetype
+        type: string
+      - description: Seconds until expiry; 0/absent = forever
+        in: formData
+        name: ttl
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_file.FileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload a file
+      tags:
+      - file
+  /file/{uuid}:
+    delete:
+      parameters:
+      - description: File uuid
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a file
+      tags:
+      - file
+    get:
+      parameters:
+      - description: File uuid
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.FileResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Get file metadata (public)
+      tags:
+      - file
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: File uuid
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_file.UpdateFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.FileResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a file's type
+      tags:
+      - file
+  /file/{uuid}/download:
+    get:
+      parameters:
+      - description: File uuid
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Download the raw file blob (public)
+      tags:
+      - file
+  /internal/credentials/{id}:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Project id — cross-tenant owner guard
+        in: header
+        name: X-Project-Id
+        type: string
+      - description: Credential id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.InternalResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Resolve a credential by id (decrypted, engine-only)
+      tags:
+      - credentials-internal
+  /internal/credentials/by-name:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Project id — the owner is derived from it
+        in: header
+        name: X-Project-Id
+        required: true
+        type: string
+      - description: Credential name
+        in: query
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.InternalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Resolve a credential by name (decrypted, engine-only)
+      tags:
+      - credentials-internal
+  /internal/payment/orders:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Order payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_payment.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_payment.OrderCreateResponse'
+      summary: '[internal] Engine creates a bot payment order'
+      tags:
+      - payment-internal
+  /internal/payment/orders/{id}/status:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Order id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Enforced if present (IDOR guard)
+        in: query
+        name: project_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.OrderResponse'
+      summary: '[internal] Engine reads a bot payment order''s status'
+      tags:
+      - payment-internal
+  /internal/webhook-hook/{token}:
+    get:
+      parameters:
+      - description: Webhook token
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhook.ResolveResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Resolve a webhook token to its routing info (internal)
+      tags:
+      - webhook
+  /kyc:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Multipart upload: full_name, passport_image, selfie_image, residence_reference.'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.VerificationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Submit a KYC verification request
+      tags:
+      - kyc
+  /kyc-verifications:
+    get:
+      parameters:
+      - description: Filter by status (pending/approved/rejected)
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.AdminListResponse'
+      security:
+      - BearerAuth: []
+      summary: List KYC verification requests (admin)
+      tags:
+      - kyc-admin
+  /kyc-verifications/{id}:
+    get:
+      parameters:
+      - description: Verification id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.AdminVerificationResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a KYC verification request (admin)
+      tags:
+      - kyc-admin
+  /kyc-verifications/{id}/approve:
+    patch:
+      consumes:
+      - application/json
+      description: Sets the submitter's kyc_verified_at, unlocking withdrawals.
+      parameters:
+      - description: Verification id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Optional note
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_modules_kyc.ApproveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.AdminVerificationResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve a KYC verification request (admin)
+      tags:
+      - kyc-admin
+  /kyc-verifications/{id}/reject:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Verification id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rejection reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kyc.RejectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.AdminVerificationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reject a KYC verification request (admin)
+      tags:
+      - kyc-admin
+  /kyc/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kyc.StatusResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user's KYC status
+      tags:
+      - kyc
+  /managed-bot:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_webhook.ManagedBotResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List my managed bots
+      tags:
+      - managed-bot
+  /managed-bot/claim:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Claim payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_webhook.ManagedBotClaimRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Pre-claim a wizard bot username before it is created
+      tags:
+      - managed-bot
+  /managed-bot/config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhook.ManagedBotConfigResponse'
+      security:
+      - BearerAuth: []
+      summary: Wizard deep-link configuration
+      tags:
+      - managed-bot
+  /managed-bot/webhook/{secret}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Webhook path secret
+        in: path
+        name: secret
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+      summary: Manager bot Telegram webhook (managed_bot updates)
+      tags:
+      - managed-bot
+  /messages:
+    get:
+      parameters:
+      - description: Filter by project id
+        in: query
+        name: project_id
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_message.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my broadcast messages
+      tags:
+      - messages
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Message payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_message.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_message.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create (queue) a broadcast message
+      tags:
+      - messages
+  /messages/{id}:
+    delete:
+      parameters:
+      - description: Message id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a broadcast message
+      tags:
+      - messages
+    get:
+      parameters:
+      - description: Message id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_message.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a broadcast message
+      tags:
+      - messages
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Message id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_message.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_message.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a broadcast message
+      tags:
+      - messages
+  /module-file:
+    post:
+      responses: {}
+      summary: Module-scoped file upload (HMAC bearer token)
+      tags:
+      - module-file
+  /module-file/{uuid}:
+    delete:
+      responses: {}
+      summary: Module-scoped file delete (HMAC bearer token)
+      tags:
+      - module-file
+  /module-trigger/{project_uuid}:
+    post:
+      responses: {}
+      summary: 'Internal relay: modul -> engine event (X-Internal-Token)'
+      tags:
+      - modules
+  /modules:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: List the module catalog
+      tags:
+      - modules
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Register a module in the catalog (admin)
+      tags:
+      - modules
+  /modules/{slug}:
+    delete:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Remove a module from the catalog (admin)
+      tags:
+      - modules
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Get a module by slug
+      tags:
+      - modules
+    patch:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Update a module (admin)
+      tags:
+      - modules
+  /modules/{slug}/redeploy:
+    post:
+      responses: {}
+      summary: CI redeploy hook — recreate the shared pod (X-Internal-Token)
+      tags:
+      - modules
+  /modules/{slug}/refresh-manifest:
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Re-run describe()/docs() against the module endpoint (admin)
+      tags:
+      - modules
+  /modules/github-webhook:
+    post:
+      responses: {}
+      summary: GitHub App push webhook — build & redeploy the matching module
+      tags:
+      - modules
+  /payment/earnings:
+    get:
+      parameters:
+      - description: Filter by bot
+        in: query
+        name: project_id
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.EarningsResponse'
+      security:
+      - BearerAuth: []
+      summary: My bot earnings dashboard (balance + paid orders)
+      tags:
+      - payment-earnings
+  /payment/earnings/{id}:
+    get:
+      parameters:
+      - description: Order id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.OrderResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my bot payment orders (any status)
+      tags:
+      - payment-earnings
+  /payment/history:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.HistoryListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my balance ledger entries
+      tags:
+      - payment-history
+  /payment/history/{id}:
+    get:
+      parameters:
+      - description: History id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.HistoryResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one balance ledger entry
+      tags:
+      - payment-history
+  /payment/link:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider + amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_payment.CreatePaymentLinkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.PaymentLinkResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a simple balance top-up pay link (Click/Payme)
+      tags:
+      - payment
+  /payment/transactions:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.TransactionListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my gateway transactions
+      tags:
+      - payment-transactions
+  /payment/transactions/{id}:
+    get:
+      parameters:
+      - description: Transaction id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.TransactionResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my gateway transactions
+      tags:
+      - payment-transactions
+  /payment/withdrawals:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my bot-income withdrawal requests
+      tags:
+      - payment-withdrawals
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Withdrawal payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_payment.CreateWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+        "403":
+          description: KYC not verified
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Insufficient withdrawable earnings
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Request a bot-income withdrawal
+      tags:
+      - payment-withdrawals
+  /payment/withdrawals/{id}:
+    delete:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Cancel one of my still-pending withdrawal requests
+      tags:
+      - payment-withdrawals
+    get:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_payment.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my withdrawal requests
+      tags:
+      - payment-withdrawals
+  /plans:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_plan.PlanResponse'
+            type: array
+      summary: List active pricing plans
+      tags:
+      - plans
+  /projects:
+    get:
+      parameters:
+      - description: Filter by name
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my projects
+      tags:
+      - projects
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_project.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_project.ProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a project
+      tags:
+      - projects
+  /projects/{id}:
+    delete:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a project (soft delete)
+      tags:
+      - projects
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.ProjectResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a project
+      tags:
+      - projects
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_project.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.ProjectResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a project
+      tags:
+      - projects
+  /projects/{id}/collab-token:
+    get:
+      description: |-
+        Returned token is presented as ?token= to the standalone
+        websocket service to join this project's "project_<id>"
+        room. Owner-scoped like Get (404s for a non-owned id).
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.CollabTokenResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mint a short-lived real-time collaboration WS token
+      tags:
+      - projects
+  /projects/{id}/debug:
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.DebugResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start (or restart) a project's debug container
+      tags:
+      - debug
+  /projects/{id}/debug/logs:
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: trailing lines, default 200, max 2000
+        in: query
+        name: tail
+        type: integer
+      - description: only lines newer than N seconds
+        in: query
+        name: since_seconds
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.LogSnapshotResponse'
+      security:
+      - BearerAuth: []
+      summary: Tail a project's debug container pod log (non-streaming snapshot)
+      tags:
+      - debug
+  /projects/{id}/debug/stop:
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.DebugResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop a project's debug container
+      tags:
+      - debug
+  /projects/{id}/info:
+    get:
+      parameters:
+      - description: Project id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.DebugResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a project's debug container status
+      tags:
+      - debug
+  /projects/{id}/module-manifests:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Flat node manifests of a project's enabled modules
+      tags:
+      - modules
+  /projects/{id}/modules:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Modules enabled for a project
+      tags:
+      - modules
+    post:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Enable a catalog module for a project
+      tags:
+      - modules
+  /projects/{id}/modules-for-engine:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Engine-facing modules.json data for a project's enabled modules
+      tags:
+      - modules
+  /projects/{id}/modules/{slug}:
+    delete:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Disable a module for a project
+      tags:
+      - modules
+  /projects/{id}/node-manifests:
+    get:
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Unified node manifests (built-in + enabled modules)
+      tags:
+      - modules
+  /projects/create-from-template:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Requires the caller to already hold a paid order for the
+        template (POST /template/orders — free templates are
+        auto-confirmed there). mode=release (default) requires
+        token; mode=debug deploys the tokenless debug container
+        instead and ignores token entirely.
+      parameters:
+      - description: Template + create payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_project.CreateFromTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_project.ProjectResponse'
+        "400":
+          description: validation failed / template not purchased / token required
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: template not found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a project seeded from a purchased marketplace template
+      tags:
+      - projects
+  /relase:
+    get:
+      parameters:
+      - description: Project id
+        in: query
+        name: project
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_release.ReleaseResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List releases for a project
+      tags:
+      - relase
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Target project
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_release.CreateReleaseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_release.ReleaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create and deploy a new release
+      tags:
+      - relase
+  /relase/{id}:
+    get:
+      parameters:
+      - description: Release id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.ReleaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a release (flow included)
+      tags:
+      - relase
+  /relase/{id}/logs:
+    get:
+      parameters:
+      - description: Release id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: trailing lines, default 200, max 2000
+        in: query
+        name: tail
+        type: integer
+      - description: only lines newer than N seconds
+        in: query
+        name: since_seconds
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.LogSnapshotResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Tail a release's live pod log (non-streaming snapshot)
+      tags:
+      - relase
+  /relase/{id}/stop:
+    get:
+      parameters:
+      - description: Release id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_release.ReleaseResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop a running release
+      tags:
+      - relase
+  /resource:
+    get:
+      parameters:
+      - description: Filter by project
+        in: query
+        name: project_id
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.ResourceListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my resource samples
+      tags:
+      - resource
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Resource payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_file.CreateResourceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_file.ResourceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Report a resource usage sample
+      tags:
+      - resource
+  /resource/{id}:
+    get:
+      parameters:
+      - description: Resource id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.ResourceResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a resource sample
+      tags:
+      - resource
+  /shared/config/internal:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: Internal flat ai_agent.* config incl. secrets (X-Internal-Token) —
+        used by agentv3
+      tags:
+      - shared-config
+  /shared/config/public:
+    get:
+      produces:
+      - application/json
+      responses: {}
+      summary: Public flat ai_agent.* config (no secrets) — used by agentv3
+      tags:
+      - shared-config
+  /shared/manifest/builtin-nodes/:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_config.builtinNodeManifestsResponse'
+      summary: Built-in node catalog (global, project-less)
+      tags:
+      - shared-manifest
+  /subscription:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_plan.SubscriptionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the current user's subscription
+      tags:
+      - subscription
+  /subscription/upgrade:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: New plan + billing period
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_plan.UpgradeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_plan.UpgradeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upgrade the current user's subscription
+      tags:
+      - subscription
+  /subscription/usage:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_plan.UsageResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the current user's token/bot usage
+      tags:
+      - subscription
+  /subscription/usage/report:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Shared internal token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Usage report
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_plan.ReportUsageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_plan.ReportUsageResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Report AI token usage for a user (internal, agentv3/worker)
+      tags:
+      - subscription
+  /template/category:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_template.CategoryResponse'
+            type: array
+      summary: List template categories
+      tags:
+      - template
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.CategoryResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a template category (admin)
+      tags:
+      - template
+  /template/feature:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_template.FeatureResponse'
+            type: array
+      summary: List template features
+      tags:
+      - template
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Feature payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateFeatureRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.FeatureResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a template feature (admin)
+      tags:
+      - template
+  /template/internal/{identifier}:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Template id (uuid) or slug
+        in: path
+        name: identifier
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.FeedItem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Get one template (by id or slug) with its flow JSON
+      tags:
+      - template-internal
+  /template/internal/list:
+    get:
+      parameters:
+      - description: Internal service token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: default true
+        in: query
+        name: only_verified
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.FeedListResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: List every template with its flow JSON (agent RAG feed)
+      tags:
+      - template-internal
+  /template/list:
+    get:
+      parameters:
+      - description: Keyword search over name/description/categories/features
+        in: query
+        name: search
+        type: string
+      - description: Filter by category id
+        in: query
+        name: category_id
+        type: string
+      - description: Filter by feature id
+        in: query
+        name: feature_id
+        type: string
+      - description: Minimum price
+        in: query
+        name: min_price
+        type: string
+      - description: Maximum price
+        in: query
+        name: max_price
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.TemplateListResponse'
+      summary: List published templates (AI-friendly smart search)
+      tags:
+      - template
+  /template/list/{slug}:
+    get:
+      parameters:
+      - description: Template slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.TemplateResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      summary: Get a published template by slug (bumps view count)
+      tags:
+      - template
+  /template/list/{slug}/like:
+    post:
+      parameters:
+      - description: Template slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.LikeResponse'
+      security:
+      - BearerAuth: []
+      summary: Like/unlike a template
+      tags:
+      - template
+  /template/orders:
+    get:
+      parameters:
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.OrderListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my template orders
+      tags:
+      - template-order
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template to order
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.OrderResponse'
+      security:
+      - BearerAuth: []
+      summary: Order a template (returns the existing order if already placed)
+      tags:
+      - template-order
+  /template/orders/{id}:
+    get:
+      parameters:
+      - description: Order id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.OrderResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my template orders
+      tags:
+      - template-order
+  /template/orders/{id}/pay:
+    post:
+      parameters:
+      - description: Order id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.OrderResponse'
+        "409":
+          description: insufficient wallet balance
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Pay for a template order from the caller's wallet balance
+      tags:
+      - template-order
+  /template/submissions:
+    get:
+      parameters:
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my template submissions
+      tags:
+      - template-submission
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Submission payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateSubmissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+      security:
+      - BearerAuth: []
+      summary: Submit a project as a template for review
+      tags:
+      - template-submission
+  /template/submissions/{id}:
+    delete:
+      parameters:
+      - description: Submission id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete a pending template submission
+      tags:
+      - template-submission
+    get:
+      parameters:
+      - description: Submission id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my template submissions
+      tags:
+      - template-submission
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Submission id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.UpdateSubmissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a pending template submission
+      tags:
+      - template-submission
+  /template/submissions/{id}/approve:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Submission id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Optional launch discount
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_modules_template.ApproveSubmissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve a submission and publish it as a template (admin)
+      tags:
+      - template-submission
+  /template/submissions/{id}/reject:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Submission id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rejection reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.RejectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionResponse'
+      security:
+      - BearerAuth: []
+      summary: Reject a pending submission (admin)
+      tags:
+      - template-submission
+  /template/submissions/admin:
+    get:
+      parameters:
+      - description: Filter by status (pending|approved|rejected)
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.SubmissionListResponse'
+      security:
+      - BearerAuth: []
+      summary: List all template submissions (admin)
+      tags:
+      - template-submission
+  /template/withdrawals:
+    get:
+      parameters:
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my withdrawal requests
+      tags:
+      - template-withdrawal
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Withdrawal payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.CreateWithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalResponse'
+        "409":
+          description: insufficient template balance
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Request a withdrawal from my template earnings
+      tags:
+      - template-withdrawal
+  /template/withdrawals/{id}:
+    delete:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete a pending withdrawal request
+      tags:
+      - template-withdrawal
+    get:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one of my withdrawal requests
+      tags:
+      - template-withdrawal
+  /template/withdrawals/{id}/approve:
+    patch:
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve a pending withdrawal, deducting template_balance (admin)
+      tags:
+      - template-withdrawal
+  /template/withdrawals/{id}/reject:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Withdrawal id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rejection reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.RejectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalResponse'
+      security:
+      - BearerAuth: []
+      summary: Reject a pending withdrawal request (admin)
+      tags:
+      - template-withdrawal
+  /template/withdrawals/admin:
+    get:
+      parameters:
+      - description: Filter by status (pending|approved|rejected)
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_template.WithdrawalListResponse'
+      security:
+      - BearerAuth: []
+      summary: List all withdrawal requests (admin)
+      tags:
+      - template-withdrawal
+  /tickets:
+    get:
+      parameters:
+      - description: Filter by status (open, pending, closed)
+        in: query
+        name: status
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List my tickets
+      tags:
+      - tickets
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Subject + first message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_ticket.CreateTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Open a support ticket
+      tags:
+      - tickets
+  /tickets/{id}:
+    get:
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a ticket with its full conversation
+      tags:
+      - tickets
+  /tickets/{id}/close:
+    post:
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Close my ticket
+      tags:
+      - tickets
+  /tickets/{id}/reply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ticket id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_ticket.ReplyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_ticket.TicketResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reply to my ticket (reopens it for admin attention)
+      tags:
+      - tickets
+  /used:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.UsedResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Aggregated usage (storage/ram/cpu/network) for a project or the whole
+        account
+      tags:
+      - used
+  /used/{project_id}:
+    get:
+      parameters:
+      - description: Project id; omit to aggregate across every owned project
+        in: path
+        name: project_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_file.UsedResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Aggregated usage (storage/ram/cpu/network) for a project or the whole
+        account
+      tags:
+      - used
+  /users:
+    get:
+      parameters:
+      - description: Filter by phone or name
+        in: query
+        name: search
+        type: string
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Rows to skip (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.ListResponse'
+      security:
+      - BearerAuth: []
+      summary: List users (admin)
+      tags:
+      - users
+  /users/{id}:
+    get:
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.AdminDetailResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by id, enriched with subscription/projects (admin)
+      tags:
+      - users
+  /users/{id}/role:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: User id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_user.SetRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+      security:
+      - BearerAuth: []
+      summary: Set user role (admin)
+      tags:
+      - users
+  /users/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Update payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_user.UpdateMeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update current user's profile
+      tags:
+      - users
+  /users/me/balance:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_user.BalanceResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user's balance
+      tags:
+      - users
+  /users/me/password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Passwords
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_user.ChangePasswordRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change current user's password
+      tags:
+      - users
+  /webhook/endpoint:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Mint payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_webhook.MintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhook.MintResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mint (or reuse) a node's webhook URL
+      tags:
+      - webhook
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer <access_token>" in the Value field.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

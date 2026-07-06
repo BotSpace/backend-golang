@@ -168,6 +168,20 @@ type MonitoringPage struct {
 	PrometheusAvailable bool
 }
 
+type MetricPoint struct {
+	Timestamp int64
+	Value     float64
+}
+
+type MonitoringHistory struct {
+	CPU                 []MetricPoint
+	Memory              []MetricPoint
+	NetworkRX           []MetricPoint
+	NetworkTX           []MetricPoint
+	Disk                []MetricPoint
+	PrometheusAvailable bool
+}
+
 // Repository is the persistence port; owner-scoped methods never return or
 // mutate another user's projects. The Admin*/Monitoring methods are
 // intentionally unscoped and only reachable behind an admin-only route.
