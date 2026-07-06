@@ -54,6 +54,10 @@ envFrom:
   - secretRef:
       name: jwt-secret
 
+env:
+  - name: APP_ENGINE_IMAGE_TAG
+    value: "3.5.138-prod"
+
 volumes:
   - name: jwt-keys
     secret:
