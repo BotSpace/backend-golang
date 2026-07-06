@@ -11,7 +11,7 @@ import (
 )
 
 // WorkerConfig — worker uchun barcha sozlamalar. Qiymatlar env'dan (backend bilan bir
-// xil nomlar) yoki configs/worker/config.yaml'dan o'qiladi; env ustun.
+// xil nomlar) yoki configs/worker.yaml'dan o'qiladi; env ustun.
 type WorkerConfig struct {
 	DatabaseURL string `mapstructure:"database_url"`
 	DBDsn       string `mapstructure:"db_dsn"` // backend database-secret'dagi nom (DATABASE_URL bo'lmasa shu)
@@ -41,9 +41,8 @@ func LoadWorker() (*WorkerConfig, error) {
 	_ = godotenv.Load()
 
 	v := viper.New()
-	v.SetConfigName("config")
+	v.SetConfigName("worker")
 	v.SetConfigType("yaml")
-	v.AddConfigPath("./configs/worker")
 	v.AddConfigPath("./configs")
 	v.AddConfigPath(".")
 
