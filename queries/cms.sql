@@ -71,15 +71,6 @@ WHERE id = sqlc.arg('project_id') AND owner_id = sqlc.arg('owner_id') AND delete
 SELECT id, legacy_id FROM projects
 WHERE id = sqlc.arg('project_id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
 
--- name: CmsSetProjectLegacyID :execrows
--- Used only by scripts/backfill_legacy_project_id (one-shot data migration).
-UPDATE projects SET legacy_id = sqlc.arg('legacy_id')
-WHERE id = sqlc.arg('id') AND legacy_id IS NULL;
-
--- name: CmsListProjectIDsWithoutLegacyID :many
--- Used only by scripts/backfill_legacy_project_id to enumerate candidates.
-SELECT id FROM projects WHERE legacy_id IS NULL AND deleted_at IS NULL;
-
 -- ── Field ───────────────────────────────────────────────────────────────────
 
 -- name: CmsCreateField :one
