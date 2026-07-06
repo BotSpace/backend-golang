@@ -1202,6 +1202,41 @@ func TestAdminMonitoring_PrometheusErrorFallsBackToSnapshots(t *testing.T) {
 	}
 }
 
+func TestMonitoring_MergesPrometheusMetricsForOwner(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	repo.projects[projectID] = &Project{ID: projectID, OwnerID: ownerID, Name: "bot"}
+	uc := NewUsecaseWithMetrics(NewUsecase(repo, nil, nil, nil, nil), fakeMetricsProvider{
+		ok: true,
+		values: map[uuid.UUID]LiveMetrics{
+			projectID: {
+				CPUMilli:     125,
+				MemoryBytes:  64 * 1024 * 1024,
+				NetworkRXBps: 1024,
+				NetworkTXBps: 2048,
+			},
+		},
+	})
+
+	metrics, err := uc.Monitoring(context.Background(), projectID, ownerID)
+	if err != nil {
+		t.Fatalf("Monitoring: %v", err)
+	}
+	if !metrics.PrometheusAvailable {
+		t.Fatal("PrometheusAvailable = false, want true")
+	}
+	if metrics.CPUCores != 0.125 {
+		t.Fatalf("CPUCores = %v, want 0.125", metrics.CPUCores)
+	}
+	if metrics.MemoryBytes != 64*1024*1024 {
+		t.Fatalf("MemoryBytes = %d, want 67108864", metrics.MemoryBytes)
+	}
+	if metrics.NetworkRXBps != 1024 || metrics.NetworkTXBps != 2048 {
+		t.Fatalf("network = %v/%v, want 1024/2048", metrics.NetworkRXBps, metrics.NetworkTXBps)
+	}
+}
+
 func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
 	projectID := uuid.New()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1211,6 +1246,10 @@ func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
 			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"0.025"]}]}}`, projectID)
 		case strings.Contains(query, "container_memory_working_set_bytes"):
 			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"10485760"]}]}}`, projectID)
+		case strings.Contains(query, "container_network_receive_bytes_total"):
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"128"]}]}}`, projectID)
+		case strings.Contains(query, "container_network_transmit_bytes_total"):
+			_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":{"project_id":"%s"},"value":[1,"256"]}]}}`, projectID)
 		default:
 			t.Fatalf("unexpected query: %s", query)
 		}
@@ -1231,5 +1270,8 @@ func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
 	}
 	if got.MemoryBytes != 10485760 {
 		t.Fatalf("MemoryBytes = %d, want 10485760", got.MemoryBytes)
+	}
+	if got.NetworkRXBps != 1024 || got.NetworkTXBps != 2048 {
+		t.Fatalf("network = %v/%v, want 1024/2048", got.NetworkRXBps, got.NetworkTXBps)
 	}
 }

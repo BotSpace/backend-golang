@@ -274,6 +274,33 @@ func toAdminProjectDetailResponse(p *AdminProjectDetail) AdminProjectDetailRespo
 
 // ===================== monitoring =====================
 
+type ProjectMonitoringResponse struct {
+	CPUCores            float64 `json:"cpu_cores"`
+	MemoryBytes         int64   `json:"memory_bytes"`
+	NetRXBps            float64 `json:"net_rx_bps"`
+	NetTXBps            float64 `json:"net_tx_bps"`
+	DiskBytes           int64   `json:"disk_bytes"`
+	DiskFilesBytes      int64   `json:"disk_files_bytes"`
+	DiskCMSBytes        int64   `json:"disk_cms_bytes"`
+	PrometheusAvailable bool    `json:"prometheus_available"`
+}
+
+func toProjectMonitoringResponse(m *ProjectMonitoring) ProjectMonitoringResponse {
+	if m == nil {
+		return ProjectMonitoringResponse{}
+	}
+	return ProjectMonitoringResponse{
+		CPUCores:            m.CPUCores,
+		MemoryBytes:         m.MemoryBytes,
+		NetRXBps:            m.NetworkRXBps,
+		NetTXBps:            m.NetworkTXBps,
+		DiskBytes:           m.DiskBytes,
+		DiskFilesBytes:      m.DiskFilesBytes,
+		DiskCMSBytes:        m.DiskCMSBytes,
+		PrometheusAvailable: m.PrometheusAvailable,
+	}
+}
+
 // MonitoringProjectResponse is one row of the admin monitoring page.
 type MonitoringProjectResponse struct {
 	ID            string    `json:"id"`

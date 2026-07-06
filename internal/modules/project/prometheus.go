@@ -19,6 +19,8 @@ const (
 	projectPodPattern        = `^(?:release|debug)-([0-9a-f-]{36})(?:-[0-9]+)?.*`
 	prometheusCPUQuery       = `sum by (project_id) (label_replace(rate(container_cpu_usage_seconds_total{namespace="botmother",container="engine",pod=~"(release|debug)-.+"}[5m]), "project_id", "$1", "pod", "` + projectPodPattern + `"))`
 	prometheusMemoryQuery    = `sum by (project_id) (label_replace(container_memory_working_set_bytes{namespace="botmother",container="engine",pod=~"(release|debug)-.+"}, "project_id", "$1", "pod", "` + projectPodPattern + `"))`
+	prometheusNetworkRXQuery = `sum by (project_id) (label_replace(rate(container_network_receive_bytes_total{namespace="botmother",pod=~"(release|debug)-.+"}[5m]), "project_id", "$1", "pod", "` + projectPodPattern + `"))`
+	prometheusNetworkTXQuery = `sum by (project_id) (label_replace(rate(container_network_transmit_bytes_total{namespace="botmother",pod=~"(release|debug)-.+"}[5m]), "project_id", "$1", "pod", "` + projectPodPattern + `"))`
 )
 
 type PrometheusMetricsProvider struct {
@@ -46,6 +48,14 @@ func (p *PrometheusMetricsProvider) ProjectMetrics(ctx context.Context) (map[uui
 	if err != nil {
 		return nil, false, err
 	}
+	rx, err := p.query(ctx, prometheusNetworkRXQuery)
+	if err != nil {
+		return nil, false, err
+	}
+	tx, err := p.query(ctx, prometheusNetworkTXQuery)
+	if err != nil {
+		return nil, false, err
+	}
 	out := make(map[uuid.UUID]LiveMetrics, len(cpu)+len(mem))
 	for id, cores := range cpu {
 		m := out[id]
@@ -55,6 +65,16 @@ func (p *PrometheusMetricsProvider) ProjectMetrics(ctx context.Context) (map[uui
 	for id, bytes := range mem {
 		m := out[id]
 		m.MemoryBytes = clampInt32(math.Round(bytes))
+		out[id] = m
+	}
+	for id, bytesPerSecond := range rx {
+		m := out[id]
+		m.NetworkRXBps = bytesPerSecond * 8
+		out[id] = m
+	}
+	for id, bytesPerSecond := range tx {
+		m := out[id]
+		m.NetworkTXBps = bytesPerSecond * 8
 		out[id] = m
 	}
 	return out, true, nil
@@ -92,8 +112,8 @@ func (p *PrometheusMetricsProvider) ProjectHistory(ctx context.Context, projectI
 	return &MonitoringHistory{
 		CPU:       cpu,
 		Memory:    mem,
-		NetworkRX: rx,
-		NetworkTX: tx,
+		NetworkRX: scaleMetricPoints(rx, 8),
+		NetworkTX: scaleMetricPoints(tx, 8),
 		Disk:      disk,
 	}, true, nil
 }
@@ -251,6 +271,14 @@ func parseMetricPoints(values [][]any) []MetricPoint {
 			continue
 		}
 		out = append(out, MetricPoint{Timestamp: int64(ts), Value: value})
+	}
+	return out
+}
+
+func scaleMetricPoints(points []MetricPoint, factor float64) []MetricPoint {
+	out := make([]MetricPoint, len(points))
+	for i, p := range points {
+		out[i] = MetricPoint{Timestamp: p.Timestamp, Value: p.Value * factor}
 	}
 	return out
 }

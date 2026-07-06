@@ -342,6 +342,67 @@ func (h *Handler) AdminGet(c *gin.Context) {
 	httpx.OK(c, 200, toAdminProjectDetailResponse(p))
 }
 
+// Monitoring godoc
+// @Summary      Get my project's live resource usage
+// @Description  Returns the latest Prometheus-backed CPU, RAM, network and disk snapshot for an owned project. If Prometheus is unavailable, prometheus_available is false and metric values are zero.
+// @Tags         projects
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Project ID (uuid)"
+// @Success      200  {object}  ProjectMonitoringResponse
+// @Failure      400  {object}  httpx.ErrorResponse
+// @Failure      401  {object}  httpx.ErrorResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Failure      500  {object}  httpx.ErrorResponse
+// @Router       /projects/{id}/monitoring [get]
+func (h *Handler) Monitoring(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	metrics, err := h.uc.Monitoring(c.Request.Context(), id, ownerID)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toProjectMonitoringResponse(metrics))
+}
+
+// MonitoringHistory godoc
+// @Summary      Get my project's resource usage history
+// @Description  Returns Prometheus-backed CPU, RAM, network and disk time series for an owned project. Supported ranges are 1h, 6h, 24h and 7d.
+// @Tags         projects
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id     path   string  true   "Project ID (uuid)"
+// @Param        range  query  string  false  "Time range: 1h, 6h, 24h, 7d"
+// @Success      200  {object}  MonitoringHistoryResponse
+// @Failure      400  {object}  httpx.ErrorResponse
+// @Failure      401  {object}  httpx.ErrorResponse
+// @Failure      404  {object}  httpx.ErrorResponse
+// @Failure      500  {object}  httpx.ErrorResponse
+// @Router       /projects/{id}/monitoring/history [get]
+func (h *Handler) MonitoringHistory(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	history, err := h.uc.MonitoringHistory(c.Request.Context(), id, ownerID, c.Query("range"))
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toMonitoringHistoryResponse(history))
+}
+
 // AdminMonitoring godoc
 // @Summary      Per-project resource usage snapshot across every owner (admin)
 // @Tags         projects-admin
