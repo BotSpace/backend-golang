@@ -13,17 +13,15 @@ import (
 //   - /admin/settings/{key}             admin/superuser only (JWT)
 //   - /shared/config/public             AllowAny — flat ai_agent.* (no secrets)
 //   - /shared/config/internal           X-Internal-Token — flat ai_agent.* incl. secrets
-//   - /shared/manifest/builtin-nodes/   AllowAny — built-in node catalog
+//   - /shared/manifest/builtin-nodes    AllowAny — built-in node catalog
 //
 // The shared/config routes exist for agentv3
 // (../agent/src/agent/integrations/backend.py fetch_public_config /
 // fetch_internal_config) to read AI provider settings without a user JWT.
-// shared/manifest/builtin-nodes/ exists for agentv3's
+// shared/manifest/builtin-nodes exists for agentv3's
 // manifest_compiler/loader.py, which fetches it at import time and crashes
-// the process on a non-200 — the trailing slash is load-bearing, it must
-// match exactly (see credential package's oauth-callback trailing-slash
-// regression test for why: gin's RedirectTrailingSlash 301s to the
-// internally-registered path form, which the prod gateway doesn't route).
+// the process on a non-200. Server.Router strips a trailing slash before gin
+// routing, so only the slashless form is registered here.
 func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVerifier) {
 	g := rg.Group("/admin/settings", middleware.Auth(verifier), middleware.RequireRole("admin", "superuser"))
 	{
@@ -37,7 +35,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		shared.GET("/internal", internalTokenAuth(), h.InternalSharedConfig)
 	}
 
-	rg.GET("/shared/manifest/builtin-nodes/", h.BuiltinNodeManifests)
+	rg.GET("/shared/manifest/builtin-nodes", h.BuiltinNodeManifests)
 }
 
 // internalTokenAuth gates the engine/agent-facing endpoint behind a shared
