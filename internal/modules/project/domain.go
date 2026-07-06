@@ -158,8 +158,21 @@ type MonitoringProject struct {
 }
 
 type LiveMetrics struct {
-	CPUMilli    int32
-	MemoryBytes int32
+	CPUMilli     int32
+	MemoryBytes  int32
+	NetworkRXBps float64
+	NetworkTXBps float64
+}
+
+type ProjectMonitoring struct {
+	CPUCores            float64
+	MemoryBytes         int64
+	NetworkRXBps        float64
+	NetworkTXBps        float64
+	DiskBytes           int64
+	DiskFilesBytes      int64
+	DiskCMSBytes        int64
+	PrometheusAvailable bool
 }
 
 type MonitoringPage struct {

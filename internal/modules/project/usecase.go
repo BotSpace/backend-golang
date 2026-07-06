@@ -34,6 +34,8 @@ type Usecase interface {
 
 	AdminList(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, int64, error)
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
+	Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*ProjectMonitoring, error)
+	MonitoringHistory(ctx context.Context, id, ownerID uuid.UUID, window string) (*MonitoringHistory, error)
 	AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error)
 	AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error)
 
@@ -763,6 +765,44 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 		}
 	}
 	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available}, nil
+}
+
+func (u *usecase) Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*ProjectMonitoring, error) {
+	if _, err := mapErr(u.repo.GetForOwner(ctx, id, ownerID)); err != nil {
+		return nil, err
+	}
+	out := &ProjectMonitoring{}
+	if u.metrics == nil {
+		return out, nil
+	}
+	live, ok, err := u.metrics.ProjectMetrics(ctx)
+	if err != nil || !ok {
+		return out, nil
+	}
+	out.PrometheusAvailable = true
+	if m, exists := live[id]; exists {
+		out.CPUCores = float64(m.CPUMilli) / 1000
+		out.MemoryBytes = int64(m.MemoryBytes)
+		out.NetworkRXBps = m.NetworkRXBps
+		out.NetworkTXBps = m.NetworkTXBps
+	}
+	return out, nil
+}
+
+func (u *usecase) MonitoringHistory(ctx context.Context, id, ownerID uuid.UUID, window string) (*MonitoringHistory, error) {
+	if _, err := mapErr(u.repo.GetForOwner(ctx, id, ownerID)); err != nil {
+		return nil, err
+	}
+	provider, ok := u.metrics.(MetricsHistoryProvider)
+	if !ok || provider == nil {
+		return &MonitoringHistory{}, nil
+	}
+	history, available, err := provider.ProjectHistory(ctx, id, window)
+	if err != nil {
+		return &MonitoringHistory{}, nil
+	}
+	history.PrometheusAvailable = available
+	return history, nil
 }
 
 func (u *usecase) AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error) {

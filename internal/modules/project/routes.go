@@ -13,6 +13,8 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.GET("", h.List)
 		g.POST("", h.Create)
 		g.POST("/create-from-template", h.CreateFromTemplate)
+		g.GET("/:id/monitoring", h.Monitoring)
+		g.GET("/:id/monitoring/history", h.MonitoringHistory)
 		g.GET("/:id", h.Get)
 		g.GET("/:id/collab-token", h.CollabToken)
 		g.PATCH("/:id", h.Update)

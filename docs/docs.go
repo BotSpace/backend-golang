@@ -5381,6 +5381,128 @@ const docTemplate = `{
                 "responses": {}
             }
         },
+        "/projects/{id}/monitoring": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the latest Prometheus-backed CPU, RAM, network and disk snapshot for an owned project. If Prometheus is unavailable, prometheus_available is false and metric values are zero.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Get my project's live resource usage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_project.ProjectMonitoringResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{id}/monitoring/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns Prometheus-backed CPU, RAM, network and disk time series for an owned project. Supported ranges are 1h, 6h, 24h and 7d.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Get my project's resource usage history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time range: 1h, 6h, 24h, 7d",
+                        "name": "range",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_project.MonitoringHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/projects/{id}/node-manifests": {
             "get": {
                 "security": [
@@ -10286,6 +10408,35 @@ const docTemplate = `{
                             "format": "float64"
                         }
                     }
+                }
+            }
+        },
+        "internal_modules_project.ProjectMonitoringResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_cores": {
+                    "type": "number"
+                },
+                "disk_bytes": {
+                    "type": "integer"
+                },
+                "disk_cms_bytes": {
+                    "type": "integer"
+                },
+                "disk_files_bytes": {
+                    "type": "integer"
+                },
+                "memory_bytes": {
+                    "type": "integer"
+                },
+                "net_rx_bps": {
+                    "type": "number"
+                },
+                "net_tx_bps": {
+                    "type": "number"
+                },
+                "prometheus_available": {
+                    "type": "boolean"
                 }
             }
         },
