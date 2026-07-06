@@ -1,0 +1,63 @@
+fullnameOverride: "backend-worker"
+command: ["/app/worker"]
+
+podLabels:
+  app: botmother
+  component: backend-worker
+
+strategy:
+  type: Recreate
+
+service:
+  enabled: false
+
+probes:
+  startup:
+    enabled: false
+  readiness:
+    enabled: false
+  liveness:
+    enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+prometheus:
+  scrape: false
+
+persistentVolumeClaims: []
+
+serviceAccount:
+  create: true
+  name: backend-worker
+  rules:
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "delete"]
+    - apiGroups: [""]
+      resources: ["secrets", "configmaps", "services"]
+      verbs: ["get", "list", "delete"]
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list"]
+
+envFrom:
+  - secretRef:
+      name: botmother-secret
+  - secretRef:
+      name: backend-golang-db
+  - secretRef:
+      name: mongo-secret
+  - secretRef:
+      name: redis-secret
+
+env:
+  - name: K8S_NAMESPACE
+    value: botmother
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
