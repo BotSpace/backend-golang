@@ -1,4 +1,6 @@
-# ArgoCD backend-golang app shu faylni $values sifatida o'qiydi.
+# ArgoCD backend-golang/backend-worker app'lari shu faylni common values
+# sifatida o'qiydi. App-specific values helm/values-api.yaml va
+# helm/values-worker.yaml ichida.
 # CI har push'da tag'ni yangilaydi (engine-golang pattern).
 image:
   repository: registry.iprogrammer.uz/botspace/backend-golang

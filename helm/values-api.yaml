@@ -1,0 +1,74 @@
+fullnameOverride: "backend-golang"
+
+podLabels:
+  app: botmother
+  component: backend-golang
+
+service:
+  enabled: true
+  port: 8080
+
+probes:
+  startup:
+    enabled: true
+    type: httpGet
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+  readiness:
+    enabled: true
+    type: httpGet
+    httpGet:
+      path: /readyz
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    type: httpGet
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+podDisruptionBudget:
+  enabled: false
+
+prometheus:
+  scrape: false
+
+envFrom:
+  - secretRef:
+      name: backend-golang-db
+  - secretRef:
+      name: backend-golang-app
+  - secretRef:
+      name: jwt-secret
+
+volumes:
+  - name: jwt-keys
+    secret:
+      secretName: backend-golang-jwt
+
+volumeMounts:
+  - name: jwt-keys
+    mountPath: /app/keys
+    readOnly: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
