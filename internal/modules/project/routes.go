@@ -24,5 +24,6 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		admin.GET("/projects", h.AdminList)
 		admin.GET("/projects/:id", h.AdminGet)
 		admin.GET("/monitoring", h.AdminMonitoring)
+		admin.GET("/monitoring/:id/history", h.AdminMonitoringHistory)
 	}
 }

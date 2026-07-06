@@ -319,6 +319,19 @@ type MonitoringListResponse struct {
 	PrometheusAvailable bool                        `json:"prometheus_available"`
 }
 
+type MonitoringSeriesResponse struct {
+	CPUCores    [][2]float64 `json:"cpu_cores"`
+	MemoryBytes [][2]float64 `json:"memory_bytes"`
+	NetRXBps    [][2]float64 `json:"net_rx_bps"`
+	NetTXBps    [][2]float64 `json:"net_tx_bps"`
+	DiskBytes   [][2]float64 `json:"disk_bytes"`
+}
+
+type MonitoringHistoryResponse struct {
+	Series              MonitoringSeriesResponse `json:"series"`
+	PrometheusAvailable bool                     `json:"prometheus_available"`
+}
+
 func toMonitoringListResponse(page *MonitoringPage, limit, offset int32) MonitoringListResponse {
 	items := page.Items
 	out := make([]MonitoringProjectResponse, len(items))
@@ -329,4 +342,25 @@ func toMonitoringListResponse(page *MonitoringPage, limit, offset int32) Monitor
 		Items: out, Total: page.Total, Limit: limit, Offset: offset,
 		PrometheusAvailable: page.PrometheusAvailable,
 	}
+}
+
+func toMonitoringHistoryResponse(history *MonitoringHistory) MonitoringHistoryResponse {
+	return MonitoringHistoryResponse{
+		Series: MonitoringSeriesResponse{
+			CPUCores:    toSeries(history.CPU),
+			MemoryBytes: toSeries(history.Memory),
+			NetRXBps:    toSeries(history.NetworkRX),
+			NetTXBps:    toSeries(history.NetworkTX),
+			DiskBytes:   toSeries(history.Disk),
+		},
+		PrometheusAvailable: history.PrometheusAvailable,
+	}
+}
+
+func toSeries(points []MetricPoint) [][2]float64 {
+	out := make([][2]float64, len(points))
+	for i, p := range points {
+		out[i] = [2]float64{float64(p.Timestamp), p.Value}
+	}
+	return out
 }

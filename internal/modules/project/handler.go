@@ -366,3 +366,25 @@ func (h *Handler) AdminMonitoring(c *gin.Context) {
 	}
 	httpx.OK(c, 200, toMonitoringListResponse(page, int32(limit), int32(offset)))
 }
+
+// AdminMonitoringHistory godoc
+// @Summary      Per-project resource usage history (admin)
+// @Tags         projects-admin
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id     path   string  true   "Project ID (uuid)"
+// @Param        range  query  string  false  "Time range: 1h, 6h, 24h, 7d"
+// @Success      200  {object}  MonitoringHistoryResponse
+// @Router       /admin/monitoring/{id}/history [get]
+func (h *Handler) AdminMonitoringHistory(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	history, err := h.uc.AdminMonitoringHistory(c.Request.Context(), id, c.Query("range"))
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toMonitoringHistoryResponse(history))
+}
