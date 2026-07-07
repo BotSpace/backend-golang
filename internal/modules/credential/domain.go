@@ -43,6 +43,18 @@ type ListFilter struct {
 	Offset  int32
 }
 
+type OptionItem struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type OptionsInput struct {
+	OwnerID      uuid.UUID
+	Resource     string
+	CredentialID uuid.UUID
+	Params       map[string]string
+}
+
 // Repository is the persistence port; all reads/writes are owner-scoped so a
 // user can never touch another user's credentials, except the two internal
 // lookups used by the engine (GetByID, GetProjectOwner) which are guarded by

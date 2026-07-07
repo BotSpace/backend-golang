@@ -89,6 +89,15 @@ type OAuthStartResponse struct {
 	AuthorizeURL string `json:"authorize_url"`
 }
 
+type OptionsRequest struct {
+	CredentialID string            `json:"credential_id" validate:"required,uuid"`
+	Params       map[string]string `json:"params"`
+}
+
+type OptionsResponse struct {
+	Options []OptionItem `json:"options"`
+}
+
 // CreateRequest is the POST /credentials body.
 type CreateRequest struct {
 	TypeKey string         `json:"type_key" validate:"required,max=40"`
