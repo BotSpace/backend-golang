@@ -425,6 +425,40 @@ func (q *Queries) GetPaymentHistoryForUser(ctx context.Context, arg GetPaymentHi
 	return i, err
 }
 
+const getPaymentOrderByExternalID = `-- name: GetPaymentOrderByExternalID :one
+SELECT id, project_id, owner_id, payer_chat_id, payer_first_name, payer_last_name, payer_username, amount, commission, net_amount, provider, status, external_id, comment, idempotency_key, transaction_id, paid_at, is_debug, pay_instruction, created_at, updated_at, deleted_at FROM payment_order WHERE external_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetPaymentOrderByExternalID(ctx context.Context, externalID *string) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getPaymentOrderByExternalID, externalID)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OwnerID,
+		&i.PayerChatID,
+		&i.PayerFirstName,
+		&i.PayerLastName,
+		&i.PayerUsername,
+		&i.Amount,
+		&i.Commission,
+		&i.NetAmount,
+		&i.Provider,
+		&i.Status,
+		&i.ExternalID,
+		&i.Comment,
+		&i.IdempotencyKey,
+		&i.TransactionID,
+		&i.PaidAt,
+		&i.IsDebug,
+		&i.PayInstruction,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getPaymentOrderByID = `-- name: GetPaymentOrderByID :one
 SELECT id, project_id, owner_id, payer_chat_id, payer_first_name, payer_last_name, payer_username, amount, commission, net_amount, provider, status, external_id, comment, idempotency_key, transaction_id, paid_at, is_debug, pay_instruction, created_at, updated_at, deleted_at FROM payment_order WHERE id = $1 AND deleted_at IS NULL
 `

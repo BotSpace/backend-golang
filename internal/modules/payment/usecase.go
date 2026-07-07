@@ -44,6 +44,12 @@ type OrderCreateResult struct {
 	PayInstruction string
 }
 
+type PaycueWebhookInput struct {
+	Action        string
+	Amount        string
+	TransactionID string
+}
+
 // EarningsResult is the owner earnings dashboard payload (Django EarningsView.list).
 type EarningsResult struct {
 	Balance         int64
@@ -96,6 +102,7 @@ type Usecase interface {
 	// return (with nil error) means the legacy transaction-only path ran.
 	SettlePaidTransaction(ctx context.Context, transactionID uuid.UUID, externalID string) (*Order, error)
 	SettleCancelledTransaction(ctx context.Context, transactionID uuid.UUID) (*Order, error)
+	SettlePaycueTransaction(ctx context.Context, in PaycueWebhookInput) (*Order, error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*Transaction, error)
 	// SetTransactionExternalRef/GetTransactionByExternalRef back the Payme
 	// gateway, which only carries its own opaque transaction id on
@@ -117,6 +124,7 @@ type usecase struct {
 	revenueUserID     *uuid.UUID
 	click             ClickGateway
 	payme             PaymeGateway
+	paycue            PaycueGateway
 }
 
 // NewUsecase wires the payment usecase. Gateway credentials and the optional
@@ -146,6 +154,7 @@ func NewUsecase(repo Repository, notifier Notifier) Usecase {
 		revenueUserID:     revenueUserID,
 		click:             NewClickGatewayFromEnv(),
 		payme:             NewPaymeGatewayFromEnv(),
+		paycue:            NewPaycueGatewayFromEnv(),
 	}
 }
 
@@ -188,19 +197,21 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 					}
 					existing = updated
 				}
-				payURL := ""
-				if existing.TransactionID != nil {
-					payURL = u.payURLFor(existing.Provider, *existing.TransactionID, existing.Amount)
-				}
-				if existing.Provider == ProviderPaycue && existing.PayInstruction == "" {
-					instruction := buildPaycueInstruction(existing)
-					updated, err := u.repo.SetOrderPayInstruction(ctx, existing.ID, existing.ID.String(), instruction)
-					if err != nil {
-						return nil, httpx.Internal(err)
+				if existing.Provider == ProviderPaycue {
+					if existing.ExternalID == "" {
+						if err := u.repo.ClearOrderIdempotencyKey(ctx, existing.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+							return nil, httpx.Internal(err)
+						}
+					} else {
+						return &OrderCreateResult{Order: existing, PayURL: u.paycue.PayURL(existing.ExternalID)}, nil
 					}
-					existing = updated
+				} else {
+					payURL := ""
+					if existing.TransactionID != nil {
+						payURL = u.payURLFor(existing.Provider, *existing.TransactionID, existing.Amount)
+					}
+					return &OrderCreateResult{Order: existing, PayURL: payURL, PayInstruction: existing.PayInstruction}, nil
 				}
-				return &OrderCreateResult{Order: existing, PayURL: payURL, PayInstruction: existing.PayInstruction}, nil
 			}
 			// Finalized order (paid/cancelled/refunded): free the key so a new
 			// order can be created with it, mirroring order.py's else branch.
@@ -218,12 +229,22 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 		return nil, httpx.Internal(err)
 	}
 
-	commission, net, err := calculateCommission(in.Amount, u.commissionPercent)
+	orderAmount := in.Amount
+	var paycueTx *PaycueTransaction
+	if provider == ProviderPaycue {
+		paycueTx, err = u.paycue.CreateTransaction(ctx, in.Amount)
+		if err != nil {
+			return nil, httpx.Internal(fmt.Errorf("create paycue transaction: %w", err))
+		}
+		orderAmount = paycueTx.Amount
+	}
+
+	commission, net, err := calculateCommission(orderAmount, u.commissionPercent)
 	if err != nil {
 		return nil, httpx.BadRequest("order.invalid_amount", "amount noto'g'ri formatda")
 	}
 
-	txn, err := u.repo.CreateTransaction(ctx, CreateTransactionInput{ID: uuid.New(), UserID: ownerID, Amount: in.Amount})
+	txn, err := u.repo.CreateTransaction(ctx, CreateTransactionInput{ID: uuid.New(), UserID: ownerID, Amount: orderAmount})
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
@@ -241,7 +262,7 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 		PayerFirstName: in.PayerFirstName,
 		PayerLastName:  in.PayerLastName,
 		PayerUsername:  in.PayerUsername,
-		Amount:         in.Amount,
+		Amount:         orderAmount,
 		Commission:     commission,
 		NetAmount:      net,
 		Provider:       provider,
@@ -255,15 +276,14 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 	}
 
 	if provider == ProviderPaycue {
-		instruction := buildPaycueInstruction(order)
-		order, err = u.repo.SetOrderPayInstruction(ctx, order.ID, order.ID.String(), instruction)
+		order, err = u.repo.SetOrderPayInstruction(ctx, order.ID, paycueTx.TransactionID, "")
 		if err != nil {
 			return nil, httpx.Internal(err)
 		}
-		return &OrderCreateResult{Order: order, PayInstruction: order.PayInstruction}, nil
+		return &OrderCreateResult{Order: order, PayURL: paycueTx.PayURL}, nil
 	}
 
-	return &OrderCreateResult{Order: order, PayURL: u.payURLFor(provider, txn.ID, in.Amount)}, nil
+	return &OrderCreateResult{Order: order, PayURL: u.payURLFor(provider, txn.ID, orderAmount)}, nil
 }
 
 // payURLFor generates a gateway checkout URL. Providers without a
@@ -281,24 +301,6 @@ func (u *usecase) payURLFor(provider string, txnID uuid.UUID, amount string) str
 	default:
 		return ""
 	}
-}
-
-func buildPaycueInstruction(order *Order) string {
-	lines := []string{
-		"To'lovni karta orqali amalga oshiring.",
-		fmt.Sprintf("Summa: %s so'm", strings.TrimSuffix(strings.TrimSuffix(order.Amount, "0"), ".")),
-	}
-	if card := strings.TrimSpace(os.Getenv("APP_PAYCUE_CARD_NUMBER")); card != "" {
-		lines = append(lines, "Karta: "+card)
-	}
-	if owner := strings.TrimSpace(os.Getenv("APP_PAYCUE_CARD_OWNER")); owner != "" {
-		lines = append(lines, "Karta egasi: "+owner)
-	}
-	lines = append(lines,
-		"Izoh: "+order.ID.String(),
-		"To'lovdan so'ng tasdiqlanishini kuting.",
-	)
-	return strings.Join(lines, "\n")
 }
 
 func (u *usecase) GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Order, error) {
@@ -724,6 +726,57 @@ func (u *usecase) SettlePaidTransaction(ctx context.Context, transactionID uuid.
 	return updated, nil
 }
 
+func (u *usecase) SettlePaycueTransaction(ctx context.Context, in PaycueWebhookInput) (*Order, error) {
+	if in.TransactionID == "" {
+		return nil, httpx.BadRequest("paycue.invalid_transaction", "transaction_id majburiy")
+	}
+	order, err := u.repo.GetOrderByExternalID(ctx, in.TransactionID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.NotFound("order.not_found", "order topilmadi")
+		}
+		return nil, httpx.Internal(err)
+	}
+	if in.Amount != "" {
+		if ok, err := sameMoneyAmount(order.Amount, in.Amount); err != nil {
+			return nil, httpx.BadRequest("paycue.invalid_amount", "amount noto'g'ri formatda")
+		} else if !ok {
+			return nil, httpx.BadRequest("paycue.amount_mismatch", "amount order bilan mos emas")
+		}
+	}
+
+	switch in.Action {
+	case "confirm":
+		if order.TransactionID == nil {
+			return nil, httpx.Conflict("paycue.order_without_transaction", "order transaction bilan bog'lanmagan")
+		}
+		return u.SettlePaidTransaction(ctx, *order.TransactionID, in.TransactionID)
+	case "cancel":
+		if order.Status == OrderStatusCancelled {
+			return order, nil
+		}
+		if order.Status == OrderStatusPaid {
+			return order, nil
+		}
+		updated, err := u.repo.MarkOrderCancelled(ctx, order.ID)
+		if err != nil {
+			if errors.Is(err, database.ErrNotFound) {
+				return u.repo.GetOrderByID(ctx, order.ID)
+			}
+			return nil, httpx.Internal(err)
+		}
+		if order.TransactionID != nil {
+			_ = u.repo.SetTransactionStatus(ctx, *order.TransactionID, true, false)
+		}
+		if err := u.repo.ClearOrderIdempotencyKey(ctx, updated.ID); err != nil && !errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.Internal(err)
+		}
+		return updated, nil
+	default:
+		return nil, httpx.BadRequest("paycue.invalid_action", "action noto'g'ri")
+	}
+}
+
 // SettleCancelledTransaction mirrors views/click.py::cancelled_payment.
 func (u *usecase) SettleCancelledTransaction(ctx context.Context, transactionID uuid.UUID) (*Order, error) {
 	order, err := u.repo.GetOrderByTransactionID(ctx, transactionID)
@@ -909,6 +962,18 @@ func parseMoneySom(s string) (int64, error) {
 		return 0, err
 	}
 	return cents / 100, nil
+}
+
+func sameMoneyAmount(a, b string) (bool, error) {
+	ac, err := parseMoneyCents(a)
+	if err != nil {
+		return false, err
+	}
+	bc, err := parseMoneyCents(b)
+	if err != nil {
+		return false, err
+	}
+	return ac == bc, nil
 }
 
 // calculateCommission mirrors services/commission.py::calculate_commission

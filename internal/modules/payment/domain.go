@@ -230,6 +230,7 @@ type Repository interface {
 	GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Order, error)
 	GetOrderByIdempotencyKey(ctx context.Context, key string) (*Order, error)
 	GetOrderByTransactionID(ctx context.Context, txnID uuid.UUID) (*Order, error)
+	GetOrderByExternalID(ctx context.Context, externalID string) (*Order, error)
 	AttachTransactionToOrder(ctx context.Context, orderID, txnID uuid.UUID) (*Order, error)
 	ClearOrderIdempotencyKey(ctx context.Context, orderID uuid.UUID) error
 	SetOrderPayInstruction(ctx context.Context, orderID uuid.UUID, externalID, payInstruction string) (*Order, error)
