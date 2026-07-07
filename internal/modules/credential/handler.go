@@ -284,10 +284,6 @@ func (h *Handler) Options(c *gin.Context) {
 		httpx.ErrorWithDetails(c, httpx.BadRequest("request.invalid", "validation failed"), details)
 		return
 	}
-	if req.CredentialID == "" {
-		httpx.OK(c, 200, OptionsResponse{Options: []OptionItem{}})
-		return
-	}
 	credentialID, err := uuid.Parse(req.CredentialID)
 	if err != nil {
 		httpx.Error(c, httpx.BadRequest("credential.invalid_id", "invalid credential id"))
