@@ -96,6 +96,11 @@ type Order struct {
 	OwnerPhone  string
 }
 
+type ProjectWebhookUUIDs struct {
+	Release uuid.UUID
+	Debug   uuid.UUID
+}
+
 // WithdrawalRequest is a bot-income payout request. amount is deducted from
 // the shared users.balance only when an admin approves it.
 type WithdrawalRequest struct {
@@ -243,6 +248,7 @@ type Repository interface {
 	// Project ownership lookup (reuses the shared projects table; this
 	// module owns no project data of its own).
 	GetProjectOwner(ctx context.Context, projectID uuid.UUID) (ownerID uuid.UUID, projectName string, err error)
+	GetProjectWebhookUUIDs(ctx context.Context, projectID uuid.UUID) (ProjectWebhookUUIDs, error)
 
 	// History (read-only listing; writes only happen via ApplyBalanceDelta).
 	ListHistoryForUser(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]History, error)
@@ -291,7 +297,7 @@ type Notifier interface {
 	NotifyOrderPaid(ctx context.Context, order *Order) error
 }
 
-// noopNotifier is the default Notifier: it does nothing and never errors.
+// noopNotifier is available for tests that do not need engine callbacks.
 type noopNotifier struct{}
 
 func (noopNotifier) NotifyOrderPaid(context.Context, *Order) error { return nil }

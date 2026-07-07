@@ -19,8 +19,9 @@ type fakeUser struct {
 }
 
 type fakeProject struct {
-	ownerID uuid.UUID
-	name    string
+	ownerID  uuid.UUID
+	name     string
+	webhooks ProjectWebhookUUIDs
 }
 
 type fakeRepo struct {
@@ -247,6 +248,20 @@ func (r *fakeRepo) GetProjectOwner(_ context.Context, projectID uuid.UUID) (uuid
 		return uuid.Nil, "", database.ErrNotFound
 	}
 	return p.ownerID, p.name, nil
+}
+
+func (r *fakeRepo) GetProjectWebhookUUIDs(_ context.Context, projectID uuid.UUID) (ProjectWebhookUUIDs, error) {
+	p, ok := r.projects[projectID]
+	if !ok {
+		return ProjectWebhookUUIDs{}, database.ErrNotFound
+	}
+	if p.webhooks.Release == uuid.Nil {
+		p.webhooks.Release = uuid.New()
+	}
+	if p.webhooks.Debug == uuid.Nil {
+		p.webhooks.Debug = uuid.New()
+	}
+	return p.webhooks, nil
 }
 
 // ---- history ----
