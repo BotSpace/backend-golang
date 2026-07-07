@@ -342,6 +342,20 @@ func (r *pgRepo) GetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid
 	return p.OwnerID, p.Name, nil
 }
 
+func (r *pgRepo) GetProjectWebhookUUIDs(ctx context.Context, projectID uuid.UUID) (ProjectWebhookUUIDs, error) {
+	p, err := r.queries.GetProject(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ProjectWebhookUUIDs{}, database.ErrNotFound
+	}
+	if err != nil {
+		return ProjectWebhookUUIDs{}, fmt.Errorf("get project webhook uuids: %w", err)
+	}
+	return ProjectWebhookUUIDs{
+		Release: p.ReleaseWebhookUuid,
+		Debug:   p.DebugWebhookUuid,
+	}, nil
+}
+
 // ===================== history =====================
 
 func (r *pgRepo) ListHistoryForUser(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]History, error) {

@@ -314,7 +314,8 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	plugin.RegisterRoutes(v1, plugin.NewHandler(pluginUC), tokens)
 
 	// payment — orders, transactions, withdrawals, Click/Payme webhooks.
-	paymentUC := payment.NewUsecase(payment.NewPostgresRepository(s.pool), payment.NewNoopNotifier())
+	paymentRepo := payment.NewPostgresRepository(s.pool)
+	paymentUC := payment.NewUsecase(paymentRepo, payment.NewHTTPNotifier(paymentRepo, s.cfg.Engine.InternalToken))
 	payment.RegisterRoutes(v1, payment.NewHandler(paymentUC), tokens)
 
 	// tickets — support.
