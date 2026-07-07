@@ -153,8 +153,7 @@ func NewUsecase(repo Repository, notifier Notifier) Usecase {
 
 // CreateOrder mirrors views/order.py::order_create: idempotency reuse for a
 // still-pending order, otherwise commission split + transaction + order +
-// pay_url. Click/Payme pay URLs are generated here; Paycue/Paynet/Uzum are
-// out of this port's scope (TODO, PayURL/PayInstruction stay empty).
+// pay_url or pay_instruction.
 func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderCreateResult, error) {
 	amountCents, err := parseMoneyCents(in.Amount)
 	if err != nil {
@@ -192,6 +191,14 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 				payURL := ""
 				if existing.TransactionID != nil {
 					payURL = u.payURLFor(existing.Provider, *existing.TransactionID, existing.Amount)
+				}
+				if existing.Provider == ProviderPaycue && existing.PayInstruction == "" {
+					instruction := buildPaycueInstruction(existing)
+					updated, err := u.repo.SetOrderPayInstruction(ctx, existing.ID, existing.ID.String(), instruction)
+					if err != nil {
+						return nil, httpx.Internal(err)
+					}
+					existing = updated
 				}
 				return &OrderCreateResult{Order: existing, PayURL: payURL, PayInstruction: existing.PayInstruction}, nil
 			}
@@ -247,11 +254,20 @@ func (u *usecase) CreateOrder(ctx context.Context, in CreateOrderInput) (*OrderC
 		return nil, httpx.Internal(err)
 	}
 
+	if provider == ProviderPaycue {
+		instruction := buildPaycueInstruction(order)
+		order, err = u.repo.SetOrderPayInstruction(ctx, order.ID, order.ID.String(), instruction)
+		if err != nil {
+			return nil, httpx.Internal(err)
+		}
+		return &OrderCreateResult{Order: order, PayInstruction: order.PayInstruction}, nil
+	}
+
 	return &OrderCreateResult{Order: order, PayURL: u.payURLFor(provider, txn.ID, in.Amount)}, nil
 }
 
 // payURLFor generates a gateway checkout URL. Providers without a
-// generator (paycue/paynet/uzum) return "" — TODO for a future port.
+// generator (paycue/paynet/uzum) return "".
 func (u *usecase) payURLFor(provider string, txnID uuid.UUID, amount string) string {
 	switch provider {
 	case ProviderClick:
@@ -265,6 +281,24 @@ func (u *usecase) payURLFor(provider string, txnID uuid.UUID, amount string) str
 	default:
 		return ""
 	}
+}
+
+func buildPaycueInstruction(order *Order) string {
+	lines := []string{
+		"To'lovni karta orqali amalga oshiring.",
+		fmt.Sprintf("Summa: %s so'm", strings.TrimSuffix(strings.TrimSuffix(order.Amount, "0"), ".")),
+	}
+	if card := strings.TrimSpace(os.Getenv("APP_PAYCUE_CARD_NUMBER")); card != "" {
+		lines = append(lines, "Karta: "+card)
+	}
+	if owner := strings.TrimSpace(os.Getenv("APP_PAYCUE_CARD_OWNER")); owner != "" {
+		lines = append(lines, "Karta egasi: "+owner)
+	}
+	lines = append(lines,
+		"Izoh: "+order.ID.String(),
+		"To'lovdan so'ng tasdiqlanishini kuting.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 func (u *usecase) GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (*Order, error) {
