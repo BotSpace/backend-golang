@@ -51,6 +51,7 @@ type Usecase interface {
 	Delete(ctx context.Context, id, ownerID uuid.UUID) error
 	List(ctx context.Context, f ListFilter) ([]Detail, int64, error)
 	ListTypes(ctx context.Context) []TypeDef
+	Options(ctx context.Context, in OptionsInput) ([]OptionItem, error)
 
 	// InternalGetByID resolves a credential by id for the engine. projectID,
 	// when non-nil, must own the credential (cross-tenant guard) — mirrors

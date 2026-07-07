@@ -258,6 +258,50 @@ func (h *Handler) OAuthStart(c *gin.Context) {
 	httpx.OK(c, 200, OAuthStartResponse{AuthorizeURL: authorizeURL})
 }
 
+// Options godoc
+// @Summary      Load dynamic credential-backed field options
+// @Tags         credentials
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        resource  path      string          true  "Resource name (google_spreadsheets/google_sheet_tabs/google_sheet_columns)"
+// @Param        body      body      OptionsRequest  true  "Credential and dependency params"
+// @Success      200       {object}  OptionsResponse
+// @Failure      400       {object}  httpx.ErrorResponse
+// @Failure      404       {object}  httpx.ErrorResponse
+// @Router       /credentials/options/{resource} [post]
+func (h *Handler) Options(c *gin.Context) {
+	ownerID, ok := owner(c)
+	if !ok {
+		return
+	}
+	var req OptionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	if details, err := validator.Struct(req); err != nil {
+		httpx.ErrorWithDetails(c, httpx.BadRequest("request.invalid", "validation failed"), details)
+		return
+	}
+	credentialID, err := uuid.Parse(req.CredentialID)
+	if err != nil {
+		httpx.Error(c, httpx.BadRequest("credential.invalid_id", "invalid credential id"))
+		return
+	}
+	options, err := h.uc.Options(c.Request.Context(), OptionsInput{
+		OwnerID:      ownerID,
+		Resource:     c.Param("resource"),
+		CredentialID: credentialID,
+		Params:       req.Params,
+	})
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, OptionsResponse{Options: options})
+}
+
 // OAuthCallback godoc
 // @Summary      Complete an OAuth2 consent flow (Google redirects here)
 // @Tags         credentials
