@@ -90,7 +90,7 @@ type OAuthStartResponse struct {
 }
 
 type OptionsRequest struct {
-	CredentialID string            `json:"credential_id" validate:"required,uuid"`
+	CredentialID string            `json:"credential_id" validate:"omitempty,uuid"`
 	Params       map[string]string `json:"params"`
 }
 
