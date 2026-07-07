@@ -1,6 +1,8 @@
 package payment
 
 import (
+	"encoding/json"
+	"net/http"
 	"strconv"
 
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -11,16 +13,17 @@ import (
 )
 
 type Handler struct {
-	uc    Usecase
-	click ClickGateway
-	payme PaymeGateway
+	uc     Usecase
+	click  ClickGateway
+	payme  PaymeGateway
+	paycue PaycueGateway
 }
 
 // NewHandler builds the payment HTTP handler. click/payme are separate
 // gateway value structs (not derived from uc) purely for webhook signature
 // verification — the pay_url generation itself happens inside the usecase.
 func NewHandler(uc Usecase) *Handler {
-	return &Handler{uc: uc, click: NewClickGatewayFromEnv(), payme: NewPaymeGatewayFromEnv()}
+	return &Handler{uc: uc, click: NewClickGatewayFromEnv(), payme: NewPaymeGatewayFromEnv(), paycue: NewPaycueGatewayFromEnv()}
 }
 
 // owner extracts the authenticated user id, writing a 401 on failure.
@@ -550,4 +553,38 @@ func (h *Handler) InternalOrderStatus(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toOrderResponse(o))
+}
+
+// PaycueWebhook godoc
+// @Summary      Paycue payment webhook
+// @Tags         payment-webhooks
+// @Accept       json
+// @Produce      json
+// @Param        X-API-Key  header    string  true  "Paycue webhook secret"
+// @Success      200        {object}  map[string]bool
+// @Router       /payment/paycue/update [post]
+func (h *Handler) PaycueWebhook(c *gin.Context) {
+	if !h.paycue.verifyWebhookSecret(c.GetHeader("X-API-Key")) {
+		c.JSON(http.StatusForbidden, gin.H{"ok": false})
+		return
+	}
+	var req struct {
+		Action        string      `json:"action"`
+		Amount        json.Number `json:"amount"`
+		CardID        int64       `json:"card_id"`
+		TransactionID string      `json:"transaction_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "invalid request body"))
+		return
+	}
+	if _, err := h.uc.SettlePaycueTransaction(c.Request.Context(), PaycueWebhookInput{
+		Action:        req.Action,
+		Amount:        req.Amount.String(),
+		TransactionID: req.TransactionID,
+	}); err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

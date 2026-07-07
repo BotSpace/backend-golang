@@ -2,6 +2,9 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -32,6 +35,7 @@ type fakeRepo struct {
 	orders       map[uuid.UUID]*Order
 	orderByIdem  map[string]uuid.UUID
 	orderByTxn   map[uuid.UUID]uuid.UUID
+	orderByExt   map[string]uuid.UUID
 	withdrawals  map[uuid.UUID]*WithdrawalRequest
 	historyKeys  map[string]bool
 }
@@ -45,6 +49,7 @@ func newFakeRepo() *fakeRepo {
 		orders:       map[uuid.UUID]*Order{},
 		orderByIdem:  map[string]uuid.UUID{},
 		orderByTxn:   map[uuid.UUID]uuid.UUID{},
+		orderByExt:   map[string]uuid.UUID{},
 		withdrawals:  map[uuid.UUID]*WithdrawalRequest{},
 		historyKeys:  map[string]bool{},
 	}
@@ -175,6 +180,14 @@ func (r *fakeRepo) GetOrderByTransactionID(_ context.Context, txnID uuid.UUID) (
 	cp := *r.orders[id]
 	return &cp, nil
 }
+func (r *fakeRepo) GetOrderByExternalID(_ context.Context, externalID string) (*Order, error) {
+	id, ok := r.orderByExt[externalID]
+	if !ok {
+		return nil, database.ErrNotFound
+	}
+	cp := *r.orders[id]
+	return &cp, nil
+}
 func (r *fakeRepo) AttachTransactionToOrder(_ context.Context, orderID, txnID uuid.UUID) (*Order, error) {
 	o, ok := r.orders[orderID]
 	if !ok {
@@ -202,6 +215,9 @@ func (r *fakeRepo) SetOrderPayInstruction(_ context.Context, orderID uuid.UUID, 
 		return nil, database.ErrNotFound
 	}
 	o.ExternalID, o.PayInstruction = externalID, payInstruction
+	if externalID != "" {
+		r.orderByExt[externalID] = orderID
+	}
 	cp := *o
 	return &cp, nil
 }
@@ -212,6 +228,9 @@ func (r *fakeRepo) MarkOrderPaid(_ context.Context, id uuid.UUID, commission, ne
 	}
 	o.Status = OrderStatusPaid
 	o.Commission, o.NetAmount, o.ExternalID = commission, netAmount, externalID
+	if externalID != "" {
+		r.orderByExt[externalID] = id
+	}
 	now := time.Now()
 	o.PaidAt = &now
 	cp := *o
@@ -411,62 +430,113 @@ func newTestUsecase(repo Repository, revenueUserID *uuid.UUID) *usecase {
 	return &usecase{
 		repo: repo, notifier: NewNoopNotifier(), commissionPercent: 5, revenueUserID: revenueUserID,
 		click: NewClickGatewayFromEnv(), payme: NewPaymeGatewayFromEnv(),
+		paycue: PaycueGateway{BaseURL: "https://paycue.uz", Token: "test-token", HTTPClient: http.DefaultClient},
 	}
 }
 
-func TestCreateOrder_PaycueReturnsInstruction(t *testing.T) {
+func TestCreateOrder_PaycueCreatesRemoteTransaction(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepo()
 	ownerID, projectID := uuid.New(), uuid.New()
 	repo.projects[projectID] = &fakeProject{ownerID: ownerID, name: "MyBot"}
 
 	uc := newTestUsecase(repo, nil)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/transactions" {
+			t.Fatalf("unexpected paycue request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		var body struct {
+			Amount int64 `json:"amount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode paycue request: %v", err)
+		}
+		if body.Amount != 1000 {
+			t.Fatalf("paycue amount = %d, want 1000", body.Amount)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": true,
+			"data": map[string]interface{}{
+				"amount":         1000.01,
+				"card_id":        7,
+				"transaction_id": "paycue-tx-1",
+				"pay_url":        "https://paycue.uz/pay/paycue-tx-1",
+			},
+		})
+	}))
+	defer api.Close()
+	uc.paycue.BaseURL = api.URL
+	uc.paycue.HTTPClient = api.Client()
+
 	result, err := uc.CreateOrder(ctx, CreateOrderInput{
 		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue,
 	})
 	if err != nil {
 		t.Fatalf("create paycue order: %v", err)
 	}
-	if result.PayURL != "" {
-		t.Fatalf("paycue must not return pay_url, got %q", result.PayURL)
+	if result.PayURL != "https://paycue.uz/pay/paycue-tx-1" {
+		t.Fatalf("paycue pay_url = %q", result.PayURL)
 	}
-	if result.PayInstruction == "" {
-		t.Fatal("paycue must return pay_instruction")
+	if result.PayInstruction != "" {
+		t.Fatalf("paycue must not use static pay_instruction, got %q", result.PayInstruction)
 	}
-	if result.Order.PayInstruction != result.PayInstruction {
-		t.Fatalf("order pay_instruction not persisted")
+	if result.Order.ExternalID != "paycue-tx-1" {
+		t.Fatalf("expected paycue external_id, got %q", result.Order.ExternalID)
 	}
-	if result.Order.ExternalID != result.Order.ID.String() {
-		t.Fatalf("expected external_id to be order id, got %q", result.Order.ExternalID)
+	if result.Order.Amount != "1000.01" {
+		t.Fatalf("expected unique paycue amount, got %q", result.Order.Amount)
 	}
 }
 
-func TestCreateOrder_PaycueExistingPendingBackfillsInstruction(t *testing.T) {
+func TestSettlePaycueTransaction_ConfirmCreditsOwner(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepo()
 	ownerID, projectID := uuid.New(), uuid.New()
 	repo.projects[projectID] = &fakeProject{ownerID: ownerID, name: "MyBot"}
+	repo.users[ownerID] = &fakeUser{}
 
 	uc := newTestUsecase(repo, nil)
-	first, err := uc.CreateOrder(ctx, CreateOrderInput{
-		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue, IdempotencyKey: "same-order",
-	})
-	if err != nil {
-		t.Fatalf("first create paycue order: %v", err)
-	}
-	repo.orders[first.Order.ID].PayInstruction = ""
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": true,
+			"data": map[string]interface{}{
+				"amount":         1000.01,
+				"card_id":        7,
+				"transaction_id": "paycue-tx-2",
+				"pay_url":        "https://paycue.uz/pay/paycue-tx-2",
+			},
+		})
+	}))
+	defer api.Close()
+	uc.paycue.BaseURL = api.URL
+	uc.paycue.HTTPClient = api.Client()
 
-	second, err := uc.CreateOrder(ctx, CreateOrderInput{
-		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue, IdempotencyKey: "same-order",
+	result, err := uc.CreateOrder(ctx, CreateOrderInput{
+		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue,
 	})
 	if err != nil {
-		t.Fatalf("second create paycue order: %v", err)
+		t.Fatalf("create paycue order: %v", err)
 	}
-	if second.Order.ID != first.Order.ID {
-		t.Fatalf("expected idempotent order reuse, got %s want %s", second.Order.ID, first.Order.ID)
+
+	updated, err := uc.SettlePaycueTransaction(ctx, PaycueWebhookInput{
+		Action:        "confirm",
+		Amount:        "1000.01",
+		TransactionID: "paycue-tx-2",
+	})
+	if err != nil {
+		t.Fatalf("settle paycue: %v", err)
 	}
-	if second.PayInstruction == "" {
-		t.Fatal("existing paycue order must be backfilled with pay_instruction")
+	if updated.Status != OrderStatusPaid {
+		t.Fatalf("paycue order status = %s, want paid", updated.Status)
+	}
+	if repo.users[ownerID].balance != 950 {
+		t.Fatalf("owner balance = %d, want 950", repo.users[ownerID].balance)
+	}
+	if got := repo.transactions[*result.Order.TransactionID].Status; !got {
+		t.Fatal("linked transaction status was not marked paid")
 	}
 }
 

@@ -208,6 +208,10 @@ func (r *pgRepo) GetOrderByTransactionID(ctx context.Context, txnID uuid.UUID) (
 	return mapOrder(r.queries.GetPaymentOrderByTransactionID(ctx, &txnID))
 }
 
+func (r *pgRepo) GetOrderByExternalID(ctx context.Context, externalID string) (*Order, error) {
+	return mapOrder(r.queries.GetPaymentOrderByExternalID(ctx, &externalID))
+}
+
 func (r *pgRepo) AttachTransactionToOrder(ctx context.Context, orderID, txnID uuid.UUID) (*Order, error) {
 	return mapOrder(r.queries.AttachPaymentTransactionToOrder(ctx, sqlcdb.AttachPaymentTransactionToOrderParams{
 		ID: orderID, TransactionID: &txnID,

@@ -67,6 +67,9 @@ SELECT * FROM payment_order WHERE idempotency_key = $1 AND deleted_at IS NULL;
 -- name: GetPaymentOrderByTransactionID :one
 SELECT * FROM payment_order WHERE transaction_id = $1 AND deleted_at IS NULL;
 
+-- name: GetPaymentOrderByExternalID :one
+SELECT * FROM payment_order WHERE external_id = $1 AND deleted_at IS NULL;
+
 -- name: AttachPaymentTransactionToOrder :one
 UPDATE payment_order SET transaction_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
 

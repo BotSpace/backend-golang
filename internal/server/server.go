@@ -316,7 +316,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// payment — orders, transactions, withdrawals, Click/Payme webhooks.
 	paymentRepo := payment.NewPostgresRepository(s.pool)
 	paymentUC := payment.NewUsecase(paymentRepo, payment.NewHTTPNotifier(paymentRepo, s.cfg.Engine.InternalToken))
-	payment.RegisterRoutes(v1, payment.NewHandler(paymentUC), tokens)
+	paymentHandler := payment.NewHandler(paymentUC)
+	payment.RegisterRoutes(v1, paymentHandler, tokens)
+	s.router.POST("/api/payment/paycue/update", paymentHandler.PaycueWebhook)
+	s.router.POST("/api/payment/paycue/update/", paymentHandler.PaycueWebhook)
 
 	// tickets — support.
 	ticketUC := ticket.NewUsecase(ticket.NewPostgresRepository(s.pool))

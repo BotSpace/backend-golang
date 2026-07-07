@@ -264,6 +264,7 @@ type Querier interface {
 	GetModuleBySlug(ctx context.Context, slug string) (Module, error)
 	GetOrCreateDebugForOwner(ctx context.Context, arg GetOrCreateDebugForOwnerParams) (Debug, error)
 	GetPaymentHistoryForUser(ctx context.Context, arg GetPaymentHistoryForUserParams) (History, error)
+	GetPaymentOrderByExternalID(ctx context.Context, externalID *string) (PaymentOrder, error)
 	GetPaymentOrderByID(ctx context.Context, id uuid.UUID) (PaymentOrder, error)
 	GetPaymentOrderByIdempotencyKey(ctx context.Context, idempotencyKey *string) (PaymentOrder, error)
 	GetPaymentOrderByTransactionID(ctx context.Context, transactionID *uuid.UUID) (PaymentOrder, error)

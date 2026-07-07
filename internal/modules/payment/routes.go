@@ -58,6 +58,13 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 	{
 		webhooks.POST("/click", h.ClickWebhook)
 		webhooks.POST("/payme", h.PaymeWebhook)
+		webhooks.POST("/paycue", h.PaycueWebhook)
+	}
+
+	paycue := rg.Group("/payment/paycue")
+	{
+		paycue.POST("/update", h.PaycueWebhook)
+		paycue.POST("/update/", h.PaycueWebhook)
 	}
 }
 
