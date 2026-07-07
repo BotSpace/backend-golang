@@ -414,6 +414,62 @@ func newTestUsecase(repo Repository, revenueUserID *uuid.UUID) *usecase {
 	}
 }
 
+func TestCreateOrder_PaycueReturnsInstruction(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepo()
+	ownerID, projectID := uuid.New(), uuid.New()
+	repo.projects[projectID] = &fakeProject{ownerID: ownerID, name: "MyBot"}
+
+	uc := newTestUsecase(repo, nil)
+	result, err := uc.CreateOrder(ctx, CreateOrderInput{
+		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue,
+	})
+	if err != nil {
+		t.Fatalf("create paycue order: %v", err)
+	}
+	if result.PayURL != "" {
+		t.Fatalf("paycue must not return pay_url, got %q", result.PayURL)
+	}
+	if result.PayInstruction == "" {
+		t.Fatal("paycue must return pay_instruction")
+	}
+	if result.Order.PayInstruction != result.PayInstruction {
+		t.Fatalf("order pay_instruction not persisted")
+	}
+	if result.Order.ExternalID != result.Order.ID.String() {
+		t.Fatalf("expected external_id to be order id, got %q", result.Order.ExternalID)
+	}
+}
+
+func TestCreateOrder_PaycueExistingPendingBackfillsInstruction(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepo()
+	ownerID, projectID := uuid.New(), uuid.New()
+	repo.projects[projectID] = &fakeProject{ownerID: ownerID, name: "MyBot"}
+
+	uc := newTestUsecase(repo, nil)
+	first, err := uc.CreateOrder(ctx, CreateOrderInput{
+		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue, IdempotencyKey: "same-order",
+	})
+	if err != nil {
+		t.Fatalf("first create paycue order: %v", err)
+	}
+	repo.orders[first.Order.ID].PayInstruction = ""
+
+	second, err := uc.CreateOrder(ctx, CreateOrderInput{
+		ProjectID: projectID, PayerChatID: 12345, Amount: "1000.00", Provider: ProviderPaycue, IdempotencyKey: "same-order",
+	})
+	if err != nil {
+		t.Fatalf("second create paycue order: %v", err)
+	}
+	if second.Order.ID != first.Order.ID {
+		t.Fatalf("expected idempotent order reuse, got %s want %s", second.Order.ID, first.Order.ID)
+	}
+	if second.PayInstruction == "" {
+		t.Fatal("existing paycue order must be backfilled with pay_instruction")
+	}
+}
+
 // TestSettlePaidTransaction_CommissionSplit verifies the core money-split
 // invariant: on a paid webhook, the owner is credited net_amount and the
 // platform revenue account is credited commission, out of the same order
