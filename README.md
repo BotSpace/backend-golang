@@ -108,6 +108,10 @@ curl -X PATCH http://localhost:8080/api/v1/users/<USER_ID>/role \
 
 Bu hammasi. Module o'zining ichida self-contained — boshqa modullarga faqat ularning eksport qilingan interfeyslari orqali bog'lanadi (masalan, `auth` modul `user.Usecase` interfeysidan foydalanadi).
 
+Kengroq amaliy qo'llanma: [docs/go-architecture-and-working-guide.md](docs/go-architecture-and-working-guide.md).
+
+Engine integratsiyasi uchun: [docs/engine-golang-integration-guide.md](docs/engine-golang-integration-guide.md).
+
 ## sqlc'ga o'tish (opsional)
 
 Manual pgx queries yetarli — lekin SQL ko'paygach `sqlc` foydali bo'ladi:
