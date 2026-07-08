@@ -39,6 +39,7 @@ import (
 	"github.com/botspace/backend/internal/shared/media"
 	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/redisq"
+	"github.com/botspace/backend/internal/shared/storagex"
 	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -50,11 +51,12 @@ import (
 // Server wires the dependency graph. Adding a new module is a single block
 // in registerRoutes — repository, usecase, handler, routes.
 type Server struct {
-	cfg    *config.Config
-	log    *logger.Logger
-	pool   *pgxpool.Pool
-	router *gin.Engine
-	tokens *auth.TokenIssuer
+	cfg       *config.Config
+	log       *logger.Logger
+	pool      *pgxpool.Pool
+	router    *gin.Engine
+	tokens    *auth.TokenIssuer
+	fileStore *storagex.Storage
 }
 
 // New builds the server. ctx governs background workers (e.g. the WebSocket
@@ -69,6 +71,22 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 	// Public object-storage base for turning stored media keys into full URLs
 	// (template covers, avatars, …). Process-wide; set once here.
 	media.Configure(cfg.Storage.URL, cfg.Storage.BucketMedia)
+
+	// Object-storage client for writing/reading uploaded blobs to the B2 media
+	// bucket. nil (no credentials configured) makes the file handler return a
+	// clear config error instead of silently writing to ephemeral local disk.
+	var (
+		fileStore *storagex.Storage
+		err       error
+	)
+	if cfg.Storage.URL != "" && cfg.Storage.ID != "" && cfg.Storage.Key != "" {
+		fileStore, err = storagex.New(cfg.Storage.URL, cfg.Storage.ID, cfg.Storage.Key, cfg.Storage.Region, cfg.Storage.BucketMedia)
+		if err != nil {
+			return nil, fmt.Errorf("init storage client: %w", err)
+		}
+	} else {
+		log.Warn("object storage credentials not configured; file uploads will be rejected")
+	}
 
 	priv, pub, err := auth.LoadKeys(cfg.JWT, cfg.Env)
 	if err != nil {
@@ -103,7 +121,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 		httpx.Error(c, httpx.NotFound("not_found", "route not found"))
 	})
 
-	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens}
+	s := &Server{cfg: cfg, log: log, pool: pool, router: r, tokens: tokens, fileStore: fileStore}
 	s.registerRoutes(ctx)
 	return s, nil
 }
@@ -307,7 +325,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 
 	// file / resource / used.
 	fileUC := file.NewUsecase(file.NewPostgresRepository(s.pool))
-	file.RegisterRoutes(v1, file.NewHandler(fileUC), tokens)
+	file.RegisterRoutes(v1, file.NewHandler(fileUC, s.fileStore), tokens)
 
 	// module/plugin catalog + per-project modules.
 	pluginUC := plugin.NewUsecase(plugin.NewPostgresRepository(s.pool), orch, plugin.NewHTTPManifestFetcher(), nil)
