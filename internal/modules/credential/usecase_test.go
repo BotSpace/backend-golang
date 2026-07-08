@@ -156,9 +156,11 @@ func TestCreateRejectsUnknownType(t *testing.T) {
 // decrypt-on-read cycle, and that toResponse masks the secret field while
 // InternalGetByID (the engine path) returns the plaintext.
 func TestCreateThenGetRoundTripsAndMasks(t *testing.T) {
-	_, uc := newTestUsecase()
+	repo, uc := newTestUsecase()
 	ctx := context.Background()
 	owner := uuid.New()
+	projectID := uuid.New()
+	repo.projects[projectID] = owner
 
 	created, err := uc.Create(ctx, CreateData{
 		OwnerID: owner,
@@ -198,13 +200,20 @@ func TestCreateThenGetRoundTripsAndMasks(t *testing.T) {
 		t.Fatalf("expected 404 for cross-owner get, got %v", err)
 	}
 
-	// Internal-by-id (no project scoping) must return the same plaintext.
-	internal, err := uc.InternalGetByID(ctx, created.ID, nil)
+	// Internal-by-id, scoped to the owning project, returns the plaintext.
+	internal, err := uc.InternalGetByID(ctx, created.ID, projectID)
 	if err != nil {
 		t.Fatalf("internal get by id: %v", err)
 	}
 	if internal.Data["api_key"] != "sk-1234567890" {
 		t.Fatalf("internal get did not decrypt, got %v", internal.Data["api_key"])
+	}
+
+	// A project owned by someone else must not resolve the credential (403).
+	otherProject := uuid.New()
+	repo.projects[otherProject] = uuid.New()
+	if _, err := uc.InternalGetByID(ctx, created.ID, otherProject); status(err) != 403 {
+		t.Fatalf("expected 403 for cross-tenant internal get, got %v", err)
 	}
 }
 

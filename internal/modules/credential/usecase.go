@@ -53,10 +53,10 @@ type Usecase interface {
 	ListTypes(ctx context.Context) []TypeDef
 	Options(ctx context.Context, in OptionsInput) ([]OptionItem, error)
 
-	// InternalGetByID resolves a credential by id for the engine. projectID,
-	// when non-nil, must own the credential (cross-tenant guard) — mirrors
+	// InternalGetByID resolves a credential by id for the engine. projectID is
+	// mandatory and must own the credential (cross-tenant guard) — mirrors
 	// core.apps.api.views.internal.credential_by_id.
-	InternalGetByID(ctx context.Context, id uuid.UUID, projectID *uuid.UUID) (*Detail, error)
+	InternalGetByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*Detail, error)
 	// InternalGetByName resolves a credential by its owner-unique name, with
 	// the owner derived from projectID — mirrors credential_by_name.
 	InternalGetByName(ctx context.Context, name string, projectID uuid.UUID) (*Detail, error)
@@ -232,22 +232,20 @@ func (u *usecase) ListTypes(_ context.Context) []TypeDef {
 	return ListTypes()
 }
 
-func (u *usecase) InternalGetByID(ctx context.Context, id uuid.UUID, projectID *uuid.UUID) (*Detail, error) {
+func (u *usecase) InternalGetByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*Detail, error) {
 	c, err := u.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, mapNotFound(err)
 	}
-	if projectID != nil {
-		ownerID, err := u.repo.GetProjectOwner(ctx, *projectID)
-		if err != nil {
-			if errors.Is(err, database.ErrNotFound) {
-				return nil, httpx.Forbidden("credential.project_not_found", "project not found")
-			}
-			return nil, httpx.Internal(err)
+	ownerID, err := u.repo.GetProjectOwner(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil, httpx.Forbidden("credential.project_not_found", "project not found")
 		}
-		if ownerID != c.OwnerID {
-			return nil, httpx.Forbidden("credential.cross_tenant", "credential does not belong to this project's owner")
-		}
+		return nil, httpx.Internal(err)
+	}
+	if ownerID != c.OwnerID {
+		return nil, httpx.Forbidden("credential.cross_tenant", "credential does not belong to this project's owner")
 	}
 	return u.decryptDetail(c)
 }

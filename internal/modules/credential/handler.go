@@ -351,9 +351,10 @@ func oauthErrorMessage(err error) string {
 // @Tags         credentials-internal
 // @Produce      json
 // @Param        X-Internal-Token  header    string  true  "Internal service token"
-// @Param        X-Project-Id      header    string  false "Project id — cross-tenant owner guard"
+// @Param        X-Project-Id      header    string  true  "Project id — mandatory cross-tenant owner guard"
 // @Param        id                path      string  true  "Credential id"
 // @Success      200  {object}  InternalResponse
+// @Failure      400  {object}  httpx.ErrorResponse
 // @Failure      403  {object}  httpx.ErrorResponse
 // @Failure      404  {object}  httpx.ErrorResponse
 // @Router       /internal/credentials/{id} [get]
@@ -362,8 +363,9 @@ func (h *Handler) InternalByID(c *gin.Context) {
 	if !ok {
 		return
 	}
-	projectID, ok := optionalProjectID(c)
-	if !ok {
+	projectID, err := uuid.Parse(c.GetHeader("X-Project-Id"))
+	if err != nil {
+		httpx.Error(c, httpx.BadRequest("credential.project_id_required", "X-Project-Id header required"))
 		return
 	}
 	d, err := h.uc.InternalGetByID(c.Request.Context(), id, projectID)
@@ -403,19 +405,4 @@ func (h *Handler) InternalByName(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toInternalResponse(d))
-}
-
-// optionalProjectID parses the X-Project-Id header when present; an absent
-// header is fine (nil, true), a malformed one is a 400 (nil, false).
-func optionalProjectID(c *gin.Context) (*uuid.UUID, bool) {
-	raw := c.GetHeader("X-Project-Id")
-	if raw == "" {
-		return nil, true
-	}
-	id, err := uuid.Parse(raw)
-	if err != nil {
-		httpx.Error(c, httpx.BadRequest("credential.invalid_project_id", "invalid X-Project-Id header"))
-		return nil, false
-	}
-	return &id, true
 }

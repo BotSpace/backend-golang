@@ -428,7 +428,7 @@ UPDATE relase
 SET status = 'stopped', updated_at = NOW()
 WHERE project_id = $1
   AND id != $2
-  AND status IN ('initializing', 'running')
+  AND status NOT IN ('stopped', 'deleted')
 RETURNING id, project_id, version, flow, service_id, status, created_at, updated_at
 `
 
@@ -437,10 +437,17 @@ type StopActiveReleasesExceptParams struct {
 	ExcludeID uuid.UUID `json:"exclude_id"`
 }
 
-// Cleanup rule (Django RelaseSignal): stop every previous release still
-// RUNNING/INIT for the project, excluding the freshly created one. Rows are
-// returned so the caller can call engine.Stop on each service_id before/along
-// with flipping status to stopped.
+// Cleanup rule (Django RelaseSignal): stop every previous release for the
+// project that could still have a live Deployment, excluding the freshly
+// created one. The old filter only caught 'initializing'/'running', so a
+// release wedged in 'failed'/'pending'/'stopping' (its pod slow to come up,
+// crash-looping, or mid-stop) was skipped -> its Deployment + '<svc>-env'
+// Secret + '<svc>-flow' ConfigMap + 'bot-<uuid>' Service leaked forever
+// (projects accumulated 6+ orphaned versions). Now we reap ANY status except
+// the definitively-terminal 'stopped'/'deleted' (Stop is idempotent, so
+// flipping an already-dead row through it is harmless). Rows are returned so
+// the caller can call engine.Stop on each service_id before/along with
+// flipping status to stopped.
 func (q *Queries) StopActiveReleasesExcept(ctx context.Context, arg StopActiveReleasesExceptParams) ([]Relase, error) {
 	rows, err := q.db.Query(ctx, stopActiveReleasesExcept, arg.ProjectID, arg.ExcludeID)
 	if err != nil {

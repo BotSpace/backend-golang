@@ -39,16 +39,23 @@ FROM projects p
 WHERE r.id = sqlc.arg('id') AND r.project_id = p.id AND p.owner_id = sqlc.arg('owner_id') AND p.deleted_at IS NULL
 RETURNING r.*;
 
--- Cleanup rule (Django RelaseSignal): stop every previous release still
--- RUNNING/INIT for the project, excluding the freshly created one. Rows are
--- returned so the caller can call engine.Stop on each service_id before/along
--- with flipping status to stopped.
+-- Cleanup rule (Django RelaseSignal): stop every previous release for the
+-- project that could still have a live Deployment, excluding the freshly
+-- created one. The old filter only caught 'initializing'/'running', so a
+-- release wedged in 'failed'/'pending'/'stopping' (its pod slow to come up,
+-- crash-looping, or mid-stop) was skipped -> its Deployment + '<svc>-env'
+-- Secret + '<svc>-flow' ConfigMap + 'bot-<uuid>' Service leaked forever
+-- (projects accumulated 6+ orphaned versions). Now we reap ANY status except
+-- the definitively-terminal 'stopped'/'deleted' (Stop is idempotent, so
+-- flipping an already-dead row through it is harmless). Rows are returned so
+-- the caller can call engine.Stop on each service_id before/along with
+-- flipping status to stopped.
 -- name: StopActiveReleasesExcept :many
 UPDATE relase
 SET status = 'stopped', updated_at = NOW()
 WHERE project_id = sqlc.arg('project_id')
   AND id != sqlc.arg('exclude_id')
-  AND status IN ('initializing', 'running')
+  AND status NOT IN ('stopped', 'deleted')
 RETURNING *;
 
 -- Owner-scoped list of every release's service_id that still has a live k8s

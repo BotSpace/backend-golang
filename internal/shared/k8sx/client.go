@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,6 +99,79 @@ func (c *Client) RemoveDeployment(ctx context.Context, name string) error {
 		}
 	}
 	return nil
+}
+
+// EngineDeployments — app=botmother-engine label'li Deployment'lar (engine
+// tomonidan boshqarilgan resurslargina; boshqa hech narsaga tegilmaydi).
+func (c *Client) EngineDeployments(ctx context.Context) ([]appsv1.Deployment, error) {
+	deps, err := c.cs.AppsV1().Deployments(c.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=botmother-engine",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return deps.Items, nil
+}
+
+// botEngineNameFromString — deployment NOMIdan (pod label'i emas) release/debug
+// turini aniqlaydi. module-* va boshqa har qanday nom EngineKindNone qaytaradi
+// — ular HECH QACHON orphan sweep tomonidan tegilmaydi.
+func botEngineNameFromString(name string) EngineKind {
+	switch {
+	case strings.HasPrefix(name, "release-"):
+		return EngineKindRelease
+	case strings.HasPrefix(name, "debug-"):
+		return EngineKindDebug
+	default:
+		return EngineKindNone
+	}
+}
+
+// SweepOrphanEngines — DB-driven orphan tozalash: app=botmother-engine label'li
+// release-*/debug-* Deployment'larni ko'radi va live to'plamida (DB'da hali
+// terminal bo'lmagan release/debug service_id'lari) YO'Q bo'lganlarini to'liq
+// resurs to'plami bilan (Deployment+Secret+ConfigMap+Service) o'chiradi.
+//
+// Bu StopActiveReleasesExcept reaping'ini to'ldiradi: agar biror sabab bilan
+// (eski bug, qo'lda DB o'zgarishi, jarayon halok bo'lishi) owning release yozuvi
+// yo'qolgan/stopped bo'lsa-yu Deployment qolib ketgan bo'lsa, shu yerda ushlanadi.
+//
+// XAVFSIZLIK:
+//   - faqat app=botmother-engine label'li resurslar (engine boshqaruvidagilar);
+//   - faqat release-*/debug-* nomlilar (module-* shared pod'lar TEGILMAYDI);
+//   - FailureGracePeriod'dan yosh Deployment'lar o'tkazib yuboriladi (deploy
+//     endigina bo'lgan, DB yozuvi hali yozilmagan bo'lishi mumkin — race'dan
+//     himoya);
+//   - dryRun=true bo'lsa hech narsa o'chirilmaydi, faqat nomzodlar qaytariladi.
+func (c *Client) SweepOrphanEngines(ctx context.Context, live map[string]bool, dryRun bool, now time.Time) ([]EngineFailure, error) {
+	deps, err := c.EngineDeployments(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var orphans []EngineFailure
+	for _, dep := range deps {
+		kind := botEngineNameFromString(dep.Name)
+		if kind == EngineKindNone {
+			continue
+		}
+		if live[dep.Name] {
+			continue
+		}
+		if now.Sub(dep.CreationTimestamp.Time) < FailureGracePeriod {
+			continue // endigina yaratilgan — DB yozuvi hali yetib kelmagan bo'lishi mumkin
+		}
+		orphans = append(orphans, EngineFailure{Name: dep.Name, Kind: kind})
+		if dryRun {
+			c.log.Info("orphan sweep: candidate (dry-run, not deleted)", zap.String("engine", dep.Name))
+			continue
+		}
+		if err := c.RemoveDeployment(ctx, dep.Name); err != nil {
+			c.log.Error("orphan sweep: remove", zap.String("engine", dep.Name), zap.Error(err))
+			continue
+		}
+		c.log.Warn("orphan engine removed", zap.String("engine", dep.Name))
+	}
+	return orphans, nil
 }
 
 // EnginePods — app=botmother-engine label'li podlar.
