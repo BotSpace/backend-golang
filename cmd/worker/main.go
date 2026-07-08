@@ -16,6 +16,7 @@
 //	expire_subscriptions             har soat :00
 //	cleanup_expired_refresh_tokens   har soat :00
 //	cleanup_expired_authbot_codes    har soat :00
+//	orphan_sweep                     */15 daqiqa  (leaked engine Deployment'lar)
 //
 // On-demand (Redis Stream goworker:tasks, Django web XADD qiladi):
 //
@@ -42,6 +43,7 @@ import (
 	"github.com/botspace/backend/internal/modules/debugsync"
 	"github.com/botspace/backend/internal/modules/disksnap"
 	"github.com/botspace/backend/internal/modules/files"
+	"github.com/botspace/backend/internal/modules/orphansweep"
 	"github.com/botspace/backend/internal/modules/releases"
 	"github.com/botspace/backend/internal/modules/subscriptions"
 	"github.com/botspace/backend/internal/shared/config"
@@ -93,6 +95,14 @@ func main() {
 	debugSync := &debugsync.Usecase{Repo: debugsync.NewPostgresRepository(pool), K8s: k8s, Log: log}
 	fileCleanup := &files.Usecase{Repo: files.NewPostgresRepository(pool), Storage: storage, Log: log}
 	releaseCleanup := &releases.Usecase{Repo: releases.NewPostgresRepository(pool), K8s: k8s, Log: log}
+	// Orphan sweep: net-new periodik job (Django'da yo'q). ORPHAN_SWEEP_DRY_RUN=true
+	// bo'lsa faqat log'laydi, o'chirmaydi (birinchi ishga tushirishda tekshirish uchun).
+	orphanSweep := &orphansweep.Usecase{
+		Repo:   orphansweep.NewPostgresRepository(pool),
+		K8s:    k8s,
+		Log:    log,
+		DryRun: os.Getenv("ORPHAN_SWEEP_DRY_RUN") == "true",
+	}
 	rdbClient, err := redisq.NewURLClient(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("redis client", zap.Error(err))
@@ -135,6 +145,7 @@ func main() {
 	mustAdd("*/5 * * * *", "sync_debug", debugSync.Run)
 	mustAdd("*/5 * * * *", "cleanup_expired_files", fileCleanup.Run)
 	mustAdd("*/10 * * * *", "cleanup_failed_releases", releaseCleanup.Run)
+	mustAdd("*/15 * * * *", "orphan_sweep", orphanSweep.Run)
 	mustAdd("0 * * * *", "sync_bot", botSync.Run)
 	mustAdd("0 * * * *", "snapshot_project_disk", diskSnap.Run)
 	mustAddIfTables("0 * * * *", "expire_subscriptions", subsExpiry.Run, "user_subscription")

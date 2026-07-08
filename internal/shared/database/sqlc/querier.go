@@ -344,6 +344,12 @@ type Querier interface {
 	ListEnviromentsForOwner(ctx context.Context, arg ListEnviromentsForOwnerParams) ([]Enviroment, error)
 	ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, error)
 	ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error)
+	// Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
+	// definitively-terminal state, i.e. the deployment SHOULD still exist. The
+	// orphan sweep deletes any engine-managed Deployment in the namespace whose
+	// name is absent from this set (its owning row was reaped/deleted, so the
+	// Deployment + its -env/-flow/bot-<uuid> resources leaked).
+	ListLiveEngineServiceIDs(ctx context.Context) ([]*string, error)
 	// project_id/filetype nargs let the caller optionally narrow the listing;
 	// NULL means "no filter" on that dimension.
 	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)

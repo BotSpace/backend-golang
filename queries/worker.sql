@@ -22,6 +22,20 @@ UPDATE relase SET status = 'failed' WHERE service_id = $1;
 -- name: MarkDebugFailedByService :execrows
 UPDATE debug SET status = 'failed' WHERE service_id = $1;
 
+-- name: ListLiveEngineServiceIDs :many
+-- Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
+-- definitively-terminal state, i.e. the deployment SHOULD still exist. The
+-- orphan sweep deletes any engine-managed Deployment in the namespace whose
+-- name is absent from this set (its owning row was reaped/deleted, so the
+-- Deployment + its -env/-flow/bot-<uuid> resources leaked).
+SELECT service_id FROM relase
+  WHERE service_id IS NOT NULL AND service_id <> ''
+    AND status NOT IN ('stopped', 'deleted')
+UNION
+SELECT service_id FROM debug
+  WHERE service_id IS NOT NULL AND service_id <> ''
+    AND status NOT IN ('stopped', 'deleted');
+
 -- name: ListProjectsWithReleaseToken :many
 SELECT p.id, p.username, p.avatar_file_id, e.value AS bot_token
 FROM projects p
