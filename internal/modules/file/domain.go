@@ -2,7 +2,7 @@
 // (FileModel), periodic host resource metrics (ResourceModel), and
 // project disk-usage snapshots (StorageResourceModel), plus the aggregated
 // "used" read that combines them (services/used.py). The blob itself is
-// stored on local disk under APP_MEDIA_DIR; only metadata lives in Postgres.
+// stored in the B2 (S3-compatible) media bucket; only metadata lives in Postgres.
 package file
 
 import (
@@ -35,7 +35,7 @@ const UsageWindow = 24 * time.Hour
 
 // File is an uploaded blob's metadata. UUID is the public lookup key
 // (Django's lookup_field="uuid", AllowAny on retrieve); ID is the internal
-// PK. FilePath is relative to APP_MEDIA_DIR and is never exposed to clients.
+// PK. FilePath is the bucket-relative object key in the B2 media bucket.
 type File struct {
 	ID           uuid.UUID
 	UUID         uuid.UUID

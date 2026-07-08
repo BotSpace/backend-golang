@@ -32,8 +32,11 @@ type Config struct {
 // bucket; internal/shared/media builds "<URL>/<BucketMedia>/<key>" from the
 // bucket-relative keys the DB stores (e.g. template.image = "template/x.png").
 type StorageConfig struct {
-	URL         string `mapstructure:"url"`          // APP_STORAGE_URL
-	BucketMedia string `mapstructure:"bucket_media"` // APP_STORAGE_BUCKET_MEDIA
+	URL         string `mapstructure:"url"`          // APP_STORAGE_URL / STORAGE_URL
+	ID          string `mapstructure:"id"`           // APP_STORAGE_ID / STORAGE_ID (S3 access key id)
+	Key         string `mapstructure:"key"`          // APP_STORAGE_KEY / STORAGE_KEY (S3 secret key)
+	Region      string `mapstructure:"region"`       // APP_STORAGE_REGION / STORAGE_REGION
+	BucketMedia string `mapstructure:"bucket_media"` // APP_STORAGE_BUCKET_MEDIA / STORAGE_BUCKET_MEDIA
 }
 
 type MonitoringConfig struct {
@@ -229,11 +232,19 @@ func Load() (*Config, error) {
 		"engine.internal_token", "engine.redis_host", "engine.redis_port", "engine.redis_password",
 		"engine.test_bot_token", "engine.mongo_addr", "engine.mongo_db_name",
 		"engine.api_url",
-		"storage.url", "storage.bucket_media",
 		"monitoring.prometheus_url",
 	} {
 		_ = v.BindEnv(key)
 	}
+
+	// Storage also accepts the legacy (unprefixed) Django env names exposed by
+	// botmother-secret, so the API can write uploads to the same B2 media bucket
+	// the worker/cleanup already use. APP_-prefixed names win when both are set.
+	_ = v.BindEnv("storage.url", "APP_STORAGE_URL", "STORAGE_URL")
+	_ = v.BindEnv("storage.id", "APP_STORAGE_ID", "STORAGE_ID")
+	_ = v.BindEnv("storage.key", "APP_STORAGE_KEY", "STORAGE_KEY")
+	_ = v.BindEnv("storage.region", "APP_STORAGE_REGION", "STORAGE_REGION")
+	_ = v.BindEnv("storage.bucket_media", "APP_STORAGE_BUCKET_MEDIA", "STORAGE_BUCKET_MEDIA")
 
 	if err := v.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError

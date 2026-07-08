@@ -2,41 +2,36 @@ package file
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
+	"net/http"
+	"path"
 	"strconv"
 	"time"
 
 	"github.com/botspace/backend/internal/shared/httpx"
+	"github.com/botspace/backend/internal/shared/media"
 	"github.com/botspace/backend/internal/shared/middleware"
+	"github.com/botspace/backend/internal/shared/storagex"
 	"github.com/botspace/backend/internal/shared/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// mediaDir is the local disk root for uploaded blobs. Configurable via
-// APP_MEDIA_DIR so container deployments can mount a persistent volume.
-func mediaDir() string {
-	if v := os.Getenv("APP_MEDIA_DIR"); v != "" {
-		return v
-	}
-	return "./media"
-}
-
-// destPath builds the blob's on-disk location: <mediaDir>/<projectID>/<random>.<ext>.
-// rel is what gets persisted on the file row; abs is where the blob is written.
-func destPath(projectID uuid.UUID, originalName string) (rel, abs string) {
-	rel = filepath.Join(projectID.String(), uuid.New().String()+filepath.Ext(originalName))
-	abs = filepath.Join(mediaDir(), rel)
-	return rel, abs
+// objectKey builds the bucket-relative storage key for an uploaded blob:
+// "<projectID>/<random>.<ext>". This is persisted as File.FilePath and is the
+// same key the cleanup worker deletes from B2 and internal/shared/media turns
+// into a public URL ("<STORAGE_URL>/<bucket>/<key>").
+func objectKey(projectID uuid.UUID, originalName string) string {
+	return path.Join(projectID.String(), uuid.New().String()+path.Ext(originalName))
 }
 
 type Handler struct {
-	uc Usecase
+	uc      Usecase
+	storage *storagex.Storage
 }
 
-func NewHandler(uc Usecase) *Handler {
-	return &Handler{uc: uc}
+func NewHandler(uc Usecase, storage *storagex.Storage) *Handler {
+	return &Handler{uc: uc, storage: storage}
 }
 
 // owner extracts the authenticated user id, writing a 401 on failure.
@@ -106,13 +101,30 @@ func (h *Handler) Upload(c *gin.Context) {
 		return
 	}
 
-	rel, abs := destPath(projectID, fh.Filename)
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		httpx.Error(c, httpx.Internal(fmt.Errorf("create media dir: %w", err)))
+	if h.storage == nil {
+		httpx.Error(c, httpx.Internal(fmt.Errorf("object storage not configured")))
 		return
 	}
-	if err := c.SaveUploadedFile(fh, abs); err != nil {
-		httpx.Error(c, httpx.Internal(fmt.Errorf("save upload: %w", err)))
+
+	src, err := fh.Open()
+	if err != nil {
+		httpx.Error(c, httpx.Internal(fmt.Errorf("open upload: %w", err)))
+		return
+	}
+	blob, err := io.ReadAll(src)
+	_ = src.Close()
+	if err != nil {
+		httpx.Error(c, httpx.Internal(fmt.Errorf("read upload: %w", err)))
+		return
+	}
+
+	key := objectKey(projectID, fh.Filename)
+	contentType := fh.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if err := h.storage.Write(c.Request.Context(), key, blob, contentType); err != nil {
+		httpx.Error(c, httpx.Internal(fmt.Errorf("upload to storage: %w", err)))
 		return
 	}
 
@@ -125,14 +137,14 @@ func (h *Handler) Upload(c *gin.Context) {
 	f, err := h.uc.CreateFile(c.Request.Context(), CreateFileInput{
 		OwnerID:      ownerID,
 		ProjectID:    projectID,
-		FilePath:     rel,
+		FilePath:     key,
 		OriginalName: fh.Filename,
 		FileSize:     fh.Size,
 		FileType:     req.FileType,
 		ExpiresAt:    expiresAt,
 	})
 	if err != nil {
-		_ = os.Remove(abs) // don't leave an orphaned blob if the metadata row failed
+		_ = h.storage.Delete(c.Request.Context(), key) // don't leave an orphaned blob if the metadata row failed
 		httpx.Error(c, err)
 		return
 	}
@@ -178,12 +190,9 @@ func (h *Handler) Download(c *gin.Context) {
 		httpx.Error(c, err)
 		return
 	}
-	abs := filepath.Join(mediaDir(), f.FilePath)
-	if _, err := os.Stat(abs); err != nil {
-		httpx.Error(c, httpx.NotFound("file.blob_missing", "file blob not found"))
-		return
-	}
-	c.FileAttachment(abs, f.OriginalName)
+	// Blobs live in the public B2 media bucket; redirect to the object URL
+	// instead of proxying bytes through the API.
+	c.Redirect(http.StatusFound, media.URL(f.FilePath))
 }
 
 // List godoc
@@ -293,8 +302,10 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	// Best-effort blob cleanup; the metadata row is already gone, so a failed
-	// unlink here must not fail the request.
-	_ = os.Remove(filepath.Join(mediaDir(), f.FilePath))
+	// storage delete here must not fail the request.
+	if h.storage != nil {
+		_ = h.storage.Delete(c.Request.Context(), f.FilePath)
+	}
 	httpx.NoContent(c)
 }
 
