@@ -2,7 +2,6 @@ package file
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"path"
 	"strconv"
@@ -111,19 +110,16 @@ func (h *Handler) Upload(c *gin.Context) {
 		httpx.Error(c, httpx.Internal(fmt.Errorf("open upload: %w", err)))
 		return
 	}
-	blob, err := io.ReadAll(src)
-	_ = src.Close()
-	if err != nil {
-		httpx.Error(c, httpx.Internal(fmt.Errorf("read upload: %w", err)))
-		return
-	}
+	defer src.Close()
 
 	key := objectKey(projectID, fh.Filename)
 	contentType := fh.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	if err := h.storage.Write(c.Request.Context(), key, blob, contentType); err != nil {
+	// Stream straight to object storage instead of buffering the whole (up to
+	// tens of MB) blob in memory, so concurrent uploads don't balloon the heap.
+	if err := h.storage.WriteStream(c.Request.Context(), key, src, fh.Size, contentType); err != nil {
 		httpx.Error(c, httpx.Internal(fmt.Errorf("upload to storage: %w", err)))
 		return
 	}
