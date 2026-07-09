@@ -61,3 +61,13 @@ func (s *Storage) Write(ctx context.Context, name string, content []byte, conten
 		minio.PutObjectOptions{ContentType: contentType})
 	return err
 }
+
+// WriteStream streams r (size bytes) to the object store without buffering the
+// whole payload in memory — used for user uploads that can be tens of MB, so a
+// few concurrent uploads don't balloon the pod's heap. size <0 lets minio
+// buffer/chunk internally when the length is unknown.
+func (s *Storage) WriteStream(ctx context.Context, name string, r io.Reader, size int64, contentType string) error {
+	_, err := s.client.PutObject(ctx, s.bucket, strings.TrimPrefix(name, "/"),
+		r, size, minio.PutObjectOptions{ContentType: contentType})
+	return err
+}

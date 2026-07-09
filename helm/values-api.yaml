@@ -76,6 +76,12 @@ env:
       secretKeyRef:
         name: botmother-secret
         key: STORAGE_REGION
+  # Max request body. Default is 1 MiB, which 413s file uploads (the frontend
+  # caps files at 50 MB). 60 MiB gives headroom for the 50 MB cap + multipart
+  # overhead. The gateway's ClientSettingsPolicy for backend-golang-api must
+  # allow at least this much too.
+  - name: APP_HTTP_MAX_BODY_BYTES
+    value: "62914560"
 
 volumes:
   - name: jwt-keys
