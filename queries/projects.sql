@@ -45,13 +45,26 @@ FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
-ORDER BY p.created_at DESC
+  AND (sqlc.narg('is_template')::bool IS NULL OR p.is_template = sqlc.narg('is_template')::bool)
+  AND (sqlc.narg('has_release')::bool IS NULL
+       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = sqlc.narg('has_release')::bool)
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR p.created_at >= sqlc.narg('created_after')::timestamptz)
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR p.created_at <= sqlc.narg('created_before')::timestamptz)
+ORDER BY
+  CASE WHEN sqlc.narg('ordering')::text = 'name' THEN p.name END ASC,
+  CASE WHEN sqlc.narg('ordering')::text = 'created_at' THEN p.created_at END ASC,
+  p.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountProjectsAdmin :one
 SELECT COUNT(*) FROM projects p
 WHERE p.deleted_at IS NULL
-  AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%');
+  AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
+  AND (sqlc.narg('is_template')::bool IS NULL OR p.is_template = sqlc.narg('is_template')::bool)
+  AND (sqlc.narg('has_release')::bool IS NULL
+       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = sqlc.narg('has_release')::bool)
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR p.created_at >= sqlc.narg('created_after')::timestamptz)
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR p.created_at <= sqlc.narg('created_before')::timestamptz);
 
 -- name: GetProjectAdmin :one
 SELECT sqlc.embed(p), u.phone AS owner_phone, u.email AS owner_email

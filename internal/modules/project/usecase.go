@@ -720,7 +720,7 @@ func (u *usecase) AdminList(ctx context.Context, f AdminListFilter) ([]AdminProj
 	if err != nil {
 		return nil, 0, httpx.Internal(err)
 	}
-	total, err := u.repo.CountAdmin(ctx, f.Search)
+	total, err := u.repo.CountAdmin(ctx, f)
 	if err != nil {
 		return nil, 0, httpx.Internal(err)
 	}
@@ -749,7 +749,7 @@ const maxMonitoringSortRows = 10000
 
 func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error) {
 	f.Limit, f.Offset = clampPage(f.Limit, f.Offset)
-	total, err := u.repo.CountAdmin(ctx, f.Search)
+	total, err := u.repo.CountAdmin(ctx, f)
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
