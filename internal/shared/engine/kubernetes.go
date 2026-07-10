@@ -485,7 +485,15 @@ func buildDeployment(in buildDeploymentInput) *appsv1.Deployment {
 			},
 		},
 		VolumeMounts: in.VolumeMounts,
-		Ports:        []corev1.ContainerPort{{ContainerPort: in.Port, Protocol: corev1.ProtocolTCP}},
+		// The "metrics" port exposes the engine's Prometheus /metrics endpoint
+		// (bot_* counters) on 9090 — the engine's METRICS_PORT default, which
+		// the bot pods don't override. Named so the PodMonitor
+		// (k8s/helm/infra) can select it. Only pods (re)deployed after this
+		// change carry it; older bots are scraped once they roll.
+		Ports: []corev1.ContainerPort{
+			{ContainerPort: in.Port, Protocol: corev1.ProtocolTCP},
+			{Name: "metrics", ContainerPort: 9090, Protocol: corev1.ProtocolTCP},
+		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: in.ReadinessPath, Port: intstr.FromInt32(in.Port)}},
 			InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 3, FailureThreshold: 3, SuccessThreshold: 1,
