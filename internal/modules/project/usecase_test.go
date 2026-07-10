@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/botspace/backend/internal/modules/cms"
 	"github.com/botspace/backend/internal/modules/release"
@@ -125,6 +126,10 @@ func (r *fakeRepo) GetAdmin(_ context.Context, _ uuid.UUID) (*AdminProjectDetail
 }
 func (r *fakeRepo) ListMonitoring(_ context.Context, _ AdminListFilter) ([]MonitoringProject, error) {
 	return r.monitoring, nil
+}
+
+func (r *fakeRepo) DiskHistory(_ context.Context, _ uuid.UUID, _ time.Time) ([]MetricPoint, error) {
+	return nil, nil
 }
 
 func (r *fakeRepo) SetReleaseBotToken(_ context.Context, projectID, ownerID uuid.UUID, token string) error {

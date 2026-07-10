@@ -210,6 +210,10 @@ type Repository interface {
 	CountAdmin(ctx context.Context, search string) (int64, error)
 	GetAdmin(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	ListMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, error)
+	// DiskHistory returns disk-usage snapshots (disksnap worker's hourly rows)
+	// since the given time, ascending — the source for the monitoring Disk chart
+	// since Prometheus has no filesystem metric for the engine pods.
+	DiskHistory(ctx context.Context, projectID uuid.UUID, since time.Time) ([]MetricPoint, error)
 
 	// SetReleaseBotToken upserts (key=RELEASE_BOT_TOKEN, project_id) in the
 	// shared enviroment table, owner-scoped. This is a SQL-only cross-module

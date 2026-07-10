@@ -78,3 +78,11 @@ WHERE p.deleted_at IS NULL
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY p.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ProjectDiskHistory :many
+-- Disk-usage time series from the hourly disksnap snapshots, for the monitoring
+-- Disk chart. Prometheus has no filesystem metric for the engine pods (its disk
+-- range query returns nothing), so the chart sources disk history from here.
+SELECT created_at, disk_bytes FROM project_resource_snapshot
+WHERE project_id = sqlc.arg('project_id') AND created_at >= sqlc.arg('since')
+ORDER BY created_at;
