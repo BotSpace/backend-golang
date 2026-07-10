@@ -120,7 +120,7 @@ func (r *fakeRepo) Count(_ context.Context, ownerID uuid.UUID, _ string) (int64,
 func (r *fakeRepo) ListAdmin(_ context.Context, _ AdminListFilter) ([]AdminProjectSummary, error) {
 	return nil, nil
 }
-func (r *fakeRepo) CountAdmin(_ context.Context, _ string) (int64, error) { return 0, nil }
+func (r *fakeRepo) CountAdmin(_ context.Context, _ AdminListFilter) (int64, error) { return 0, nil }
 func (r *fakeRepo) GetAdmin(_ context.Context, _ uuid.UUID) (*AdminProjectDetail, error) {
 	return nil, database.ErrNotFound
 }

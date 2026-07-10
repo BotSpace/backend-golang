@@ -208,9 +208,14 @@ func (r *pgRepo) Count(ctx context.Context, ownerID uuid.UUID, search string) (i
 
 func (r *pgRepo) ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, error) {
 	rows, err := r.queries.ListProjectsAdmin(ctx, sqlcdb.ListProjectsAdminParams{
-		Search: strPtr(f.Search),
-		Limit:  f.Limit,
-		Offset: f.Offset,
+		Search:        strPtr(f.Search),
+		IsTemplate:    f.IsTemplate,
+		HasRelease:    f.HasRelease,
+		CreatedAfter:  f.CreatedAfter,
+		CreatedBefore: f.CreatedBefore,
+		Ordering:      strPtr(f.Ordering),
+		Limit:         f.Limit,
+		Offset:        f.Offset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list projects admin: %w", err)
@@ -227,8 +232,14 @@ func (r *pgRepo) ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProje
 	return out, nil
 }
 
-func (r *pgRepo) CountAdmin(ctx context.Context, search string) (int64, error) {
-	n, err := r.queries.CountProjectsAdmin(ctx, strPtr(search))
+func (r *pgRepo) CountAdmin(ctx context.Context, f AdminListFilter) (int64, error) {
+	n, err := r.queries.CountProjectsAdmin(ctx, sqlcdb.CountProjectsAdminParams{
+		Search:        strPtr(f.Search),
+		IsTemplate:    f.IsTemplate,
+		HasRelease:    f.HasRelease,
+		CreatedAfter:  f.CreatedAfter,
+		CreatedBefore: f.CreatedBefore,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("count projects admin: %w", err)
 	}

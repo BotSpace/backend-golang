@@ -104,7 +104,7 @@ type Querier interface {
 	CountPaymentWithdrawalsAdmin(ctx context.Context, status *string) (int64, error)
 	CountPaymentWithdrawalsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountPersonalAccessTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	CountProjectsAdmin(ctx context.Context, search *string) (int64, error)
+	CountProjectsAdmin(ctx context.Context, arg CountProjectsAdminParams) (int64, error)
 	CountProjectsForOwner(ctx context.Context, arg CountProjectsForOwnerParams) (int64, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountProjectsTotal(ctx context.Context) (int64, error)
@@ -349,15 +349,15 @@ type Querier interface {
 	ListEnviromentsForOwner(ctx context.Context, arg ListEnviromentsForOwnerParams) ([]Enviroment, error)
 	ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, error)
 	ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error)
+	// project_id/filetype nargs let the caller optionally narrow the listing;
+	// NULL means "no filter" on that dimension.
+	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)
 	// Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
 	// definitively-terminal state, i.e. the deployment SHOULD still exist. The
 	// orphan sweep deletes any engine-managed Deployment in the namespace whose
 	// name is absent from this set (its owning row was reaped/deleted, so the
 	// Deployment + its -env/-flow/bot-<uuid> resources leaked).
 	ListLiveEngineServiceIDs(ctx context.Context) ([]*string, error)
-	// project_id/filetype nargs let the caller optionally narrow the listing;
-	// NULL means "no filter" on that dimension.
-	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)
 	ListManagedBotsForOwner(ctx context.Context, ownerID *uuid.UUID) ([]ManagedBot, error)
 	// project_id narg lets the caller optionally scope to a single project;
 	// when NULL, every message across all of the owner's projects is returned.
@@ -463,10 +463,17 @@ type Querier interface {
 	SetUserKYCVerifiedAt(ctx context.Context, id uuid.UUID) error
 	SoftDeleteCredential(ctx context.Context, arg SoftDeleteCredentialParams) (int64, error)
 	SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectParams) (int64, error)
-	// Cleanup rule (Django RelaseSignal): stop every previous release still
-	// RUNNING/INIT for the project, excluding the freshly created one. Rows are
-	// returned so the caller can call engine.Stop on each service_id before/along
-	// with flipping status to stopped.
+	// Cleanup rule (Django RelaseSignal): stop every previous release for the
+	// project that could still have a live Deployment, excluding the freshly
+	// created one. The old filter only caught 'initializing'/'running', so a
+	// release wedged in 'failed'/'pending'/'stopping' (its pod slow to come up,
+	// crash-looping, or mid-stop) was skipped -> its Deployment + '<svc>-env'
+	// Secret + '<svc>-flow' ConfigMap + 'bot-<uuid>' Service leaked forever
+	// (projects accumulated 6+ orphaned versions). Now we reap ANY status except
+	// the definitively-terminal 'stopped'/'deleted' (Stop is idempotent, so
+	// flipping an already-dead row through it is harmless). Rows are returned so
+	// the caller can call engine.Stop on each service_id before/along with
+	// flipping status to stopped.
 	StopActiveReleasesExcept(ctx context.Context, arg StopActiveReleasesExceptParams) ([]Relase, error)
 	// Hourly storage peak, for the usage chart.
 	StorageHourlyForOwner(ctx context.Context, arg StorageHourlyForOwnerParams) ([]StorageHourlyForOwnerRow, error)

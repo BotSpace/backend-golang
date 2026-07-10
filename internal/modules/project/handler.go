@@ -2,6 +2,7 @@ package project
 
 import (
 	"strconv"
+	"time"
 	"strings"
 
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -306,16 +307,56 @@ func (h *Handler) Delete(c *gin.Context) {
 func (h *Handler) AdminList(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
-	items, total, err := h.uc.AdminList(c.Request.Context(), AdminListFilter{
-		Search: c.Query("search"),
-		Limit:  int32(limit),
-		Offset: int32(offset),
-	})
+	f := AdminListFilter{
+		Search:   c.Query("search"),
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+		Ordering: c.Query("ordering"),
+	}
+	if b, ok := parseBoolQuery(c.Query("is_template")); ok {
+		f.IsTemplate = &b
+	}
+	if b, ok := parseBoolQuery(c.Query("has_release")); ok {
+		f.HasRelease = &b
+	}
+	if t, ok := parseDateQuery(c.Query("created_after")); ok {
+		f.CreatedAfter = &t
+	}
+	if t, ok := parseDateQuery(c.Query("created_before")); ok {
+		// Inclusive of the whole selected day.
+		end := t.Add(24 * time.Hour)
+		f.CreatedBefore = &end
+	}
+	items, total, err := h.uc.AdminList(c.Request.Context(), f)
 	if err != nil {
 		httpx.Error(c, err)
 		return
 	}
 	httpx.OK(c, 200, toAdminProjectListResponse(items, total, int32(limit), int32(offset)))
+}
+
+func parseBoolQuery(s string) (bool, bool) {
+	if s == "" {
+		return false, false
+	}
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return false, false
+	}
+	return b, true
+}
+
+// parseDateQuery parses a "YYYY-MM-DD" filter value (UTC midnight); ok=false for
+// empty or malformed input.
+func parseDateQuery(s string) (time.Time, bool) {
+	if s == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // AdminGet godoc

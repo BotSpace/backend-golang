@@ -114,6 +114,13 @@ type AdminListFilter struct {
 	Search string
 	Limit  int32
 	Offset int32
+	// Project-list filters (admin projects page). nil = not filtering on that
+	// dimension. IsTemplate/HasRelease/CreatedAfter/CreatedBefore only apply to
+	// AdminList (the monitoring list leaves them nil).
+	IsTemplate    *bool
+	HasRelease    *bool
+	CreatedAfter  *time.Time
+	CreatedBefore *time.Time
 	// Ordering optionally sorts the monitoring list by a resource metric:
 	// "cpu_asc"/"cpu_desc", "ram_*", "disk_*", "net_*". Empty keeps the default
 	// (created_at DESC). Sorting is applied in Go over the full set (see
@@ -213,7 +220,7 @@ type Repository interface {
 	Count(ctx context.Context, ownerID uuid.UUID, search string) (int64, error)
 
 	ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, error)
-	CountAdmin(ctx context.Context, search string) (int64, error)
+	CountAdmin(ctx context.Context, f AdminListFilter) (int64, error)
 	GetAdmin(ctx context.Context, id uuid.UUID) (*AdminProjectDetail, error)
 	ListMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, error)
 	// DiskHistory returns disk-usage snapshots (disksnap worker's hourly rows)
