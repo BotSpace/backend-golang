@@ -280,6 +280,7 @@ func (r *pgRepo) ListMonitoring(ctx context.Context, f AdminListFilter) ([]Monit
 			CPUCores:      row.CpuCores,
 			MemoryBytes:   row.MemoryBytes,
 			DiskBytes:     row.DiskBytes,
+			NetBytes:      row.NetBytes,
 		}
 	}
 	return out, nil

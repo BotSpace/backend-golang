@@ -415,9 +415,10 @@ func (h *Handler) AdminMonitoring(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
 	page, err := h.uc.AdminMonitoring(c.Request.Context(), AdminListFilter{
-		Search: c.Query("search"),
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Search:   c.Query("search"),
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+		Ordering: c.Query("ordering"),
 	})
 	if err != nil {
 		httpx.Error(c, err)
