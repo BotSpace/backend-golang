@@ -427,6 +427,10 @@ type Querier interface {
 	MintWebhookEndpoint(ctx context.Context, arg MintWebhookEndpointParams) (WebhookEndpoint, error)
 	// Bot-by-bot income breakdown for the earnings dashboard (by_bot payload).
 	PaymentEarningsByProject(ctx context.Context, ownerID uuid.UUID) ([]PaymentEarningsByProjectRow, error)
+	// Disk-usage time series from the hourly disksnap snapshots, for the monitoring
+	// Disk chart. Prometheus has no filesystem metric for the engine pods (its disk
+	// range query returns nothing), so the chart sources disk history from here.
+	ProjectDiskHistory(ctx context.Context, arg ProjectDiskHistoryParams) ([]ProjectDiskHistoryRow, error)
 	RejectPaymentWithdrawal(ctx context.Context, arg RejectPaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
 	RejectVerification(ctx context.Context, arg RejectVerificationParams) (UserVerification, error)
 	// Internal (not owner-checked): resolves a project's owner_id for real-time

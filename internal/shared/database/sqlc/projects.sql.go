@@ -7,6 +7,7 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -426,6 +427,45 @@ func (q *Queries) ListReleasesForProjectAdmin(ctx context.Context, projectID uui
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const projectDiskHistory = `-- name: ProjectDiskHistory :many
+SELECT created_at, disk_bytes FROM project_resource_snapshot
+WHERE project_id = $1 AND created_at >= $2
+ORDER BY created_at
+`
+
+type ProjectDiskHistoryParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	Since     time.Time `json:"since"`
+}
+
+type ProjectDiskHistoryRow struct {
+	CreatedAt time.Time `json:"created_at"`
+	DiskBytes int64     `json:"disk_bytes"`
+}
+
+// Disk-usage time series from the hourly disksnap snapshots, for the monitoring
+// Disk chart. Prometheus has no filesystem metric for the engine pods (its disk
+// range query returns nothing), so the chart sources disk history from here.
+func (q *Queries) ProjectDiskHistory(ctx context.Context, arg ProjectDiskHistoryParams) ([]ProjectDiskHistoryRow, error) {
+	rows, err := q.db.Query(ctx, projectDiskHistory, arg.ProjectID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectDiskHistoryRow{}
+	for rows.Next() {
+		var i ProjectDiskHistoryRow
+		if err := rows.Scan(&i.CreatedAt, &i.DiskBytes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

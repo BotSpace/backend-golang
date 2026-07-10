@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
@@ -280,6 +281,21 @@ func (r *pgRepo) ListMonitoring(ctx context.Context, f AdminListFilter) ([]Monit
 			MemoryBytes:   row.MemoryBytes,
 			DiskBytes:     row.DiskBytes,
 		}
+	}
+	return out, nil
+}
+
+func (r *pgRepo) DiskHistory(ctx context.Context, projectID uuid.UUID, since time.Time) ([]MetricPoint, error) {
+	rows, err := r.queries.ProjectDiskHistory(ctx, sqlcdb.ProjectDiskHistoryParams{
+		ProjectID: projectID,
+		Since:     since,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("project disk history: %w", err)
+	}
+	out := make([]MetricPoint, len(rows))
+	for i, row := range rows {
+		out[i] = MetricPoint{Timestamp: row.CreatedAt.Unix(), Value: float64(row.DiskBytes)}
 	}
 	return out, nil
 }

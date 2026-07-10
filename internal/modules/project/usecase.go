@@ -793,29 +793,43 @@ func (u *usecase) MonitoringHistory(ctx context.Context, id, ownerID uuid.UUID, 
 	if _, err := mapErr(u.repo.GetForOwner(ctx, id, ownerID)); err != nil {
 		return nil, err
 	}
-	provider, ok := u.metrics.(MetricsHistoryProvider)
-	if !ok || provider == nil {
-		return &MonitoringHistory{}, nil
-	}
-	history, available, err := provider.ProjectHistory(ctx, id, window)
-	if err != nil {
-		return &MonitoringHistory{}, nil
-	}
-	history.PrometheusAvailable = available
-	return history, nil
+	return u.projectHistory(ctx, id, window), nil
 }
 
 func (u *usecase) AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error) {
-	provider, ok := u.metrics.(MetricsHistoryProvider)
-	if !ok || provider == nil {
-		return &MonitoringHistory{}, nil
+	return u.projectHistory(ctx, id, window), nil
+}
+
+// projectHistory assembles the monitoring time-series: CPU/RAM/network from the
+// Prometheus provider (when available), and Disk from the hourly disksnap
+// snapshots — Prometheus has no filesystem metric for the engine pods, so its
+// disk range query is always empty and the Disk chart would otherwise be blank.
+func (u *usecase) projectHistory(ctx context.Context, id uuid.UUID, window string) *MonitoringHistory {
+	history := &MonitoringHistory{}
+	if provider, ok := u.metrics.(MetricsHistoryProvider); ok && provider != nil {
+		if h, available, err := provider.ProjectHistory(ctx, id, window); err == nil && h != nil {
+			history = h
+			history.PrometheusAvailable = available
+		}
 	}
-	history, available, err := provider.ProjectHistory(ctx, id, window)
-	if err != nil {
-		return &MonitoringHistory{}, nil
+	since := time.Now().Add(-historyWindowDuration(window))
+	if disk, err := u.repo.DiskHistory(ctx, id, since); err == nil {
+		history.Disk = disk
 	}
-	history.PrometheusAvailable = available
-	return history, nil
+	return history
+}
+
+func historyWindowDuration(window string) time.Duration {
+	switch window {
+	case "1h":
+		return time.Hour
+	case "6h":
+		return 6 * time.Hour
+	case "7d":
+		return 7 * 24 * time.Hour
+	default:
+		return 24 * time.Hour
+	}
 }
 
 // mapErr translates a not-found into a 404 and any other error into a 500.
