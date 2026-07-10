@@ -312,6 +312,8 @@ type MonitoringProjectResponse struct {
 	CPUCores      int32     `json:"cpu_cores"`
 	MemoryBytes   int32     `json:"memory_bytes"`
 	DiskBytes     int64     `json:"disk_bytes"`
+	NetBytes      int64     `json:"net_bytes"`
+	IsTemplate    bool      `json:"is_template"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -330,6 +332,8 @@ func toMonitoringProjectResponse(p *MonitoringProject) MonitoringProjectResponse
 		CPUCores:      p.CPUCores,
 		MemoryBytes:   p.MemoryBytes,
 		DiskBytes:     p.DiskBytes,
+		NetBytes:      p.NetBytes,
+		IsTemplate:    p.IsTemplate,
 		CreatedAt:     p.CreatedAt,
 	}
 }

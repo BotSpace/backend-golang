@@ -17,7 +17,8 @@ SELECT p.id, p.uuid, p.name, p.description, p.username, p.avatar_file_id, p.owne
        COALESCE((SELECT r.status FROM relase r WHERE r.project_id = p.id ORDER BY r.version DESC LIMIT 1), '')::text AS release_status,
        COALESCE((SELECT res.cpu FROM resource res WHERE res.project_id = p.id ORDER BY res.created_at DESC LIMIT 1), 0)::int AS cpu_cores,
        COALESCE((SELECT res.ram FROM resource res WHERE res.project_id = p.id ORDER BY res.created_at DESC LIMIT 1), 0)::int AS memory_bytes,
-       COALESCE((SELECT snap.disk_bytes FROM project_resource_snapshot snap WHERE snap.project_id = p.id ORDER BY snap.created_at DESC LIMIT 1), 0)::bigint AS disk_bytes
+       COALESCE((SELECT snap.disk_bytes FROM project_resource_snapshot snap WHERE snap.project_id = p.id ORDER BY snap.created_at DESC LIMIT 1), 0)::bigint AS disk_bytes,
+       COALESCE((SELECT res.net_rx + res.net_tx FROM resource res WHERE res.project_id = p.id ORDER BY res.created_at DESC LIMIT 1), 0)::bigint AS net_bytes
 FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
@@ -39,6 +40,7 @@ type AdminMonitoringProjectsRow struct {
 	CpuCores      int32   `json:"cpu_cores"`
 	MemoryBytes   int32   `json:"memory_bytes"`
 	DiskBytes     int64   `json:"disk_bytes"`
+	NetBytes      int64   `json:"net_bytes"`
 }
 
 // Per-project resource snapshot for the admin monitoring page: latest
@@ -78,6 +80,7 @@ func (q *Queries) AdminMonitoringProjects(ctx context.Context, arg AdminMonitori
 			&i.CpuCores,
 			&i.MemoryBytes,
 			&i.DiskBytes,
+			&i.NetBytes,
 		); err != nil {
 			return nil, err
 		}

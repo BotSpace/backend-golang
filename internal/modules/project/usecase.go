@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -741,16 +742,31 @@ func (u *usecase) AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDeta
 
 // AdminMonitoring returns a page of every project across every owner with
 // its latest reported resource usage (admin-only).
+// maxMonitoringSortRows caps how many projects a resource sort loads into memory
+// to order globally before paginating. Far above the real project count; a
+// runaway backstop, not a functional limit.
+const maxMonitoringSortRows = 10000
+
 func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error) {
 	f.Limit, f.Offset = clampPage(f.Limit, f.Offset)
-	items, err := u.repo.ListMonitoring(ctx, f)
-	if err != nil {
-		return nil, httpx.Internal(err)
-	}
 	total, err := u.repo.CountAdmin(ctx, f.Search)
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
+
+	// A resource sort must order the whole set before paginating (the metric is
+	// a per-project subquery, not a real column), so load all matching rows and
+	// slice in Go; otherwise page in SQL as before.
+	resourceSort := isResourceOrdering(f.Ordering)
+	listFilter := f
+	if resourceSort {
+		listFilter.Limit, listFilter.Offset = maxMonitoringSortRows, 0
+	}
+	items, err := u.repo.ListMonitoring(ctx, listFilter)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+
 	available := false
 	if u.metrics != nil {
 		live, ok, err := u.metrics.ProjectMetrics(ctx)
@@ -764,7 +780,64 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 			}
 		}
 	}
+
+	// Sort by the live-overlaid values (matches what the UI shows) then paginate.
+	if resourceSort {
+		sortMonitoringByResource(items, f.Ordering)
+		items = pageSlice(items, f.Offset, f.Limit)
+	}
+
 	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available}, nil
+}
+
+// isResourceOrdering reports whether the ordering key selects a resource metric
+// sort handled in Go (vs the default created_at DESC done in SQL).
+func isResourceOrdering(o string) bool {
+	switch o {
+	case "cpu_asc", "cpu_desc", "ram_asc", "ram_desc", "disk_asc", "disk_desc", "net_asc", "net_desc":
+		return true
+	}
+	return false
+}
+
+func sortMonitoringByResource(items []MonitoringProject, ordering string) {
+	field := strings.TrimSuffix(strings.TrimSuffix(ordering, "_desc"), "_asc")
+	desc := strings.HasSuffix(ordering, "_desc")
+	value := func(m *MonitoringProject) int64 {
+		switch field {
+		case "cpu":
+			return int64(m.CPUCores)
+		case "ram":
+			return int64(m.MemoryBytes)
+		case "disk":
+			return m.DiskBytes
+		case "net":
+			return m.NetBytes
+		}
+		return 0
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := value(&items[i]), value(&items[j])
+		if a == b {
+			return items[i].CreatedAt.After(items[j].CreatedAt)
+		}
+		if desc {
+			return a > b
+		}
+		return a < b
+	})
+}
+
+func pageSlice(items []MonitoringProject, offset, limit int32) []MonitoringProject {
+	start := int(offset)
+	if start > len(items) {
+		start = len(items)
+	}
+	end := start + int(limit)
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[start:end]
 }
 
 func (u *usecase) Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*ProjectMonitoring, error) {

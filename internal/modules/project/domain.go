@@ -114,6 +114,11 @@ type AdminListFilter struct {
 	Search string
 	Limit  int32
 	Offset int32
+	// Ordering optionally sorts the monitoring list by a resource metric:
+	// "cpu_asc"/"cpu_desc", "ram_*", "disk_*", "net_*". Empty keeps the default
+	// (created_at DESC). Sorting is applied in Go over the full set (see
+	// usecase.AdminMonitoring) since the values are per-project subqueries.
+	Ordering string
 }
 
 // AdminProjectSummary is a project row enriched with owner phone and release
@@ -155,6 +160,7 @@ type MonitoringProject struct {
 	CPUCores      int32
 	MemoryBytes   int32
 	DiskBytes     int64
+	NetBytes      int64
 }
 
 type LiveMetrics struct {
