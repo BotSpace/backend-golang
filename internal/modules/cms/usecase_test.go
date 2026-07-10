@@ -245,6 +245,14 @@ func (r *fakeRepo) ProjectMongoTenant(_ context.Context, ownerID, projectID uuid
 	return r.legacyIDs[projectID], nil
 }
 
+func (r *fakeRepo) ProjectOwner(_ context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	ownerID, ok := r.owners[projectID]
+	if !ok {
+		return uuid.Nil, database.ErrNotFound
+	}
+	return ownerID, nil
+}
+
 func (r *fakeRepo) CreateField(_ context.Context, in CreateFieldInput) (*Field, error) {
 	c, ok := r.collections[in.CollectionID]
 	if !ok || r.owners[c.ProjectID] != in.OwnerID {

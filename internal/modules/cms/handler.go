@@ -52,14 +52,49 @@ func findForbiddenOperator(node any, depth int) string {
 	return ""
 }
 
-// owner extracts the authenticated user id, writing a 401 on failure.
+// effectiveOwnerKey holds the owner id the shared owner-scoped handlers should
+// operate as. It is set ONLY by AdminOwnerOverride (admin CMS routes) to the
+// target project's real owner; normal routes never set it and fall back to the
+// caller's own id.
+const effectiveOwnerKey = "cms_effective_owner"
+
+// owner returns the owner id the current request operates as: the admin-injected
+// effective owner when present (admin CMS routes), otherwise the authenticated
+// caller's own id. Writes a 401 on a malformed token.
 func owner(c *gin.Context) (uuid.UUID, bool) {
+	if v, exists := c.Get(effectiveOwnerKey); exists {
+		if id, ok := v.(uuid.UUID); ok {
+			return id, true
+		}
+	}
 	id, err := uuid.Parse(middleware.UserID(c))
 	if err != nil {
 		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token"))
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// AdminOwnerOverride is middleware for the admin CMS routes: it resolves the
+// path project's real owner and stores it as the effective owner, so the same
+// owner-scoped handlers return that project's data regardless of which admin is
+// calling. Must be mounted behind an admin/superuser role guard.
+func (h *Handler) AdminOwnerOverride() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID, ok := pathProjectID(c)
+		if !ok {
+			c.Abort()
+			return
+		}
+		ownerID, err := h.uc.ProjectOwner(c.Request.Context(), projectID)
+		if err != nil {
+			httpx.Error(c, err)
+			c.Abort()
+			return
+		}
+		c.Set(effectiveOwnerKey, ownerID)
+		c.Next()
+	}
 }
 
 func pathProjectID(c *gin.Context) (uuid.UUID, bool) {

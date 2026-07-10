@@ -34,6 +34,14 @@ WHERE c.project_id = sqlc.arg('project_id') AND c.deleted_at IS NULL
   AND p.owner_id = sqlc.arg('owner_id') AND p.deleted_at IS NULL
 ORDER BY c.name;
 
+-- name: CmsGetProjectOwner :one
+-- Resolves a project's owner id WITHOUT an owner check, so the admin CMS
+-- endpoints can run the normal owner-scoped usecase on behalf of the project's
+-- real owner (see cms/routes.go admin group + handler AdminOwnerOverride).
+-- Cross-tenant by design — mount only behind an admin/superuser role guard.
+SELECT owner_id FROM projects
+WHERE id = sqlc.arg('project_id') AND deleted_at IS NULL;
+
 -- name: CmsUpdateCollection :one
 UPDATE collection c
 SET name          = COALESCE(sqlc.narg('name'), c.name),
