@@ -135,6 +135,17 @@ func (r *pgRepo) ProjectMongoTenant(ctx context.Context, ownerID, projectID uuid
 	return row.LegacyID, nil
 }
 
+func (r *pgRepo) ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	ownerID, err := r.queries.CmsGetProjectOwner(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, database.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get project owner: %w", err)
+	}
+	return ownerID, nil
+}
+
 // ── Field ─────────────────────────────────────────────────────────────────
 
 func (r *pgRepo) CreateField(ctx context.Context, in CreateFieldInput) (*Field, error) {

@@ -204,6 +204,12 @@ type Repository interface {
 	// resolveMongoTenant).
 	ProjectMongoTenant(ctx context.Context, ownerID, projectID uuid.UUID) (legacyID *int32, err error)
 
+	// ProjectOwner resolves a project's owner id WITHOUT an owner check. Used
+	// only by the admin CMS endpoints to run the owner-scoped usecase on behalf
+	// of the project's real owner; returns database.ErrNotFound for a
+	// missing/deleted project.
+	ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
+
 	CreateField(ctx context.Context, in CreateFieldInput) (*Field, error)
 	GetFieldByName(ctx context.Context, ownerID, collectionID uuid.UUID, name string) (*Field, error)
 	ListFields(ctx context.Context, collectionID uuid.UUID) ([]Field, error)

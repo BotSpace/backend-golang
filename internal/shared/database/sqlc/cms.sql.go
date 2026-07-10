@@ -367,6 +367,22 @@ func (q *Queries) CmsGetProjectMongoDatabaseForOwner(ctx context.Context, arg Cm
 	return mongo_database, err
 }
 
+const cmsGetProjectOwner = `-- name: CmsGetProjectOwner :one
+SELECT owner_id FROM projects
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+// Resolves a project's owner id WITHOUT an owner check, so the admin CMS
+// endpoints can run the normal owner-scoped usecase on behalf of the project's
+// real owner (see cms/routes.go admin group + handler AdminOwnerOverride).
+// Cross-tenant by design — mount only behind an admin/superuser role guard.
+func (q *Queries) CmsGetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, cmsGetProjectOwner, projectID)
+	var owner_id uuid.UUID
+	err := row.Scan(&owner_id)
+	return owner_id, err
+}
+
 const cmsGetProjectTenantForOwner = `-- name: CmsGetProjectTenantForOwner :one
 SELECT id, legacy_id FROM projects
 WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL

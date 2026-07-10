@@ -86,6 +86,11 @@ type Usecase interface {
 
 	CreateExportTask(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string) (*ExportTask, error)
 	GetExportTask(ctx context.Context, ownerID, taskID uuid.UUID) (*ExportTask, error)
+
+	// ProjectOwner resolves a project's real owner id (no owner check). The
+	// admin CMS endpoints call this to run the owner-scoped operations above on
+	// behalf of the project's owner; returns 404 for a missing/deleted project.
+	ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 }
 
 type usecase struct {
@@ -468,6 +473,14 @@ func (u *usecase) GetExportTask(ctx context.Context, ownerID, taskID uuid.UUID) 
 		return nil, mapNotFound(err, "cms.export_task_not_found", "export task not found")
 	}
 	return task, nil
+}
+
+func (u *usecase) ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	ownerID, err := u.repo.ProjectOwner(ctx, projectID)
+	if err != nil {
+		return uuid.Nil, mapNotFound(err, "cms.project_not_found", "project not found")
+	}
+	return ownerID, nil
 }
 
 // ── shared helpers ───────────────────────────────────────────────────────

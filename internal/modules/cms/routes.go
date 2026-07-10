@@ -33,4 +33,22 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.POST("/:slug/export", h.CreateExportTask)
 		g.GET("/:slug/export/:task_id", h.GetExportTaskStatus)
 	}
+
+	// Admin (read-only): lets an admin/superuser browse ANY project's
+	// collections and documents, not just their own. AdminOwnerOverride
+	// resolves the project's real owner so the same owner-scoped handlers run
+	// on the owner's behalf. Only GET routes are exposed — cross-tenant writes
+	// are intentionally not granted here.
+	admin := rg.Group("/admin/cms/projects/:project_id/collections",
+		middleware.Auth(verifier),
+		middleware.RequireRole("admin", "superuser"),
+		h.AdminOwnerOverride(),
+	)
+	{
+		admin.GET("", h.ListCollections)
+		admin.GET("/:slug", h.GetCollection)
+		admin.GET("/:slug/documents", h.FindDocuments)
+		admin.GET("/:slug/documents/count", h.CountDocuments)
+		admin.GET("/:slug/documents/:doc_id", h.FindOneDocument)
+	}
 }

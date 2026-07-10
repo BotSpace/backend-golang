@@ -67,6 +67,11 @@ type Querier interface {
 	// Resolves the Mongo database name for a project, verifying ownership in the
 	// same query so the caller can never probe another owner's project.
 	CmsGetProjectMongoDatabaseForOwner(ctx context.Context, arg CmsGetProjectMongoDatabaseForOwnerParams) (*string, error)
+	// Resolves a project's owner id WITHOUT an owner check, so the admin CMS
+	// endpoints can run the normal owner-scoped usecase on behalf of the project's
+	// real owner (see cms/routes.go admin group + handler AdminOwnerOverride).
+	// Cross-tenant by design — mount only behind an admin/superuser role guard.
+	CmsGetProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	// Resolves the CMS Mongo tenant key for a project, verifying ownership.
 	// legacy_id (nullable) is the Django project pk that existing imported Mongo
 	// documents were tagged with (`_project_id`); see migration 000033 and
