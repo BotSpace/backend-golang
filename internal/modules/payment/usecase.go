@@ -310,6 +310,12 @@ func (u *usecase) GetOrderForOwner(ctx context.Context, id, ownerID uuid.UUID) (
 
 func (u *usecase) GetOrderInternal(ctx context.Context, id uuid.UUID, projectID *uuid.UUID) (*Order, error) {
 	o, err := u.repo.GetOrderByID(ctx, id)
+	if errors.Is(err, database.ErrNotFound) {
+		// The payment link exposes the order's transaction_id as the Click
+		// `transaction_param`, so users commonly paste that instead of the order
+		// id. Fall back to a transaction_id lookup before giving up.
+		o, err = u.repo.GetOrderByTransactionID(ctx, id)
+	}
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, httpx.NotFound("order.not_found", "order topilmadi")
