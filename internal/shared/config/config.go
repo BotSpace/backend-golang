@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -276,6 +277,27 @@ func (c *Config) validate() error {
 	}
 	if c.DB.Host == "" {
 		return fmt.Errorf("db.host required")
+	}
+	if c.Env == "production" {
+		cryptoKey := strings.TrimSpace(os.Getenv("APP_CRYPTO_KEY"))
+		if cryptoKey == "" || strings.HasPrefix(cryptoKey, "change-me") {
+			return fmt.Errorf("APP_CRYPTO_KEY must be a non-default secret in production")
+		}
+		internalToken := strings.TrimSpace(os.Getenv("APP_INTERNAL_TOKEN"))
+		if internalToken == "" || strings.HasPrefix(internalToken, "change-me") {
+			return fmt.Errorf("APP_INTERNAL_TOKEN must be a non-default secret in production")
+		}
+		for _, origin := range c.HTTP.CORSOrigins {
+			if strings.TrimSpace(origin) == "*" {
+				return fmt.Errorf("http.cors_origins must not contain wildcard in production")
+			}
+		}
+		if c.HTTP.RateLimitRPS <= 0 {
+			return fmt.Errorf("http.rate_limit_rps must be positive in production")
+		}
+		if !c.OTP.Prod {
+			return fmt.Errorf("otp.prod must be true in production")
+		}
 	}
 	return nil
 }

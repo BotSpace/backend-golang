@@ -11,8 +11,9 @@ http:
   max_header_bytes: 1048576 # 1 MiB
   max_body_bytes: 1048576 # 1 MiB request body cap
   cors_origins:
-    - "*"
-  rate_limit_rps: 0 # per-IP req/sec; 0 disables
+    - "http://localhost:3010"
+    - "http://localhost:3020"
+  rate_limit_rps: 20 # per-IP req/sec; 0 disables
   rate_limit_burst: 20
 
 db:
