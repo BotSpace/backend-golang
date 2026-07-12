@@ -6559,7 +6559,7 @@
       "paid",
       "failed"
     ],
-    "agentCategory": "integration"
+    "agentCategory": "payment"
   },
   {
     "type": "ApproveChatJoinRequestNode",
@@ -7267,7 +7267,7 @@
       "source-default"
     ],
     "targetHandles": [],
-    "agentCategory": "ai"
+    "agentCategory": "payment"
   },
   {
     "type": "AIPaymentStatusToolNode",
@@ -7317,7 +7317,7 @@
       "source-default"
     ],
     "targetHandles": [],
-    "agentCategory": "ai"
+    "agentCategory": "payment"
   },
   {
     "type": "SwitchNode",

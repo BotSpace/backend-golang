@@ -15,6 +15,17 @@ import (
 //go:embed data/builtin_node_manifests.json
 var builtinManifestsJSON []byte
 
+//go:embed data/node_categories.json
+var nodeCategoriesJSON []byte
+
+// NodeCategoriesJSON returns the raw embedded node_categories.json — a
+// {category_key: {label, doc}} map served alongside the node manifests so the
+// agent can show category-level docs (and lazy-load a category's nodes) without
+// hardcoding category descriptions.
+func NodeCategoriesJSON() []byte {
+	return nodeCategoriesJSON
+}
+
 // builtinNodeManifests is the canonical built-in node catalog (Django
 // data/builtin_node_manifests.json), parsed once at package init. A corrupt
 // embedded file is a build-time bug, so it panics loudly instead of degrading
