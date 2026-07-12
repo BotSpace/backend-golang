@@ -1,0 +1,42 @@
+{
+  "trigger": {
+    "label": "Trigger",
+    "doc": "Flow'ni boshlovchi yoki javob kutuvchi hodisalar: /command, xabar (matn/rasm/kontakt), inline/reply tugma, cron jadval."
+  },
+  "send": {
+    "label": "Send",
+    "doc": "Foydalanuvchiga xabar va media yuborish: matn, rasm, video, audio, hujjat, stiker, lokatsiya, kontakt, animatsiya."
+  },
+  "edit": {
+    "label": "Edit",
+    "doc": "Oldin yuborilgan xabarni tahrirlash yoki o'chirish (matn, inline tugma), edit-or-send."
+  },
+  "flow_control": {
+    "label": "Flow control",
+    "doc": "Oqim mantig'i: shart (if), tarmoqlanish, sikl (for-loop), kutish, kanal a'zoligini tekshirish, sub-flow chaqirish."
+  },
+  "data": {
+    "label": "Data",
+    "doc": "Ma'lumot bilan ishlash: MongoDB collection (yaratish/o'qish/yozish/o'chirish) va state (o'zgaruvchi saqlash)."
+  },
+  "integration": {
+    "label": "Integration",
+    "doc": "Tashqi xizmatlar: HTTP so'rov, Google Sheets/Drive, fayl yuklash, custom JavaScript kod."
+  },
+  "interaction": {
+    "label": "Interaction",
+    "doc": "Foydalanuvchidan ma'lumot so'rash: matn, kontakt/telefon, tugma orqali tanlov."
+  },
+  "subflow": {
+    "label": "Subflow",
+    "doc": "Sub-flow kirish/chiqish nuqtalari — flow'ni qayta ishlatiladigan bo'laklarga bo'lish."
+  },
+  "payment": {
+    "label": "Payment",
+    "doc": "To'lov qabul qilish: PaymentNode (Click/Paycue), Telegram invoice, va AI agent uchun to'lov havolasi/status tool'lari."
+  },
+  "ai": {
+    "label": "AI",
+    "doc": "AI agent (LLM), provider sub-node'lar (Ollama/OpenAI/Gemini/Anthropic) va AI tool'lar (HTTP, collection, custom code, knowledge/RAG, sana, Google Sheets). structuredOutput bilan JSON."
+  }
+}
