@@ -55,6 +55,16 @@ envFrom:
       name: jwt-secret
 
 env:
+  - name: APP_ENV
+    value: "production"
+  - name: APP_HTTP_CORS_ORIGINS
+    value: "https://botspace.uz,https://admin.botspace.uz"
+  - name: APP_HTTP_RATE_LIMIT_RPS
+    value: "20"
+  - name: APP_HTTP_RATE_LIMIT_BURST
+    value: "40"
+  - name: APP_OTP_PROD
+    value: "true"
   - name: APP_ENGINE_IMAGE_TAG
     value: "3.5.144-prod"
   # B2/S3 object-storage write credentials for the file-upload handler. Sourced
