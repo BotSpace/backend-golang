@@ -5036,6 +5036,13 @@
         "description": "'text' returns plain string; 'json' also stores parsed JSON under outputKey_json. NOTE: for guaranteed-valid JSON prefer structuredOutput+jsonSchema (below) — that constrains the model at the provider level; returnMode='json' only best-effort parses free text."
       },
       {
+        "type": "switch",
+        "key": "autoHistory",
+        "label": "Auto conversation memory",
+        "optional": true,
+        "description": "When true, the engine keeps a SEPARATE conversation history per chat automatically (no historyKey needed) — the agent remembers earlier turns. Use for chatbots/assistants. Ignored if historyKey is set."
+      },
+      {
         "type": "text",
         "key": "historyKey",
         "label": "History Key",
