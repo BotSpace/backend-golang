@@ -181,27 +181,18 @@ func (u *usecase) ReportUsage(ctx context.Context, in ReportUsageInput) (int64, 
 		return 0, err // already httpx.NotFound / httpx.Internal
 	}
 
-	sub, plan, err := u.getOrCreateSubscription(ctx, in.UserID)
+	sub, _, err := u.getOrCreateSubscription(ctx, in.UserID)
 	if err != nil {
 		return 0, err
 	}
 
-	// Cached tokens are billed at the plan's discounted rate; never let
-	// cache_read exceed the reported input.
-	cacheRead := in.CacheReadTokens
-	if cacheRead < 0 {
-		cacheRead = 0
+	// Bill 100% of input tokens — every token that goes into the model is
+	// deducted from the user's balance, with NO cache discount (cached tokens
+	// count at full weight). input_tokens already includes the cached portion.
+	billableInput := in.InputTokens
+	if billableInput < 0 {
+		billableInput = 0
 	}
-	if cacheRead > in.InputTokens {
-		cacheRead = in.InputTokens
-	}
-	uncached := in.InputTokens - cacheRead
-
-	rate, err := strconv.ParseFloat(plan.CachedTokenRate, 64)
-	if err != nil {
-		rate = 0
-	}
-	billableInput := uncached + int64(math.Round(float64(cacheRead)*rate))
 
 	if err := u.repo.IncrementUsage(ctx, sub.ID, billableInput, in.OutputTokens); err != nil {
 		if errors.Is(err, database.ErrNotFound) {
