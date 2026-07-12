@@ -77,3 +77,53 @@ func TestValidate_RequiresKeyPaths(t *testing.T) {
 		t.Errorf("expected valid config, got %v", err)
 	}
 }
+
+func validProductionConfig(t *testing.T) *Config {
+	t.Helper()
+	t.Setenv("APP_CRYPTO_KEY", "a-real-32-byte-production-secret")
+	t.Setenv("APP_INTERNAL_TOKEN", "a-real-internal-production-secret")
+	return &Config{
+		Env: "production",
+		DB:  DBConfig{Host: "db"},
+		JWT: JWTConfig{PrivateKeyPath: "keys/p.pem", PublicKeyPath: "keys/pub.pem"},
+		HTTP: HTTPConfig{
+			CORSOrigins:  []string{"https://botspace.uz"},
+			RateLimitRPS: 20,
+		},
+		OTP: OTPConfig{Prod: true},
+	}
+}
+
+func TestValidate_ProductionRejectsUnsafeDefaults(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"wildcard cors", func(c *Config) { c.HTTP.CORSOrigins = []string{"*"} }},
+		{"disabled rate limit", func(c *Config) { c.HTTP.RateLimitRPS = 0 }},
+		{"fixed otp", func(c *Config) { c.OTP.Prod = false }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validProductionConfig(t)
+			tc.mutate(cfg)
+			if err := cfg.validate(); err == nil {
+				t.Fatal("expected unsafe production config to fail")
+			}
+		})
+	}
+}
+
+func TestValidate_ProductionRequiresRealSecrets(t *testing.T) {
+	cfg := validProductionConfig(t)
+	t.Setenv("APP_CRYPTO_KEY", "change-me-in-production")
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected placeholder crypto key to fail")
+	}
+
+	cfg = validProductionConfig(t)
+	t.Setenv("APP_INTERNAL_TOKEN", "change-me-internal")
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected placeholder internal token to fail")
+	}
+}
