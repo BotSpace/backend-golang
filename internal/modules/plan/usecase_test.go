@@ -367,7 +367,7 @@ func TestUpgradeInsufficientBalanceLeavesPlanUnchanged(t *testing.T) {
 	}
 }
 
-func TestReportUsageAppliesCachedTokenDiscount(t *testing.T) {
+func TestReportUsageBillsFullInputNoCacheDiscount(t *testing.T) {
 	repo := newFakeRepo()
 	repo.addPlan(Plan{
 		ID: uuid.New(), Name: NameFree, Price: "0", IsActive: true,
@@ -386,16 +386,16 @@ func TestReportUsageAppliesCachedTokenDiscount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReportUsage: %v", err)
 	}
-	// uncached = 100-40 = 60; cached billable = round(40*0.5) = 20; total = 80.
-	if billable != 80 {
-		t.Fatalf("expected billable input 80, got %d", billable)
+	// 100% billing: the full input is charged, cache_read gets NO discount.
+	if billable != 100 {
+		t.Fatalf("expected billable input 100 (full), got %d", billable)
 	}
 
 	sub, err := repo.GetSubscriptionByUserID(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sub.TokensUsedInput != 80 || sub.TokensUsedOutput != 20 {
+	if sub.TokensUsedInput != 100 || sub.TokensUsedOutput != 20 {
 		t.Fatalf("usage not persisted correctly: input=%d output=%d", sub.TokensUsedInput, sub.TokensUsedOutput)
 	}
 }
