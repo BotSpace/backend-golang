@@ -66,7 +66,7 @@ var Types = []TypeDef{
 	{
 		Key: "ollama", Label: "Ollama", Icon: "boxes", Color: "#F97316", Mode: ModeBearer,
 		Fields: []Field{
-			{Name: "base_url", Label: "Base URL", Type: "text", Required: true, Default: "https://ollama.com/v1"},
+			{Name: "base_url", Label: "Base URL", Type: "text", Default: "https://ollama.com/v1"},
 			{Name: "api_key", Label: "API key", Type: "password", Secret: true},
 		},
 	},
