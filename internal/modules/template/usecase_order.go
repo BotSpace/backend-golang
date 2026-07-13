@@ -53,7 +53,7 @@ func (u *usecase) CreateOrder(ctx context.Context, userID, templateID uuid.UUID)
 // a spec snapshot, else the linked project's legacy flow (empty/missing
 // either way normalizes to the empty-graph default via normalizeFlow, same
 // as the internal RAG feed).
-func (u *usecase) ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error) {
+func (u *usecase) ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, json.RawMessage, error) {
 	var t *Template
 	var err error
 	if id, perr := uuid.Parse(idOrSlug); perr == nil {
@@ -62,21 +62,21 @@ func (u *usecase) ResolveForProjectCreate(ctx context.Context, idOrSlug string, 
 		t, err = u.repo.GetBySlug(ctx, idOrSlug)
 	}
 	if err != nil {
-		return nil, mapNoRowsHTTP(err)
+		return nil, nil, mapNoRowsHTTP(err)
 	}
 	if !t.IsVerify {
-		return nil, httpx.NotFound("template.not_found", "template not found")
+		return nil, nil, httpx.NotFound("template.not_found", "template not found")
 	}
 
 	order, err := u.repo.GetOrderForUserAndTemplate(ctx, buyerID, t.ID)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
-			return nil, httpx.BadRequest("template.not_purchased", "template not purchased")
+			return nil, nil, httpx.BadRequest("template.not_purchased", "template not purchased")
 		}
-		return nil, httpx.Internal(err)
+		return nil, nil, httpx.Internal(err)
 	}
 	if !order.PaymentStatus {
-		return nil, httpx.BadRequest("template.not_purchased", "template not purchased")
+		return nil, nil, httpx.BadRequest("template.not_purchased", "template not purchased")
 	}
 
 	flow := extractSpecFlow(t.Spec)
@@ -85,7 +85,29 @@ func (u *usecase) ResolveForProjectCreate(ctx context.Context, idOrSlug string, 
 			flow = raw
 		}
 	}
-	return normalizeFlow(flow), nil
+	return normalizeFlow(flow), extractSpecCollections(t.Spec), nil
+}
+
+// extractSpecCollections pulls the "collections" array out of a template's
+// spec JSONB snapshot (see template_spec.py::build_spec_from_project). Each
+// element is {name,label,description,primary_field,system,fields[],data[]} —
+// the project module provisions these as CMS collections and seeds `data`.
+// Returns nil when the spec is empty or has no collections.
+func extractSpecCollections(spec json.RawMessage) json.RawMessage {
+	if len(spec) == 0 {
+		return nil
+	}
+	var wrapper struct {
+		Collections json.RawMessage `json:"collections"`
+	}
+	if err := json.Unmarshal(spec, &wrapper); err != nil {
+		return nil
+	}
+	trimmed := skipJSONWhitespace(wrapper.Collections)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil
+	}
+	return wrapper.Collections
 }
 
 // extractSpecFlow pulls the "flow" key out of a template's spec JSONB

@@ -482,12 +482,14 @@ func TestGet_ResolverError_LeavesBotLinkEmpty(t *testing.T) {
 type fakeCollectionProvisioner struct {
 	collections map[string]*cms.Collection   // slug -> created collection
 	fields      map[string][]cms.FieldCreate // slug -> fields added, in call order
+	docs        map[string][]map[string]any  // slug -> documents inserted
 }
 
 func newFakeCollectionProvisioner() *fakeCollectionProvisioner {
 	return &fakeCollectionProvisioner{
 		collections: map[string]*cms.Collection{},
 		fields:      map[string][]cms.FieldCreate{},
+		docs:        map[string][]map[string]any{},
 	}
 }
 
@@ -519,6 +521,14 @@ func (f *fakeCollectionProvisioner) AddField(_ context.Context, _, _ uuid.UUID, 
 	}
 	f.fields[collSlug] = append(f.fields[collSlug], in)
 	return &cms.Field{ID: uuid.New(), Name: in.Name}, nil
+}
+
+func (f *fakeCollectionProvisioner) InsertDocuments(_ context.Context, _, _ uuid.UUID, collSlug string, docs []map[string]any) ([]map[string]any, error) {
+	if _, ok := f.collections[collSlug]; !ok {
+		return nil, database.ErrNotFound
+	}
+	f.docs[collSlug] = append(f.docs[collSlug], docs...)
+	return docs, nil
 }
 
 // TestCreate_ProvisionsDefaultCollections ports Django's
@@ -723,18 +733,19 @@ func TestDelete_NilOrchestrator_StillDeletes(t *testing.T) {
 // so tests can assert the usecase forwarded them correctly.
 type fakeTemplateResolver struct {
 	flow         json.RawMessage
+	collections  json.RawMessage
 	err          error
 	lastIDOrSlug string
 	lastBuyerID  uuid.UUID
 }
 
-func (f *fakeTemplateResolver) ResolveForProjectCreate(_ context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error) {
+func (f *fakeTemplateResolver) ResolveForProjectCreate(_ context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, json.RawMessage, error) {
 	f.lastIDOrSlug = idOrSlug
 	f.lastBuyerID = buyerID
 	if f.err != nil {
-		return nil, f.err
+		return nil, nil, f.err
 	}
-	return f.flow, nil
+	return f.flow, f.collections, nil
 }
 
 // fakeReleaseOrchestrator is a stub ReleaseOrchestrator that just records
@@ -830,6 +841,67 @@ func TestCreateFromTemplate_CopiesFlowAndProvisionsCollections(t *testing.T) {
 	}
 	if rel.debugCalled {
 		t.Fatal("did not expect StartDebug to be called for the default (release) mode")
+	}
+}
+
+// TestCreateFromTemplate_SeedsTemplateCollections verifies the fix for
+// "bot from template arrives without its collections": the template's own CMS
+// collections (schema + fields) are provisioned and their demo `data`
+// documents inserted, while the default users/chat collections (already
+// created by Create) are not duplicated.
+func TestCreateFromTemplate_SeedsTemplateCollections(t *testing.T) {
+	repo := newFakeRepo()
+	cmsUC := newFakeCollectionProvisioner()
+	// One brand-new collection with 2 fields + 2 docs, plus a "users" entry
+	// that must be skipped because Create already provisioned it.
+	collections := json.RawMessage(`[
+		{"name":"services","label":"Services","primary_field":"title","fields":[
+			{"name":"title","label":"Title","kind":"text","order":0,"required":true},
+			{"name":"price","label":"Price","kind":"int","order":1}
+		],"data":[
+			{"title":"QR menu","price":2500000},
+			{"title":"Delivery","price":1000000}
+		]},
+		{"name":"users","label":"Foydalanuvchilar","fields":[
+			{"name":"chat_id","label":"Chat ID","kind":"int","order":0}
+		],"data":[{"chat_id":999}]}
+	]`)
+	tmpl := &fakeTemplateResolver{
+		flow:        json.RawMessage(`{"nodes":[],"edges":[]}`),
+		collections: collections,
+	}
+	uc := NewUsecase(repo, nil, cmsUC, tmpl, &fakeReleaseOrchestrator{})
+	ctx := context.Background()
+
+	if _, err := uc.CreateFromTemplate(ctx, CreateFromTemplateInput{
+		OwnerID:  uuid.New(),
+		Template: "qr-menu",
+		Name:     "QR bot",
+		Token:    "123:abc",
+	}); err != nil {
+		t.Fatalf("CreateFromTemplate: %v", err)
+	}
+
+	// New template collection created with its fields.
+	svc, ok := cmsUC.collections["services"]
+	if !ok {
+		t.Fatal("expected template collection 'services' to be created")
+	}
+	if svc.PrimaryField != "title" {
+		t.Fatalf("services primary_field = %q, want title", svc.PrimaryField)
+	}
+	if got := len(cmsUC.fields["services"]); got != 2 {
+		t.Fatalf("services fields = %d, want 2", got)
+	}
+	// Demo documents seeded.
+	if got := len(cmsUC.docs["services"]); got != 2 {
+		t.Fatalf("services docs = %d, want 2", got)
+	}
+	// The default users collection (provisioned by Create) is skipped: even
+	// though the template's users entry carries a document, none is inserted
+	// because GetCollection already finds the default schema.
+	if got := len(cmsUC.docs["users"]); got != 0 {
+		t.Fatalf("users docs = %d, want 0 (collection already existed, must be skipped)", got)
 	}
 }
 

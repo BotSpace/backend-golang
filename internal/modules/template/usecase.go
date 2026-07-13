@@ -61,7 +61,9 @@ type Usecase interface {
 	// "create a project from a template" (project.Usecase.CreateFromTemplate
 	// depends on this via project.TemplateResolver) — see its doc comment in
 	// usecase_order.go for the full purchase-check/flow-fallback semantics.
-	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error)
+	// Returns the flow and the raw `collections` spec array (nil when the
+	// template has none) so the project module can seed CMS collections + data.
+	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (flow, collections json.RawMessage, err error)
 	GetOrder(ctx context.Context, id, ownerID uuid.UUID) (*Order, error)
 	ListOrders(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]Order, int64, error)
 	PayOrder(ctx context.Context, id, buyerID uuid.UUID) (*Order, error)
