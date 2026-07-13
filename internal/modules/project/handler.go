@@ -8,16 +8,24 @@ import (
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
 	"github.com/botspace/backend/internal/shared/validator"
+	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	uc Usecase
+	uc    Usecase
+	wsPub wsevents.Publisher
 }
 
 func NewHandler(uc Usecase) *Handler {
 	return &Handler{uc: uc}
+}
+
+// NewHandlerWithPublisher wires a ws-events publisher so agent-driven flow
+// updates (impersonated PATCH /projects/:id) notify the constructor to reload.
+func NewHandlerWithPublisher(uc Usecase, wsPub wsevents.Publisher) *Handler {
+	return &Handler{uc: uc, wsPub: wsPub}
 }
 
 // owner extracts the authenticated user id, writing a 401 on failure.
@@ -264,6 +272,17 @@ func (h *Handler) Update(c *gin.Context) {
 	if err != nil {
 		httpx.Error(c, err)
 		return
+	}
+	// When the AI agent (impersonated) changes the flow, tell the constructor to
+	// reload — but NOT for a human's own save (their JWT), which would fight the
+	// editor they're typing in. Best-effort; nil-safe publisher.
+	if req.Flow != nil && middleware.Impersonated(c) && h.wsPub != nil {
+		h.wsPub.Publish(
+			c.Request.Context(),
+			wsevents.UserRoom(ownerID),
+			wsevents.EventFlowChanged,
+			map[string]any{"project_id": id.String()},
+		)
 	}
 	httpx.OK(c, 200, toResponse(p))
 }

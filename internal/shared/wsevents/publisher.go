@@ -51,6 +51,9 @@ const (
 	EventNodeExecution = "node_execution"
 	EventContext       = "context"
 	EventError         = "error"
+	// EventFlowChanged tells the constructor that the project's flow was updated
+	// out-of-band (by the AI agent) so it can reload — see project.Update.
+	EventFlowChanged = "flow_changed"
 )
 
 // ProjectRoom formats the "project_<ref>" room name, matching

@@ -322,7 +322,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		}
 		projectUC = project.NewUsecaseWithCollabSigner(projectUC, collabSigner)
 	}
-	project.RegisterRoutes(v1, project.NewHandler(projectUC), tokens)
+	project.RegisterRoutes(v1, project.NewHandlerWithPublisher(projectUC, wsPub), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
 	planUC := plan.NewUsecase(plan.NewPostgresRepository(s.pool), userUC)
