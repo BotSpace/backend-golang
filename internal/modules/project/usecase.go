@@ -55,7 +55,7 @@ type Usecase interface {
 // template into a flow" step, not the whole marketplace usecase.
 // template.Usecase satisfies this interface structurally.
 type TemplateResolver interface {
-	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (json.RawMessage, error)
+	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (flow, collections json.RawMessage, err error)
 }
 
 // ReleaseOrchestrator is the minimal release-module surface
@@ -80,6 +80,7 @@ type CollectionProvisioner interface {
 	CreateCollection(ctx context.Context, ownerID, projectID uuid.UUID, in cms.CreateCollectionInput) (*cms.Collection, error)
 	GetCollection(ctx context.Context, ownerID, projectID uuid.UUID, slug string) (*cms.Collection, error)
 	AddField(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, in cms.FieldCreate) (*cms.Field, error)
+	InsertDocuments(ctx context.Context, ownerID, projectID uuid.UUID, collSlug string, docs []map[string]any) ([]map[string]any, error)
 }
 
 // ManagedBotTokenResolver is the minimal webhook-module surface Create/
@@ -284,7 +285,7 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 	if u.tmpl == nil {
 		return nil, httpx.Internal(errors.New("project: template resolver not configured"))
 	}
-	flow, err := u.tmpl.ResolveForProjectCreate(ctx, in.Template, in.OwnerID)
+	flow, collections, err := u.tmpl.ResolveForProjectCreate(ctx, in.Template, in.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +313,13 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 	if err != nil {
 		return nil, err
 	}
+
+	// Seed the template's CMS collections (schema + demo documents) so a bot
+	// built from a template arrives with its `services`/`orders`/... data, not
+	// just the flow. u.Create already provisioned the default users/chat system
+	// collections; those are skipped here (get-or-create). Best-effort like the
+	// default provisioning — a CMS hiccup must not fail an otherwise-good create.
+	u.provisionTemplateCollections(ctx, p, collections)
 
 	if u.rel == nil {
 		return p, nil
@@ -457,6 +465,119 @@ func (u *usecase) provisionDefaultCollections(ctx context.Context, p *Project) {
 			}
 		}
 	}
+}
+
+// templateCollectionSpec is one entry of a template spec's `collections` array
+// (see template.extractSpecCollections / Django's build_spec_from_project).
+type templateCollectionSpec struct {
+	Name         string                    `json:"name"`
+	Label        string                    `json:"label"`
+	Description  string                    `json:"description"`
+	PrimaryField string                    `json:"primary_field"`
+	System       bool                      `json:"system"`
+	Fields       []templateCollectionField `json:"fields"`
+	Data         []map[string]any          `json:"data"`
+}
+
+type templateCollectionField struct {
+	Name       string          `json:"name"`
+	Label      string          `json:"label"`
+	Kind       string          `json:"kind"`
+	Required   bool            `json:"required"`
+	Order      int32           `json:"order"`
+	Default    json.RawMessage `json:"default"`
+	Validators json.RawMessage `json:"validators"`
+}
+
+// provisionTemplateCollections seeds a from-template project with the template's
+// own CMS collections — schema, fields and demo `data` documents — so the bot
+// arrives with its content (e.g. the QR-menu template's `services`/`orders`),
+// not just the flow that reads from them.
+//
+// Get-or-create per collection: any slug that already exists (the default
+// users/chat provisioned by Create, or a re-run) is skipped, mirroring
+// provisionDefaultCollections. Best-effort throughout — a CMS failure logs a
+// warning and moves on; it must never fail an otherwise-successful create.
+func (u *usecase) provisionTemplateCollections(ctx context.Context, p *Project, raw json.RawMessage) {
+	if u.cms == nil || len(raw) == 0 {
+		return
+	}
+	var colls []templateCollectionSpec
+	if err := json.Unmarshal(raw, &colls); err != nil {
+		zap.L().Warn("project create-from-template: invalid collections spec",
+			logger.String("project_id", p.ID.String()),
+			logger.Err(err),
+		)
+		return
+	}
+
+	for _, col := range colls {
+		if col.Name == "" {
+			continue
+		}
+		if _, err := u.cms.GetCollection(ctx, p.OwnerID, p.ID, col.Name); err == nil {
+			continue // already provisioned (users/chat, or a re-run)
+		}
+		name := col.Label
+		if name == "" {
+			name = col.Name
+		}
+		if _, err := u.cms.CreateCollection(ctx, p.OwnerID, p.ID, cms.CreateCollectionInput{
+			Name:         name,
+			Slug:         col.Name,
+			Description:  col.Description,
+			PrimaryField: col.PrimaryField,
+			System:       col.System,
+		}); err != nil {
+			zap.L().Warn("project create-from-template collection failed",
+				logger.String("collection", col.Name),
+				logger.String("project_id", p.ID.String()),
+				logger.Err(err),
+			)
+			continue
+		}
+		for i, f := range col.Fields {
+			fc := cms.FieldCreate{
+				Name:     f.Name,
+				Label:    f.Label,
+				Type:     f.Kind,
+				Required: f.Required,
+				Order:    f.Order,
+			}
+			if nonNullJSON(f.Default) {
+				fc.Default = f.Default
+			}
+			if nonNullJSON(f.Validators) {
+				fc.Validators = f.Validators
+			}
+			if _, err := u.cms.AddField(ctx, p.OwnerID, p.ID, col.Name, fc); err != nil {
+				zap.L().Warn("project create-from-template field failed",
+					logger.String("field", f.Name),
+					logger.String("collection", col.Name),
+					logger.String("project_id", p.ID.String()),
+					logger.Int("field_index", i),
+					logger.Err(err),
+				)
+			}
+		}
+		if len(col.Data) > 0 {
+			if _, err := u.cms.InsertDocuments(ctx, p.OwnerID, p.ID, col.Name, col.Data); err != nil {
+				zap.L().Warn("project create-from-template documents failed",
+					logger.String("collection", col.Name),
+					logger.Int("count", len(col.Data)),
+					logger.String("project_id", p.ID.String()),
+					logger.Err(err),
+				)
+			}
+		}
+	}
+}
+
+// nonNullJSON reports whether a raw JSON value is present and not literal null,
+// so we only forward a field's default/validators when the template set them.
+func nonNullJSON(r json.RawMessage) bool {
+	t := strings.TrimSpace(string(r))
+	return t != "" && t != "null"
 }
 
 // Get ports RetrieveProjectSerializer, which nests RetrieveDebugSerializer
