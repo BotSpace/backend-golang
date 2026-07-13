@@ -100,6 +100,10 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger, pool *pgxp
 		middleware.RequestID(),
 		middleware.Recovery(log),
 		middleware.Logger(log),
+		// Public OAuth discovery/registration/token endpoints must be reachable
+		// by browser MCP clients from ANY origin — runs before the allowlist
+		// CORS below so it answers their cross-origin preflights.
+		middleware.PublicCORS("/.well-known/oauth-authorization-server", "/auth/oauth"),
 		middleware.CORS(cfg.HTTP.CORSOrigins),
 		middleware.RateLimit(cfg.HTTP.RateLimitRPS, cfg.HTTP.RateLimitBurst),
 		middleware.BodyLimit(cfg.HTTP.MaxBodyBytes),
