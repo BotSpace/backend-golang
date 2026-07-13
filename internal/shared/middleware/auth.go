@@ -12,6 +12,7 @@ import (
 const (
 	ctxUserIDKey        = "user_id"
 	ctxRoleKey          = "user_role"
+	ctxImpersonatedKey  = "impersonated"
 	authHeader          = "Authorization"
 	bearerPrefix        = "Bearer "
 	internalTokenHeader = "X-Internal-Token"
@@ -50,6 +51,7 @@ func Auth(v TokenVerifier) gin.HandlerFunc {
 				}
 				c.Set(ctxUserIDKey, uid)
 				c.Set(ctxRoleKey, role)
+				c.Set(ctxImpersonatedKey, true)
 				c.Next()
 				return
 			}
@@ -95,6 +97,19 @@ func UserID(c *gin.Context) string {
 	}
 	uid, _ := v.(string)
 	return uid
+}
+
+// Impersonated reports whether the request authenticated via the internal-token
+// + X-User-Id path (i.e. a trusted backend service acting AS the user, such as
+// the AI agent) rather than a user's own bearer JWT. Handlers use this to tell
+// agent-driven writes apart from a human editing in the constructor.
+func Impersonated(c *gin.Context) bool {
+	v, ok := c.Get(ctxImpersonatedKey)
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
 }
 
 // Role extracts the authenticated user's role set by Auth.
