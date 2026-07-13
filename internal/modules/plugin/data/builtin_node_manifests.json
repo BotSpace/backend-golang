@@ -573,7 +573,7 @@
       "global": true,
       "context": {}
     },
-    "aiDoc": "Xabar turini kutib trigger. type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation. filter: any/equals/contains/starts_with/regex. context.value: filter qiymati. global:false bo'lsa faqat pauzada ishlaydi (foydalanuvchi javobini kutish). state: {key, type} — kelgan ma'lumotni AVTOMATIK saqlaydi (public_<key>), alohida StateNode KERAK EMAS. Misol: state:{key:'user_name', type:'text'} → {{user_name}} (yoki {{public.user_name}}) orqali foydalaniladi.",
+    "aiDoc": "Xabar turini kutib trigger. Maydonlar FLAT (nested obyekt YO'Q). type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation (`messageType` EMAS — `type`). filter: any/equals/contains/starts_with/regex; filter qiymati `f_context_value`. global_:false bo'lsa (nom oxirida `_`, `global` EMAS) faqat pauzada ishlaydi (foydalanuvchi javobini kutish). Kelgan ma'lumotni AVTOMATIK saqlash uchun: save_state:true + state_key:'<nom>' + state_type:'<tur>' (nested `state:{}` EMAS, `state:true` EMAS) — public_<state_key> ga yoziladi, alohida StateNode KERAK EMAS. Misol: {\"type\":\"text\",\"global_\":false,\"save_state\":true,\"state_key\":\"user_name\",\"state_type\":\"text\"} → {{user_name}} orqali ishlatiladi.",
     "summary": "Foydalanuvchi xabari (matn/rasm/kontakt...) kelganda flow'ni boshlaydi yoki javobni kutadi",
     "agentCategory": "trigger"
   },
