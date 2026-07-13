@@ -13,16 +13,30 @@ import (
 )
 
 type Config struct {
-	Env     string           `mapstructure:"env"`
-	HTTP    HTTPConfig       `mapstructure:"http"`
-	DB      DBConfig         `mapstructure:"db"`
-	JWT     JWTConfig        `mapstructure:"jwt"`
-	OTP     OTPConfig        `mapstructure:"otp"`
-	Log     LogConfig        `mapstructure:"log"`
-	Engine  EngineConfig     `mapstructure:"engine"`
-	Google  GoogleConfig     `mapstructure:"google"`
-	Storage StorageConfig    `mapstructure:"storage"`
-	Monitor MonitoringConfig `mapstructure:"monitoring"`
+	Env      string           `mapstructure:"env"`
+	HTTP     HTTPConfig       `mapstructure:"http"`
+	DB       DBConfig         `mapstructure:"db"`
+	JWT      JWTConfig        `mapstructure:"jwt"`
+	OTP      OTPConfig        `mapstructure:"otp"`
+	Log      LogConfig        `mapstructure:"log"`
+	Engine   EngineConfig     `mapstructure:"engine"`
+	Google   GoogleConfig     `mapstructure:"google"`
+	Storage  StorageConfig    `mapstructure:"storage"`
+	Monitor  MonitoringConfig `mapstructure:"monitoring"`
+	MCPOAuth MCPOAuthConfig   `mapstructure:"mcp_oauth"`
+}
+
+// MCPOAuthConfig configures the MCP OAuth authorization server (discovery +
+// authorization-code/PKCE + dynamic client registration). Defaults mirror the
+// URLs the legacy Django server advertised so existing MCP clients keep working.
+type MCPOAuthConfig struct {
+	// Issuer is this authorization server's public base (must equal the agent's
+	// AGENT_OAUTH_ISSUER); token/registration endpoints are derived from it.
+	Issuer string `mapstructure:"issuer"`
+	// AuthorizeURL is the frontend consent page the client is redirected to.
+	AuthorizeURL string `mapstructure:"authorize_url"`
+	// CodeTTL is the authorization-code lifetime.
+	CodeTTL time.Duration `mapstructure:"code_ttl"`
 }
 
 // GoogleConfig configures Google sign-in (POST /api/v1/auth/google) and the
@@ -351,6 +365,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("google.oauth_client_secret", "")                        // APP_GOOGLE_OAUTH_CLIENT_SECRET
 	v.SetDefault("google.oauth_callback_base", "https://api.botspace.uz") // APP_GOOGLE_OAUTH_CALLBACK_BASE
 	v.SetDefault("google.oauth_panel_url", "https://admin.botspace.uz")   // APP_GOOGLE_OAUTH_PANEL_URL
+
+	v.SetDefault("mcp_oauth.issuer", "https://api.botspace.uz")                    // APP_MCP_OAUTH_ISSUER — must match agent AGENT_OAUTH_ISSUER
+	v.SetDefault("mcp_oauth.authorize_url", "https://botspace.uz/oauth/authorize") // APP_MCP_OAUTH_AUTHORIZE_URL — frontend consent page
+	v.SetDefault("mcp_oauth.code_ttl", "10m")                                      // APP_MCP_OAUTH_CODE_TTL
 
 	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
 	v.SetDefault("engine.namespace", "botmother")
