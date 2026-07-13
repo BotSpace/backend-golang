@@ -3339,7 +3339,7 @@
         "key": "key",
         "label": "Saqlash nomi (state)",
         "placeholder": "yuklangan_fayl",
-        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{state_NOM}} = fayl UUID, {{state_NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun).",
+        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{NOM}} = fayl UUID, {{NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun). ({{state_NOM}} EMAS — yalang'och yoz.)",
         "description": "State key prefix for uploaded file UUID/URL."
       },
       {
@@ -5624,7 +5624,7 @@
       "listContextKey": "",
       "description": ""
     },
-    "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{state_<key>}}/{{user_id}}/{{username}} placeholder — engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
+    "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{<key>}}/{{user_id}}/{{username}} placeholder; saqlangan qiymat uchun yalang'och {{<key>}} — {{state_<key>}} underscore RESOLVE BO'LMAYDI — engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun CMS kolleksiya tool'i (create/read/update/delete)",
     "sourceHandles": [
       "source-default"
@@ -5963,7 +5963,7 @@
         "key": "response_variable",
         "label": "Javob o'zgaruvchisi",
         "placeholder": "response",
-        "helpText": "Flow ichida bu o'zgaruvchiga qiymat yozing (masalan CustomCode'da set_state(\"response\", qiymat) yoki StateNode bilan), shu yerga o'sha nomni yozing. {{state.response}} yoki {{webhook.body}} kabi ifoda ham bo'ladi.",
+        "helpText": "Flow ichida bu o'zgaruvchiga qiymat yozing (masalan CustomCode'da set_state(\"response\", qiymat) yoki StateNode bilan), shu yerga o'sha nomni yozing. {{response}} yoki {{webhook.body}} kabi ifoda ham bo'ladi.",
         "visibleWhen": {
           "key": "wait_response",
           "equals": true
@@ -6123,9 +6123,9 @@
         "type": "text",
         "key": "scheduledAt",
         "label": "Vaqt (ISO yoki {{var}})",
-        "placeholder": "2025-12-31T23:59:59Z yoki {{state.scheduled_time}}",
+        "placeholder": "2025-12-31T23:59:59Z yoki {{scheduled_time}}",
         "helpText": "ISO 8601 formatida vaqt yoki state o'zgaruvchisi",
-        "description": "ISO 8601 datetime or {{state_key}} expression."
+        "description": "ISO 8601 datetime or {{key}} expression (bare name; NOT {{state_key}} underscore)."
       }
     ],
     "defaults": {
@@ -6218,7 +6218,7 @@
         "type": "textarea",
         "key": "filter",
         "label": "Filter (JSON)",
-        "placeholder": "{\"_id\": \"{{state.item_id}}\"}",
+        "placeholder": "{\"_id\": \"{{item_id}}\"}",
         "helpText": "Qaysi documentni yangilash kerakligini belgilaydi"
       },
       {
@@ -6277,7 +6277,7 @@
         "type": "textarea",
         "key": "filter",
         "label": "Filter (JSON)",
-        "placeholder": "{\"_id\": \"{{state.item_id}}\"}",
+        "placeholder": "{\"_id\": \"{{item_id}}\"}",
         "helpText": "Qaysi documentni o'chirish kerakligini belgilaydi"
       }
     ],
@@ -6321,7 +6321,7 @@
         "type": "text",
         "key": "fileId",
         "label": "File ID",
-        "placeholder": "{{state.file_id}} yoki to'g'ridan-to'g'ri ID",
+        "placeholder": "{{file_id}} yoki to'g'ridan-to'g'ri ID",
         "helpText": "Telegram file_id — state o'zgaruvchisi yoki statik qiymat",
         "description": "Telegram file_id or {{file_id}} (saqlangan ochiq qiymat)."
       },
@@ -6536,14 +6536,14 @@
         "type": "text",
         "key": "amount",
         "label": "Miqdor",
-        "placeholder": "10000 yoki {{state.summa}}",
+        "placeholder": "10000 yoki {{summa}}",
         "description": "To'lov summasi — son yoki {{var}} (masalan {{total}} yoki {{public.total}})."
       },
       {
         "type": "text",
         "key": "comment",
         "label": "Izoh (mijozga ko'rinadigan)",
-        "placeholder": "Buyurtma #{{state.order_id}} uchun to'lov",
+        "placeholder": "Buyurtma #{{order_id}} uchun to'lov",
         "description": "To'lov izohi. {{}} o'zgaruvchilar qo'llab-quvvatlanadi."
       },
       {
@@ -6904,7 +6904,7 @@
       "sheets_response_rows",
       "sheets_success"
     ],
-    "aiDoc": "Google Sheets (v4) — oauth2 credential orqali. credential_id type_key 'google_sheets' bo'lgan credential'ga ishora qiladi (secret flow'da emas, engine runtime'da access_token'ga aylantiradi). operation: append/read/update/clear. spreadsheet_id majburiy. range to'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10' (engine sheet+range birlashtiradi) — sheet yoki range'dan kamida biri bo'lishi shart. values JSON 2D massiv (append/update). JAVOB SHAKLI (read): context[responseVariable] (default 'sheets_response') = XOM Google API javobi {majorDimension, range, values} — values 2D massiv, 1-QATOR SARLAVHA, qolganlari ma'lumot; bu OBYEKT, {{#each}} bilan ISHLAMAYDI. Engine yana context[rowsVariable] (default '<responseVariable>_rows' = 'sheets_response_rows') ga TOZA array-of-objects yozadi (sarlavha qatori kalit): [{ustun_nomi: qiymat}, ...]. Ro'yxatni xabarda chiqarish uchun ALBATTA rowsVariable'ni ishlat: `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` — XOM responseVariable'ni {{#each}} bilan ISHLATMA. Yana context[responseVariable+'_status'], context['sheets_success'] ham yoziladi. READ FILTER (in-memory, STATIK — AI-slot YO'Q): faqat ayrim qatorlar kerak bo'lsa filterConditions bilan rowsni field/op/value bo'yicha filterla, filterMatch ('and'|'or', default 'and') ularni birlashtiradi. op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists; field — ustun nomi (1-qator sarlavhasi); value'da {{chat_id}}/{{<key>}} (saqlangan ochiq qiymat; legacy {{state_<key>}} ham) ishlaydi (masalan price>100000 yoki category=={{category}}). Filterlangan natija ham rowsVariable'ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
+    "aiDoc": "Google Sheets (v4) — oauth2 credential orqali. credential_id type_key 'google_sheets' bo'lgan credential'ga ishora qiladi (secret flow'da emas, engine runtime'da access_token'ga aylantiradi). operation: append/read/update/clear. spreadsheet_id majburiy. range to'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10' (engine sheet+range birlashtiradi) — sheet yoki range'dan kamida biri bo'lishi shart. values JSON 2D massiv (append/update). JAVOB SHAKLI (read): context[responseVariable] (default 'sheets_response') = XOM Google API javobi {majorDimension, range, values} — values 2D massiv, 1-QATOR SARLAVHA, qolganlari ma'lumot; bu OBYEKT, {{#each}} bilan ISHLAMAYDI. Engine yana context[rowsVariable] (default '<responseVariable>_rows' = 'sheets_response_rows') ga TOZA array-of-objects yozadi (sarlavha qatori kalit): [{ustun_nomi: qiymat}, ...]. Ro'yxatni xabarda chiqarish uchun ALBATTA rowsVariable'ni ishlat: `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` — XOM responseVariable'ni {{#each}} bilan ISHLATMA. Yana context[responseVariable+'_status'], context['sheets_success'] ham yoziladi. READ FILTER (in-memory, STATIK — AI-slot YO'Q): faqat ayrim qatorlar kerak bo'lsa filterConditions bilan rowsni field/op/value bo'yicha filterla, filterMatch ('and'|'or', default 'and') ularni birlashtiradi. op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists; field — ustun nomi (1-qator sarlavhasi); value'da {{chat_id}}/{{<key>}} (saqlangan ochiq qiymat — yalang'och nom; {{state_<key>}} underscore RESOLVE BO'LMAYDI) ishlaydi (masalan price>100000 yoki category=={{category}}). Filterlangan natija ham rowsVariable'ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
     "summary": "Google Sheets bilan ishlaydi (append/read/update/clear)",
     "agentCategory": "integration"
   },
@@ -7362,8 +7362,8 @@
         "type": "text",
         "key": "value",
         "label": "Qiymat",
-        "placeholder": "{{state.status}}",
-        "description": "Expression/value to compare, e.g. {{state.status}}."
+        "placeholder": "{{status}}",
+        "description": "Expression/value to compare, e.g. {{status}}."
       },
       {
         "type": "array-editor",
