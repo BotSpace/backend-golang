@@ -21,6 +21,7 @@ import (
 	"github.com/botspace/backend/internal/modules/file"
 	"github.com/botspace/backend/internal/modules/kyc"
 	"github.com/botspace/backend/internal/modules/message"
+	"github.com/botspace/backend/internal/modules/oauth"
 	"github.com/botspace/backend/internal/modules/payment"
 	"github.com/botspace/backend/internal/modules/plan"
 	"github.com/botspace/backend/internal/modules/plugin"
@@ -210,6 +211,19 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// re-exposed at root, only this one public, credential-is-the-auth
 	// endpoint).
 	s.router.POST("/auth/token/exchange", authHandler.TokenExchange)
+
+	// MCP OAuth authorization server — root-mounted at bare /auth/oauth/* and
+	// /.well-known/oauth-authorization-server (the URLs the discovery document
+	// advertises and MCP clients / the dashboard consent page call). Migrated
+	// off the legacy Django `web` server, whose SimpleJWT auth 500'd on the
+	// UUID user_id these Go tokens carry.
+	oauthUC := oauth.NewUsecase(oauth.NewStore(s.pool), authUC, oauth.Config{
+		Issuer:       s.cfg.MCPOAuth.Issuer,
+		AuthorizeURL: s.cfg.MCPOAuth.AuthorizeURL,
+		AccessTTL:    s.cfg.JWT.AccessTTL,
+		CodeTTL:      s.cfg.MCPOAuth.CodeTTL,
+	})
+	oauth.RegisterRoutes(&s.router.RouterGroup, oauth.NewHandler(oauthUC), tokens)
 
 	// user routes need the verifier from auth
 	user.RegisterRoutes(v1, user.NewHandler(userUC), tokens)

@@ -200,6 +200,19 @@ func (u *Usecase) Refresh(ctx context.Context, in RefreshRequest) (TokenResponse
 	return u.issueTokens(ctx, usr.ID, usr.Role)
 }
 
+// IssueTokensForUser mints a fresh access+refresh pair for an existing user.
+// Used by the MCP OAuth authorization-code token endpoint after the code (and
+// its PKCE verifier) are validated: the user was already authenticated at the
+// consent/approve step, so here we only re-confirm they still exist and hand
+// out tokens carrying their current role.
+func (u *Usecase) IssueTokensForUser(ctx context.Context, userID uuid.UUID) (TokenResponse, error) {
+	usr, err := u.users.GetByID(ctx, userID)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	return u.issueTokens(ctx, usr.ID, usr.Role)
+}
+
 // Logout revokes the presented refresh token. Idempotent: an invalid token is
 // treated as success so logout never leaks token validity.
 func (u *Usecase) Logout(ctx context.Context, in RefreshRequest) error {
