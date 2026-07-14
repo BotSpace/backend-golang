@@ -147,12 +147,18 @@ func (h *Handler) GoogleLogin(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	tokens, err := h.uc.GoogleLogin(c.Request.Context(), req)
+	tokens, isNew, err := h.uc.GoogleLogin(c.Request.Context(), req)
 	if err != nil {
 		httpx.Error(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusOK, tokens)
+	// Embed promotes TokenResponse's fields to the top level (access_token, …)
+	// so existing clients are unaffected; is_new is added alongside them so the
+	// dashboard can start onboarding for a first-time Google sign-up.
+	httpx.OK(c, http.StatusOK, struct {
+		TokenResponse
+		IsNew bool `json:"is_new"`
+	}{TokenResponse: tokens, IsNew: isNew})
 }
 
 // Refresh godoc
