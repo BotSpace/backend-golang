@@ -25,14 +25,14 @@ WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL;
 
 -- name: ListProjectsForOwner :many
 SELECT * FROM projects
-WHERE owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL
+WHERE owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL AND is_template = false
   AND (sqlc.narg('search')::text IS NULL OR name ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountProjectsForOwner :one
 SELECT COUNT(*) FROM projects
-WHERE owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL
+WHERE owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL AND is_template = false
   AND (sqlc.narg('search')::text IS NULL OR name ILIKE '%' || sqlc.narg('search') || '%');
 
 -- ===================== admin-wide (cross-owner) =====================
