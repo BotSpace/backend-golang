@@ -246,7 +246,7 @@ func TestGoogleLoginCreatesNewUserOnFirstSignIn(t *testing.T) {
 	uc, tokens, userRepo := newTestUsecase(t, verifier)
 	ctx := context.Background()
 
-	got, err := uc.GoogleLogin(ctx, auth.GoogleLoginRequest{IDToken: "whatever"})
+	got, _, err := uc.GoogleLogin(ctx, auth.GoogleLoginRequest{IDToken: "whatever"})
 	if err != nil {
 		t.Fatalf("GoogleLogin: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestGoogleLoginReusesExistingUserByEmail(t *testing.T) {
 		t.Fatalf("seed email: %v", err)
 	}
 
-	got, err := uc.GoogleLogin(ctx, auth.GoogleLoginRequest{IDToken: "whatever"})
+	got, _, err := uc.GoogleLogin(ctx, auth.GoogleLoginRequest{IDToken: "whatever"})
 	if err != nil {
 		t.Fatalf("GoogleLogin: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestGoogleLoginRejectsUnverifiedEmail(t *testing.T) {
 	}}
 	uc, _, _ := newTestUsecase(t, verifier)
 
-	_, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "whatever"})
+	_, _, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "whatever"})
 	if got := status(err); got != 403 {
 		t.Fatalf("status = %d, want 403 (forbidden); err=%v", got, err)
 	}
@@ -327,7 +327,7 @@ func TestGoogleLoginPropagatesVerifierFailure(t *testing.T) {
 	verifier := fakeGoogleVerifier{err: errFakeInvalidToken}
 	uc, _, _ := newTestUsecase(t, verifier)
 
-	_, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "garbage"})
+	_, _, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "garbage"})
 	if got := status(err); got != 401 {
 		t.Fatalf("status = %d, want 401 (unauthorized); err=%v", got, err)
 	}
@@ -336,7 +336,7 @@ func TestGoogleLoginPropagatesVerifierFailure(t *testing.T) {
 func TestGoogleLoginWithoutClientIDConfiguredFailsCleanly(t *testing.T) {
 	uc, _, _ := newTestUsecase(t, nil) // no GoogleVerifier wired — mirrors APP_GOOGLE_CLIENT_ID unset
 
-	_, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "whatever"})
+	_, _, err := uc.GoogleLogin(context.Background(), auth.GoogleLoginRequest{IDToken: "whatever"})
 	if err == nil {
 		t.Fatal("expected an error when google sign-in is not configured")
 	}

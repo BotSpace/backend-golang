@@ -83,30 +83,35 @@ func (u *Usecase) Login(ctx context.Context, in LoginRequest) (TokenResponse, er
 // GoogleLogin verifies a Google ID token (from Google Identity Services on
 // the dashboard), gets-or-creates the matching user by verified email, and
 // issues the same token pair as the phone/password Login flow.
-func (u *Usecase) GoogleLogin(ctx context.Context, in GoogleLoginRequest) (TokenResponse, error) {
+// The bool return reports whether this sign-in provisioned a brand-new
+// account (true) — used to trigger first-run onboarding on the client.
+func (u *Usecase) GoogleLogin(ctx context.Context, in GoogleLoginRequest) (TokenResponse, bool, error) {
 	if u.google == nil {
-		return TokenResponse{}, httpx.Internal(fmt.Errorf("google sign-in not configured: APP_GOOGLE_CLIENT_ID unset"))
+		return TokenResponse{}, false, httpx.Internal(fmt.Errorf("google sign-in not configured: APP_GOOGLE_CLIENT_ID unset"))
 	}
 	claims, err := u.google.Verify(ctx, in.IDToken)
 	if err != nil {
-		return TokenResponse{}, httpx.Unauthorized("auth.invalid_google_token", err.Error())
+		return TokenResponse{}, false, httpx.Unauthorized("auth.invalid_google_token", err.Error())
 	}
 	if !claims.EmailVerified {
-		return TokenResponse{}, httpx.Forbidden("auth.google_email_unverified", "google account email is not verified")
+		return TokenResponse{}, false, httpx.Forbidden("auth.google_email_unverified", "google account email is not verified")
 	}
 
+	isNew := false
 	usr, err := u.users.GetByEmail(ctx, claims.Email)
 	if err != nil {
 		ae, ok := httpx.AsAppError(err)
 		if !ok || ae.Status != http.StatusNotFound {
-			return TokenResponse{}, err
+			return TokenResponse{}, false, err
 		}
 		usr, err = u.createGoogleUser(ctx, claims)
 		if err != nil {
-			return TokenResponse{}, err
+			return TokenResponse{}, false, err
 		}
+		isNew = true
 	}
-	return u.issueTokens(ctx, usr.ID, usr.Role)
+	tokens, err := u.issueTokens(ctx, usr.ID, usr.Role)
+	return tokens, isNew, err
 }
 
 // createGoogleUser provisions a new account for a first-time Google sign-in.
