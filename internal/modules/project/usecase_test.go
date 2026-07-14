@@ -386,7 +386,7 @@ func TestGet_DebugMode_BotLinkHasStartParam(t *testing.T) {
 	if got.BotUsername != "botmother_test_robot" {
 		t.Fatalf("BotUsername = %q, want botmother_test_robot", got.BotUsername)
 	}
-	want := fmt.Sprintf("https://t.me/botmother_test_robot?start=%s", got.DebugWebhookUUID.String())
+	want := fmt.Sprintf("https://telegram.me/botmother_test_robot?start=%s", got.DebugWebhookUUID.String())
 	if got.BotLink != want {
 		t.Fatalf("BotLink = %q, want %q", got.BotLink, want)
 	}
@@ -397,7 +397,7 @@ func TestGet_DebugMode_BotLinkHasStartParam(t *testing.T) {
 
 // TestGet_ReleaseMode_BotLinkHasNoStartParam mirrors Django's release branch:
 // a project with its own RELEASE_BOT_TOKEN gets bot_mode "release" and a
-// plain https://t.me/<username> link (no ?start=, since a release bot is
+// plain https://telegram.me/<username> link (no ?start=, since a release bot is
 // dedicated to this one project already).
 func TestGet_ReleaseMode_BotLinkHasNoStartParam(t *testing.T) {
 	repo := newFakeRepo()
@@ -421,8 +421,8 @@ func TestGet_ReleaseMode_BotLinkHasNoStartParam(t *testing.T) {
 	if got.BotMode != "release" {
 		t.Fatalf("BotMode = %q, want release", got.BotMode)
 	}
-	if got.BotLink != "https://t.me/my_own_bot" {
-		t.Fatalf("BotLink = %q, want https://t.me/my_own_bot (no ?start=)", got.BotLink)
+	if got.BotLink != "https://telegram.me/my_own_bot" {
+		t.Fatalf("BotLink = %q, want https://telegram.me/my_own_bot (no ?start=)", got.BotLink)
 	}
 	if len(resolver.calls) != 1 || resolver.calls[0] != "123:ABC" {
 		t.Fatalf("expected resolver called with the project's own token, got %v", resolver.calls)

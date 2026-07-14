@@ -191,7 +191,7 @@ func (u *usecase) ManagedBotConfig() ManagedBotConfig {
 	return ManagedBotConfig{
 		Enabled:          true,
 		ManagerUsername:  username,
-		DeepLinkTemplate: fmt.Sprintf("https://t.me/newbot/%s/{username}?name={name}", username),
+		DeepLinkTemplate: fmt.Sprintf("https://telegram.me/newbot/%s/{username}?name={name}", username),
 	}
 }
 
