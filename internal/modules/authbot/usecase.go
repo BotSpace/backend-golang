@@ -107,7 +107,7 @@ func (u *Usecase) Login(ctx context.Context, code string) (LoginResult, error) {
 		return LoginResult{}, httpx.BadRequest("authbot.code_expired", "otp code has expired")
 	}
 
-	usr, err := u.resolveUser(ctx, botUser)
+	usr, isNew, err := u.resolveUser(ctx, botUser)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -130,6 +130,7 @@ func (u *Usecase) Login(ctx context.Context, code string) (LoginResult, error) {
 		Tokens:     tokens,
 		TelegramID: botUser.TelegramID,
 		MessageID:  found.MessageID,
+		IsNew:      isNew,
 	}, nil
 }
 
@@ -139,21 +140,25 @@ func (u *Usecase) Login(ctx context.Context, code string) (LoginResult, error) {
 // never-exposed password: the Telegram contact share already proved phone
 // ownership, so no OTP step is needed here; the user can set a real password
 // later via the normal password-reset flow.
-func (u *Usecase) resolveUser(ctx context.Context, bu *BotUser) (*user.User, error) {
+// The bool return reports whether this login registered a brand-new account
+// (true) versus resolving an existing one — used to trigger first-run
+// onboarding on the client.
+func (u *Usecase) resolveUser(ctx context.Context, bu *BotUser) (*user.User, bool, error) {
 	existing, err := u.users.GetByPhone(ctx, bu.Phone)
 	if err == nil {
 		if existing.IsValidated() {
-			return existing, nil
+			return existing, false, nil
 		}
-		return u.users.MarkValidated(ctx, existing.ID)
+		validated, vErr := u.users.MarkValidated(ctx, existing.ID)
+		return validated, false, vErr
 	}
 	if ae, ok := httpx.AsAppError(err); !ok || ae.Status != http.StatusNotFound {
-		return nil, err // already an httpx-wrapped error (e.g. internal)
+		return nil, false, err // already an httpx-wrapped error (e.g. internal)
 	}
 
 	password, genErr := randomToken(passwordBytes)
 	if genErr != nil {
-		return nil, httpx.Internal(genErr)
+		return nil, false, httpx.Internal(genErr)
 	}
 	created, err := u.users.Register(ctx, user.RegisterInput{
 		Phone:     bu.Phone,
@@ -162,9 +167,10 @@ func (u *Usecase) resolveUser(ctx context.Context, bu *BotUser) (*user.User, err
 		Password:  password,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return u.users.MarkValidated(ctx, created.ID)
+	validated, vErr := u.users.MarkValidated(ctx, created.ID)
+	return validated, true, vErr
 }
 
 // generateNumericCode returns a cryptographically random n-digit numeric

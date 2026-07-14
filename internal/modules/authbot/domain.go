@@ -96,6 +96,8 @@ type LoginResult struct {
 	Tokens     TokenPair
 	TelegramID int64
 	MessageID  *int64
+	// IsNew is true when this login just registered the account (first sign-in).
+	IsNew bool
 }
 
 // TokenPair mirrors auth.TokenResponse's wire shape so /authbot/login stays

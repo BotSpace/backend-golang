@@ -51,6 +51,8 @@ type UserSummary struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Role      string `json:"role"`
+	// IsNew flags a first-ever sign-in so the client can start onboarding.
+	IsNew bool `json:"is_new"`
 }
 
 // TokenResponse mirrors auth.TokenResponse's wire shape exactly, so a client
@@ -78,6 +80,7 @@ func toLoginResponse(r LoginResult) LoginResponse {
 			FirstName: r.FirstName,
 			LastName:  r.LastName,
 			Role:      r.Role,
+			IsNew:     r.IsNew,
 		},
 		Token: TokenResponse{
 			AccessToken:      r.Tokens.AccessToken,
