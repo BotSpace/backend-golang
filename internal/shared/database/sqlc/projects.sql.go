@@ -126,7 +126,7 @@ func (q *Queries) CountProjectsAdmin(ctx context.Context, arg CountProjectsAdmin
 
 const countProjectsForOwner = `-- name: CountProjectsForOwner :one
 SELECT COUNT(*) FROM projects
-WHERE owner_id = $1 AND deleted_at IS NULL
+WHERE owner_id = $1 AND deleted_at IS NULL AND is_template = false
   AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%')
 `
 
@@ -391,7 +391,7 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminPa
 
 const listProjectsForOwner = `-- name: ListProjectsForOwner :many
 SELECT id, uuid, name, description, username, avatar_file_id, owner_id, flow, is_template, release_webhook_uuid, debug_webhook_uuid, mongo_username, mongo_password, mongo_database, created_at, updated_at, deleted_at, legacy_id FROM projects
-WHERE owner_id = $1 AND deleted_at IS NULL
+WHERE owner_id = $1 AND deleted_at IS NULL AND is_template = false
   AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%')
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $3
