@@ -638,7 +638,7 @@ func (u *usecase) IssueCollabToken(ctx context.Context, id, ownerID uuid.UUID) (
 // views/project.py:210-216, 571-575), extended to the plain GET (see
 // NewUsecaseWithBotLinks's doc comment for why). A RELEASE_BOT_TOKEN takes
 // precedence — the project has its own bot, mode "release", a plain
-// https://t.me/<username> link. Otherwise, when the platform TEST_BOT_TOKEN
+// https://telegram.me/<username> link. Otherwise, when the platform TEST_BOT_TOKEN
 // is configured, mode "debug": the shared test bot's username with the
 // required ?start=<debug_webhook_uuid> deep-link, since a bare t.me link to
 // the shared test bot can't route to any one specific project (Django's
@@ -653,7 +653,7 @@ func (u *usecase) populateBotLink(ctx context.Context, p *Project) {
 		if username, uerr := u.botResolver.ResolveUsername(ctx, token); uerr == nil && username != "" {
 			p.BotMode = "release"
 			p.BotUsername = username
-			p.BotLink = fmt.Sprintf("https://t.me/%s", username)
+			p.BotLink = fmt.Sprintf("https://telegram.me/%s", username)
 		}
 		return
 	}
@@ -666,7 +666,7 @@ func (u *usecase) populateBotLink(ctx context.Context, p *Project) {
 	}
 	p.BotMode = "debug"
 	p.BotUsername = username
-	p.BotLink = fmt.Sprintf("https://t.me/%s?start=%s", username, p.DebugWebhookUUID.String())
+	p.BotLink = fmt.Sprintf("https://telegram.me/%s?start=%s", username, p.DebugWebhookUUID.String())
 }
 
 // reconcileDebug is the project-module twin of release.reconcileRelease /
