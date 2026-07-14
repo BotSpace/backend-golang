@@ -11,7 +11,16 @@ import (
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// isUniqueViolation reports whether err is a Postgres unique-constraint
+// violation (SQLSTATE 23505) — e.g. creating a collection whose slug already
+// exists in the project. Callers translate it into a 409 instead of a 500.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
 
 // slugRe matches a Mongo-safe collection identifier: lowercase snake_case,
 // starting with a letter (mirrors Django's SlugField usage for `name`).
@@ -124,6 +133,12 @@ func (u *usecase) CreateCollection(ctx context.Context, ownerID, projectID uuid.
 	in.ProjectID = projectID
 	coll, err := u.repo.CreateCollection(ctx, in)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, httpx.Conflict(
+				"cms.collection_exists",
+				fmt.Sprintf("a collection with slug %q already exists in this project", in.Slug),
+			)
+		}
 		return nil, mapNotFound(err, "project.not_found", "project not found")
 	}
 	return coll, nil
@@ -239,6 +254,12 @@ func (u *usecase) AddField(ctx context.Context, ownerID, projectID uuid.UUID, co
 		Order:                in.Order,
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, httpx.Conflict(
+				"cms.field_exists",
+				fmt.Sprintf("a field named %q already exists in this collection", in.Name),
+			)
+		}
 		return nil, mapNotFound(err, "cms.collection_not_found", "collection not found")
 	}
 	_ = u.repo.BumpSchemaVersion(ctx, coll.ID)
