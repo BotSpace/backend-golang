@@ -154,7 +154,7 @@ func (r *fakeUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 func (r *fakeUserRepo) List(_ context.Context, _ user.ListFilter) ([]user.User, error) {
 	return nil, nil
 }
-func (r *fakeUserRepo) Count(_ context.Context, _ string) (int64, error) { return 0, nil }
+func (r *fakeUserRepo) Count(_ context.Context, _ user.ListFilter) (int64, error) { return 0, nil }
 func (r *fakeUserRepo) GetSubscription(_ context.Context, _ uuid.UUID) (*user.Subscription, error) {
 	return nil, nil
 }

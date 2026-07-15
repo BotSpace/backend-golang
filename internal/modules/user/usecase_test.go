@@ -118,7 +118,7 @@ func (r *fakeRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 func (r *fakeRepo) List(_ context.Context, _ ListFilter) ([]User, error) { return nil, nil }
-func (r *fakeRepo) Count(_ context.Context, _ string) (int64, error)     { return 0, nil }
+func (r *fakeRepo) Count(_ context.Context, _ ListFilter) (int64, error)  { return 0, nil }
 
 func (r *fakeRepo) GetSubscription(_ context.Context, _ uuid.UUID) (*Subscription, error) {
 	return nil, nil

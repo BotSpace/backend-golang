@@ -19,6 +19,9 @@ type UserResponse struct {
 	ValidatedAt     *time.Time `json:"validated_at"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+	// TokensUsedTotal is the user's AI-agent token usage. Populated only by
+	// the admin listing (GET /users); 0 on every other projection.
+	TokensUsedTotal int64 `json:"tokens_used_total"`
 }
 
 func toResponse(u *User) UserResponse {
@@ -37,6 +40,7 @@ func toResponse(u *User) UserResponse {
 		ValidatedAt:     u.ValidatedAt,
 		CreatedAt:       u.CreatedAt,
 		UpdatedAt:       u.UpdatedAt,
+		TokensUsedTotal: u.TokensUsedTotal,
 	}
 }
 

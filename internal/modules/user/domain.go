@@ -33,17 +33,33 @@ type User struct {
 	KYCVerifiedAt   *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+
+	// TokensUsedTotal is the user's AI-agent token consumption (subscription
+	// tokens_used_input + tokens_used_output). Only the admin list query
+	// (Repository.List) populates it; every other read leaves it 0.
+	TokensUsedTotal int64
 }
 
 // IsValidated reports whether the phone has passed OTP confirmation.
 func (u *User) IsValidated() bool { return u.ValidatedAt != nil }
 
-// ListFilter narrows and paginates a user listing. Search matches phone or
-// name (case-insensitive); empty means no filter.
+// ListFilter narrows and paginates a user listing (admin). All fields are
+// optional — a zero value means "don't filter on this". Search matches phone,
+// name or email (case-insensitive). Ordering is a whitelisted sort key (see
+// repository.orderClause); an unknown value falls back to newest-first.
 type ListFilter struct {
-	Search string
-	Limit  int32
-	Offset int32
+	Search       string
+	Role         string
+	IsActive     *bool
+	IsStaff      *bool
+	Plan         string
+	JoinedAfter  *time.Time
+	JoinedBefore *time.Time
+	BalanceMin   *int64
+	BalanceMax   *int64
+	Ordering     string
+	Limit        int32
+	Offset       int32
 }
 
 // ProfileUpdate carries optional profile fields; nil pointers are left as-is.
@@ -105,7 +121,7 @@ type Repository interface {
 	RecordBalanceHistory(ctx context.Context, userID uuid.UUID, delta int64, comment string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, f ListFilter) ([]User, error)
-	Count(ctx context.Context, search string) (int64, error)
+	Count(ctx context.Context, f ListFilter) (int64, error)
 
 	// GetSubscription returns nil (no error) when the user has no
 	// subscription row yet — a brand-new account before its default plan is
