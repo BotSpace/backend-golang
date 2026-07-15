@@ -6,12 +6,10 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
@@ -444,71 +442,4 @@ func (h *Handler) ModuleTrigger(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, http.StatusOK, gin.H{"detail": "ok"})
-}
-
-// verifyModuleFileToken checks the HMAC-scoped bearer token module servers use
-// to call back into the platform on behalf of a project:
-// `Bearer <project_id>:<hex(HMAC-SHA256(APP_INTERNAL_TOKEN, project_id))>`
-// (Django views.module_file._verify_module_token). Returns the project id on
-// success.
-func verifyModuleFileToken(c *gin.Context) (string, bool) {
-	auth := c.GetHeader("Authorization")
-	const prefix = "Bearer "
-	if !strings.HasPrefix(auth, prefix) {
-		httpx.Error(c, httpx.Unauthorized("auth.missing_token", "missing bearer token"))
-		return "", false
-	}
-	token := strings.TrimPrefix(auth, prefix)
-	parts := strings.SplitN(token, ":", 2)
-	if len(parts) != 2 {
-		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token format"))
-		return "", false
-	}
-	projID, providedHex := parts[0], parts[1]
-
-	secret := os.Getenv(internalTokenEnv)
-	if secret == "" {
-		httpx.Error(c, httpx.Internal(errors.New("server misconfigured: "+internalTokenEnv+" is not set")))
-		return "", false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(projID))
-	expectedHex := hex.EncodeToString(mac.Sum(nil))
-	if subtle.ConstantTimeCompare([]byte(strings.ToLower(providedHex)), []byte(expectedHex)) != 1 {
-		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token"))
-		return "", false
-	}
-	return projID, true
-}
-
-// UploadModuleFile godoc
-// @Summary  Module-scoped file upload (HMAC bearer token)
-// @Tags     module-file
-// @Router   /module-file [post]
-func (h *Handler) UploadModuleFile(c *gin.Context) {
-	if _, ok := verifyModuleFileToken(c); !ok {
-		return
-	}
-	// TODO: the `file` module (Django FileModel/ResourceModel) has not been
-	// ported yet (porting guide migration 000012). Wire real storage here once
-	// it lands; until then the token contract is enforced but uploads 501.
-	httpx.Error(c, &httpx.AppError{
-		Code: "module_file.not_implemented", Message: "module file storage not implemented yet",
-		Status: http.StatusNotImplemented,
-	})
-}
-
-// DeleteModuleFile godoc
-// @Summary  Module-scoped file delete (HMAC bearer token)
-// @Tags     module-file
-// @Router   /module-file/{uuid} [delete]
-func (h *Handler) DeleteModuleFile(c *gin.Context) {
-	if _, ok := verifyModuleFileToken(c); !ok {
-		return
-	}
-	// TODO: see UploadModuleFile — file module not ported yet.
-	httpx.Error(c, &httpx.AppError{
-		Code: "module_file.not_implemented", Message: "module file storage not implemented yet",
-		Status: http.StatusNotImplemented,
-	})
 }

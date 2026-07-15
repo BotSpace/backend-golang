@@ -57,6 +57,14 @@ func (r *fakeRepo) GetFileByUUID(_ context.Context, uid uuid.UUID) (*File, error
 	return &cp, nil
 }
 
+func (r *fakeRepo) ProjectOwner(_ context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	owner, ok := r.projects[projectID]
+	if !ok {
+		return uuid.Nil, database.ErrNotFound
+	}
+	return owner, nil
+}
+
 func (r *fakeRepo) GetFileByUUIDForOwner(_ context.Context, uid, ownerID uuid.UUID) (*File, error) {
 	f, ok := r.files[uid]
 	if !ok || f.OwnerID != ownerID {

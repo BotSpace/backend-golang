@@ -343,7 +343,11 @@ func (s *Server) registerRoutes(ctx context.Context) {
 
 	// file / resource / used.
 	fileUC := file.NewUsecase(file.NewPostgresRepository(s.pool))
-	file.RegisterRoutes(v1, file.NewHandler(fileUC, s.fileStore), tokens)
+	fileHandler := file.NewHandler(fileUC, s.fileStore)
+	file.RegisterRoutes(v1, fileHandler, tokens)
+	// Engine-facing (Django-compat, non-/v1) file + module-file endpoints the
+	// bot engine and its modules call directly with an HMAC project token.
+	file.RegisterEngineRoutes(s.router, fileHandler)
 
 	// module/plugin catalog + per-project modules.
 	pluginUC := plugin.NewUsecase(plugin.NewPostgresRepository(s.pool), orch, plugin.NewHTTPManifestFetcher(), nil)

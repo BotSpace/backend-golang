@@ -38,8 +38,8 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		pg.GET("/modules-for-engine", h.ModulesForEngine)
 	}
 
-	// Internal relay + module-scoped file endpoints — own token checks.
+	// Internal relay — own token check. Module-scoped file upload/delete live in
+	// the file module at the engine's Django-compat paths (/api/module-file),
+	// registered via file.RegisterEngineRoutes.
 	rg.POST("/module-trigger/:project_uuid", h.ModuleTrigger)
-	rg.POST("/module-file", h.UploadModuleFile)
-	rg.DELETE("/module-file/:uuid", h.DeleteModuleFile)
 }

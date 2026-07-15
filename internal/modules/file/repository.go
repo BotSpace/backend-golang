@@ -52,6 +52,20 @@ func (r *pgRepo) GetFileByUUID(ctx context.Context, uid uuid.UUID) (*File, error
 	return mapOneFile(r.queries.GetFileByUUID(ctx, uid))
 }
 
+// ProjectOwner returns the owner_id of a live project. Module-file uploads
+// arrive with an HMAC project token (no user session), so the uploader stamped
+// on the file row is the project's owner. Reuses the projects owner lookup.
+func (r *pgRepo) ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	owner, err := r.queries.DebugGetProjectOwner(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, database.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("project owner: %w", err)
+	}
+	return owner, nil
+}
+
 func (r *pgRepo) GetFileByUUIDForOwner(ctx context.Context, uid, ownerID uuid.UUID) (*File, error) {
 	return mapOneFile(r.queries.GetFileByUUIDForOwner(ctx, sqlcdb.GetFileByUUIDForOwnerParams{
 		Uuid: uid, OwnerID: ownerID,
