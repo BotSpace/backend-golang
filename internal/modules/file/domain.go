@@ -147,6 +147,7 @@ type Repository interface {
 	CreateFile(ctx context.Context, in CreateFileInput) (*File, error)
 	GetFileByUUID(ctx context.Context, uid uuid.UUID) (*File, error)
 	GetFileByUUIDForOwner(ctx context.Context, uid, ownerID uuid.UUID) (*File, error)
+	ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	UpdateFileByUUIDForOwner(ctx context.Context, uid, ownerID uuid.UUID, in UpdateFileInput) (*File, error)
 	DeleteFileByUUIDForOwner(ctx context.Context, uid, ownerID uuid.UUID) (*File, error)
 	ListFiles(ctx context.Context, f ListFileFilter) ([]File, error)

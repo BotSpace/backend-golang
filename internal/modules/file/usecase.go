@@ -15,6 +15,7 @@ import (
 type Usecase interface {
 	CreateFile(ctx context.Context, in CreateFileInput) (*File, error)
 	GetFilePublic(ctx context.Context, uid uuid.UUID) (*File, error)
+	ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	GetFileForOwner(ctx context.Context, uid, ownerID uuid.UUID) (*File, error)
 	UpdateFile(ctx context.Context, uid, ownerID uuid.UUID, in UpdateFileInput) (*File, error)
 	DeleteFile(ctx context.Context, uid, ownerID uuid.UUID) (*File, error)
@@ -53,6 +54,19 @@ func (u *usecase) CreateFile(ctx context.Context, in CreateFileInput) (*File, er
 
 func (u *usecase) GetFilePublic(ctx context.Context, uid uuid.UUID) (*File, error) {
 	return mapFileErr(u.repo.GetFileByUUID(ctx, uid))
+}
+
+// ProjectOwner resolves the owner a module-file upload is stamped to. Maps a
+// missing project to a 404 so the engine surfaces a clean error.
+func (u *usecase) ProjectOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	owner, err := u.repo.ProjectOwner(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return uuid.Nil, httpx.NotFound("file.project_not_found", "project not found")
+		}
+		return uuid.Nil, httpx.Internal(err)
+	}
+	return owner, nil
 }
 
 func (u *usecase) GetFileForOwner(ctx context.Context, uid, ownerID uuid.UUID) (*File, error) {
