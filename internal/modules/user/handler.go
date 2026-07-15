@@ -2,6 +2,7 @@ package user
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
@@ -159,15 +160,68 @@ func (h *Handler) List(c *gin.Context) {
 	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
 	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
 	users, total, err := h.uc.List(c.Request.Context(), ListFilter{
-		Search: c.Query("search"),
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Search:       c.Query("search"),
+		Role:         c.Query("role"),
+		IsActive:     parseBoolQuery(c.Query("is_active")),
+		IsStaff:      parseBoolQuery(c.Query("is_staff")),
+		Plan:         c.Query("plan"),
+		JoinedAfter:  parseDateQuery(c.Query("joined_after"), false),
+		JoinedBefore: parseDateQuery(c.Query("joined_before"), true),
+		BalanceMin:   parseInt64Query(c.Query("balance_min")),
+		BalanceMax:   parseInt64Query(c.Query("balance_max")),
+		Ordering:     c.Query("ordering"),
+		Limit:        int32(limit),
+		Offset:       int32(offset),
 	})
 	if err != nil {
 		httpx.Error(c, err)
 		return
 	}
 	httpx.OK(c, 200, toListResponse(users, total, int32(limit), int32(offset)))
+}
+
+// parseBoolQuery reads a "true"/"false" filter param; any other value (empty,
+// "all", …) means "don't filter" and returns nil.
+func parseBoolQuery(s string) *bool {
+	switch s {
+	case "true":
+		v := true
+		return &v
+	case "false":
+		v := false
+		return &v
+	default:
+		return nil
+	}
+}
+
+// parseDateQuery reads a "YYYY-MM-DD" filter param. endOfDay pushes an
+// inclusive upper bound to 23:59:59 so "joined_before=2026-01-10" also matches
+// rows created that day. An unparseable/empty value returns nil (no filter).
+func parseDateQuery(s string, endOfDay bool) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil
+	}
+	if endOfDay {
+		t = t.Add(24*time.Hour - time.Second)
+	}
+	return &t
+}
+
+// parseInt64Query reads a numeric filter param; empty/invalid returns nil.
+func parseInt64Query(s string) *int64 {
+	if s == "" {
+		return nil
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &v
 }
 
 // GetByID godoc

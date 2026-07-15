@@ -223,7 +223,7 @@ func (u *usecase) List(ctx context.Context, f ListFilter) ([]User, int64, error)
 	if err != nil {
 		return nil, 0, httpx.Internal(err)
 	}
-	total, err := u.repo.Count(ctx, f.Search)
+	total, err := u.repo.Count(ctx, f)
 	if err != nil {
 		return nil, 0, httpx.Internal(err)
 	}

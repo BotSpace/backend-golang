@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/botspace/backend/internal/shared/database"
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
@@ -20,10 +21,14 @@ import (
 // domain errors. The usecase never sees sqlc, so it stays trivially testable.
 type pgRepo struct {
 	queries *sqlcdb.Queries
+	// pool is kept alongside the sqlc queries for the admin user listing,
+	// whose dynamic filter set + whitelisted ORDER BY can't be expressed as a
+	// static sqlc query — see List/Count below.
+	pool *pgxpool.Pool
 }
 
 func NewPostgresRepository(pool *pgxpool.Pool) Repository {
-	return &pgRepo{queries: sqlcdb.New(pool)}
+	return &pgRepo{queries: sqlcdb.New(pool), pool: pool}
 }
 
 const uniqueViolation = "23505"
@@ -130,25 +135,135 @@ func (r *pgRepo) RecordBalanceHistory(ctx context.Context, userID uuid.UUID, del
 	return nil
 }
 
+// listWhere builds the shared WHERE clause (and its positional args) for the
+// admin user listing, used by both List and Count so the page and its total
+// stay in sync. Args are appended to `args`; the returned string is either ""
+// or "WHERE ...".
+func listWhere(f ListFilter, args *[]any) string {
+	var conds []string
+	add := func(cond string, val any) {
+		*args = append(*args, val)
+		conds = append(conds, fmt.Sprintf(cond, len(*args)))
+	}
+	if f.Search != "" {
+		*args = append(*args, "%"+f.Search+"%")
+		n := len(*args)
+		conds = append(conds, fmt.Sprintf(
+			"(u.phone ILIKE $%[1]d OR u.first_name ILIKE $%[1]d OR u.last_name ILIKE $%[1]d OR u.email ILIKE $%[1]d)", n))
+	}
+	if f.Role != "" {
+		add("u.role = $%d", f.Role)
+	}
+	if f.IsActive != nil {
+		add("u.is_active = $%d", *f.IsActive)
+	}
+	if f.IsStaff != nil {
+		add("u.is_staff = $%d", *f.IsStaff)
+	}
+	if f.Plan != "" {
+		add("p.name = $%d", f.Plan)
+	}
+	if f.JoinedAfter != nil {
+		add("u.created_at >= $%d", *f.JoinedAfter)
+	}
+	if f.JoinedBefore != nil {
+		add("u.created_at <= $%d", *f.JoinedBefore)
+	}
+	if f.BalanceMin != nil {
+		add("u.balance >= $%d", *f.BalanceMin)
+	}
+	if f.BalanceMax != nil {
+		add("u.balance <= $%d", *f.BalanceMax)
+	}
+	if len(conds) == 0 {
+		return ""
+	}
+	return "WHERE " + strings.Join(conds, " AND ")
+}
+
+// orderClause maps the whitelisted ordering keys the admin panel sends to
+// safe SQL. An unknown/empty key falls back to newest-first. Never interpolates
+// caller input into SQL — the switch is the whitelist.
+func orderClause(ordering string) string {
+	switch ordering {
+	case "date_joined":
+		return "ORDER BY u.created_at ASC"
+	case "-date_joined":
+		return "ORDER BY u.created_at DESC"
+	case "balance":
+		return "ORDER BY u.balance ASC"
+	case "-balance":
+		return "ORDER BY u.balance DESC"
+	case "tokens_used_total":
+		return "ORDER BY tokens_used_total ASC"
+	case "-tokens_used_total":
+		return "ORDER BY tokens_used_total DESC"
+	case "id":
+		return "ORDER BY u.id ASC"
+	case "-id":
+		return "ORDER BY u.id DESC"
+	default:
+		return "ORDER BY u.created_at DESC"
+	}
+}
+
 func (r *pgRepo) List(ctx context.Context, f ListFilter) ([]User, error) {
-	rows, err := r.queries.ListUsers(ctx, sqlcdb.ListUsersParams{
-		Search: nilIfEmpty(f.Search),
-		Limit:  f.Limit,
-		Offset: f.Offset,
-	})
+	args := make([]any, 0, 12)
+	where := listWhere(f, &args)
+	args = append(args, f.Limit, f.Offset)
+	query := fmt.Sprintf(`
+		SELECT u.id, u.phone, u.first_name, u.last_name, u.username, u.email,
+		       u.password_hash, u.role, u.balance, u.template_balance,
+		       u.is_active, u.validated_at, u.kyc_verified_at, u.created_at, u.updated_at,
+		       COALESCE(us.tokens_used_input + us.tokens_used_output, 0) AS tokens_used_total
+		FROM users u
+		LEFT JOIN user_subscription us ON us.user_id = u.id
+		LEFT JOIN plan p ON p.id = us.plan_id
+		%s
+		%s
+		LIMIT $%d OFFSET $%d`,
+		where, orderClause(f.Ordering), len(args)-1, len(args))
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
-	out := make([]User, len(rows))
-	for i, row := range rows {
-		out[i] = fromSQLC(row)
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		var phone, username, email *string
+		var templateBalance pgtype.Numeric
+		if err := rows.Scan(
+			&u.ID, &phone, &u.FirstName, &u.LastName, &username, &email,
+			&u.PasswordHash, &u.Role, &u.Balance, &templateBalance,
+			&u.IsActive, &u.ValidatedAt, &u.KYCVerifiedAt, &u.CreatedAt, &u.UpdatedAt,
+			&u.TokensUsedTotal,
+		); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		u.Phone, u.Username, u.Email = deref(phone), deref(username), deref(email)
+		u.TemplateBalance = numericToString(templateBalance)
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
 	}
 	return out, nil
 }
 
-func (r *pgRepo) Count(ctx context.Context, search string) (int64, error) {
-	n, err := r.queries.CountUsers(ctx, nilIfEmpty(search))
-	if err != nil {
+func (r *pgRepo) Count(ctx context.Context, f ListFilter) (int64, error) {
+	args := make([]any, 0, 10)
+	where := listWhere(f, &args)
+	query := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM users u
+		LEFT JOIN user_subscription us ON us.user_id = u.id
+		LEFT JOIN plan p ON p.id = us.plan_id
+		%s`, where)
+	var n int64
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return n, nil
@@ -271,8 +386,6 @@ func strPtr(s string) *string {
 	}
 	return &s
 }
-
-func nilIfEmpty(s string) *string { return strPtr(s) }
 
 func deref(s *string) string {
 	if s == nil {
