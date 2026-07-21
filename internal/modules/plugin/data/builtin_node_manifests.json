@@ -31,39 +31,28 @@
         "type": "text",
         "key": "command",
         "label": "Buyruq matni",
-        "placeholder": "/start",
-        "description": "Bot command, e.g. '/start' or '/help'."
+        "placeholder": "/start"
       },
       {
         "type": "switch",
         "key": "withArgs",
         "label": "Argumentlarni ushlash",
-        "optional": true,
-        "description": "Capture text after the command."
+        "optional": true
       },
       {
         "type": "switch",
         "key": "global",
         "label": "Global",
-        "optional": true,
-        "description": "True: fires anywhere. False: only while engine paused."
-      },
-      {
-        "type": "switch",
-        "key": "save_state",
-        "label": "Ma'lumotni saqlash",
         "optional": true
       },
       {
         "type": "text",
         "key": "state_key",
-        "label": "State Key",
+        "label": "Ma'lumotni saqlash — State Key",
         "placeholder": "Masalan: user_message, phone, etc.",
         "helpText": "Ma'lumot shu kalitga saqlanadi",
-        "visibleWhen": {
-          "key": "save_state",
-          "equals": true
-        }
+        "optional": true,
+        "is_state": true
       },
       {
         "type": "select",
@@ -96,8 +85,8 @@
           }
         ],
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       },
       {
@@ -107,8 +96,8 @@
         "helpText": "Yoqilsa, bu qiymat {{private.key}} sifatida saqlanadi",
         "optional": true,
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       }
     ],
@@ -249,8 +238,7 @@
             "value": "sticker",
             "label": "Stiker"
           }
-        ],
-        "description": "Expected message media type."
+        ]
       },
       {
         "type": "select",
@@ -293,8 +281,7 @@
             "phone",
             "contact"
           ]
-        },
-        "description": "'any' | 'starts_with' | 'equals' | regex."
+        }
       },
       {
         "type": "select",
@@ -321,8 +308,7 @@
             "animation",
             "sticker"
           ]
-        },
-        "description": "'any' | 'starts_with' | 'equals' | regex."
+        }
       },
       {
         "type": "select",
@@ -347,8 +333,7 @@
           "oneOf": [
             "document"
           ]
-        },
-        "description": "'any' | 'starts_with' | 'equals' | regex."
+        }
       },
       {
         "type": "select",
@@ -369,8 +354,7 @@
           "oneOf": [
             "location"
           ]
-        },
-        "description": "'any' | 'starts_with' | 'equals' | regex."
+        }
       },
       {
         "type": "text",
@@ -467,8 +451,7 @@
             "video_note",
             "animation"
           ]
-        },
-        "description": "True bo'lsa media xabarni platformaga yuklaydi."
+        }
       },
       {
         "type": "text",
@@ -479,8 +462,7 @@
         "visibleWhen": {
           "key": "upload_file",
           "equals": true
-        },
-        "description": "upload_file=true bo'lganda fayl public_<file_key> ostida saqlanadi."
+        }
       },
       {
         "type": "number",
@@ -494,8 +476,7 @@
         "visibleWhen": {
           "key": "upload_file",
           "equals": true
-        },
-        "description": "upload_file=true bo'lganda fayl necha sekunddan keyin o'chadi. None = doimiy."
+        }
       },
       {
         "type": "switch",
@@ -504,21 +485,13 @@
         "optional": true
       },
       {
-        "type": "switch",
-        "key": "save_state",
-        "label": "Ma'lumotni saqlash",
-        "optional": true
-      },
-      {
         "type": "text",
         "key": "state_key",
-        "label": "State Key",
+        "label": "Ma'lumotni saqlash — State Key",
         "placeholder": "Masalan: user_message, phone, etc.",
         "helpText": "Ma'lumot shu kalitga saqlanadi",
-        "visibleWhen": {
-          "key": "save_state",
-          "equals": true
-        }
+        "optional": true,
+        "is_state": true
       },
       {
         "type": "select",
@@ -551,8 +524,8 @@
           }
         ],
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       },
       {
@@ -562,8 +535,8 @@
         "helpText": "Yoqilsa, bu qiymat {{private.key}} sifatida saqlanadi",
         "optional": true,
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       }
     ],
@@ -573,7 +546,7 @@
       "global": true,
       "context": {}
     },
-    "aiDoc": "Xabar turini kutib trigger. Maydonlar FLAT (nested obyekt YO'Q). type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation (`messageType` EMAS — `type`). filter: any/equals/contains/starts_with/regex; filter qiymati `f_context_value`. global_:false bo'lsa (nom oxirida `_`, `global` EMAS) faqat pauzada ishlaydi (foydalanuvchi javobini kutish). Kelgan ma'lumotni AVTOMATIK saqlash uchun: save_state:true + state_key:'<nom>' + state_type:'<tur>' (nested `state:{}` EMAS, `state:true` EMAS) — public_<state_key> ga yoziladi, alohida StateNode KERAK EMAS. Misol: {\"type\":\"text\",\"global_\":false,\"save_state\":true,\"state_key\":\"user_name\",\"state_type\":\"text\"} → {{user_name}} orqali ishlatiladi.",
+    "aiDoc": "Xabar turini kutib trigger. Maydonlar FLAT (nested obyekt YO'Q). type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation (`messageType` EMAS — `type`). filter: any/equals/contains/starts_with/regex; filter qiymati `f_context_value`. global_:false bo'lsa (nom oxirida `_`, `global` EMAS) faqat pauzada ishlaydi (foydalanuvchi javobini kutish). Kelgan ma'lumotni AVTOMATIK saqlash uchun: state_key:'<nom>' + state_type:'<tur>' (nested `state:{}` EMAS, `state:true` EMAS) — public_<state_key> ga yoziladi, alohida StateNode KERAK EMAS. Misol: {\"type\":\"text\",\"global_\":false,\"state_key\":\"user_name\",\"state_type\":\"text\"} → {{user_name}} orqali ishlatiladi.",
     "summary": "Foydalanuvchi xabari (matn/rasm/kontakt...) kelganda flow'ni boshlaydi yoki javobni kutadi",
     "agentCategory": "trigger"
   },
@@ -610,8 +583,7 @@
         "key": "messageText",
         "label": "Xabar matni",
         "i18n": true,
-        "helpText": "O'zgaruvchilarni {{ }} ichida yozing.\nMisol: Salom {{user.first_name}}, balans: {{vars.balance}}\nKontekst: {{user.id}}, {{message.text}}, {{webhook.body.field}}\nRo'yxat uchun loop:\n{{#each collection.items}}\n  {{this.name}} — {{this.price}}\n{{/each}}\nIchida {{@index}} (0 dan) yoki {{@number}} (1 dan) ishlatish mumkin.",
-        "description": "Message text. Supports {{var}} substitutions. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "helpText": "O'zgaruvchilarni {{ }} ichida yozing.\nMisol: Salom {{user.first_name}}, balans: {{vars.balance}}\nKontekst: {{user.id}}, {{message.text}}, {{webhook.body.field}}\nRo'yxat uchun loop:\n{{#each collection.items}}\n  {{this.name}} — {{this.price}}\n{{/each}}\nIchida {{@index}} (0 dan) yoki {{@number}} (1 dan) ishlatish mumkin."
       },
       {
         "type": "action-recipients",
@@ -634,8 +606,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -701,8 +672,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -720,8 +690,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       },
       {
         "type": "select",
@@ -762,10 +731,12 @@
       "keyboard_kind": "inline",
       "rows": []
     },
+    "producesState": [
+      "message_id_{{nodeId}}"
+    ],
     "aiDoc": "Text xabar yuborish. keyboard.active: 'inline'/'reply'/'none'. keyboard.inline: [[{text,type:'callback'/'url'/'web_app',value}]] (web_app value=https URL). keyboard.reply: [[{id:'btn-xxx',text,type:'reply'/'request_contact'/'request_location'}]]. recipients: {sendToSender:bool, additionalIds:[chatId]}. {{key}} (yoki {{public.key}}) — saqlangan ochiq qiymat, {{first_name}} — user ismi, {{callback_data}} — bosilgan tugma callback'i, {{private.key}} — maxfiy qiymat. TUGMA ROUTING (yangi usul): har reply/inline tugma o'zidan edge chiqaradi. flow.connect da source_handle='target-handler-{nodeId}-{buttonText}' formatidan foydalaniladi. Alohida ReplyButtonTriggerNode KERAK EMAS.",
     "summary": "Foydalanuvchiga matn xabar yuboradi (klaviatura/tugmalar bilan)",
-    "agentCategory": "send",
-    "buttonEdge": true
+    "agentCategory": "send"
   },
   {
     "type": "SendPhotoNode",
@@ -820,8 +791,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -887,8 +857,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -906,8 +875,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -927,6 +895,9 @@
       "keyboard_kind": "inline",
       "rows": []
     },
+    "producesState": [
+      "message_id_{{nodeId}}"
+    ],
     "aiDoc": "Rasm yuborish",
     "summary": "Rasm yuboradi",
     "agentCategory": "send"
@@ -984,8 +955,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -1051,8 +1021,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -1070,8 +1039,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -1091,6 +1059,9 @@
       "keyboard_kind": "inline",
       "rows": []
     },
+    "producesState": [
+      "message_id_{{nodeId}}"
+    ],
     "aiDoc": "Video yuborish",
     "summary": "Video yuboradi",
     "agentCategory": "send"
@@ -1148,8 +1119,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -1215,8 +1185,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -1234,8 +1203,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -1314,8 +1282,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -1381,8 +1348,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -1400,8 +1366,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -1609,14 +1574,14 @@
         "key": "latitude",
         "label": "Latitude",
         "placeholder": "41.311151",
-        "step": 1e-06
+        "step": 0.000001
       },
       {
         "type": "number",
         "key": "longitude",
         "label": "Longitude",
         "placeholder": "69.279737",
-        "step": 1e-06
+        "step": 0.000001
       },
       {
         "type": "action-recipients",
@@ -1639,8 +1604,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -1706,8 +1670,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -1725,8 +1688,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -1821,8 +1783,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -1888,8 +1849,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -1907,8 +1867,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -1961,8 +1920,7 @@
         "key": "question",
         "label": "Savol",
         "placeholder": "Sevimli rangingiz qaysi?",
-        "i18n": true,
-        "description": "Poll question. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "i18n": true
       },
       {
         "type": "array-editor",
@@ -1979,8 +1937,7 @@
             "label": "Variant matni",
             "placeholder": "Variant..."
           }
-        ],
-        "description": "2-10 poll option strings."
+        ]
       },
       {
         "type": "select",
@@ -2064,8 +2021,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -2131,8 +2087,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -2150,8 +2105,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -2369,8 +2323,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -2436,8 +2389,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -2455,8 +2407,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       }
     ],
     "footer": [
@@ -2606,8 +2557,7 @@
         "type": "richTextMessage",
         "key": "newText",
         "label": "Yangi matn",
-        "i18n": true,
-        "description": "New message text. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "i18n": true
       },
       {
         "type": "select",
@@ -2743,8 +2693,7 @@
     },
     "aiDoc": "Avvalgi xabarni edit qilish. messageIdSource: 'this_message' (callback xabarini edit) yoki node ID. newText: yangi matn. keyboard: yangilangan tugmalar.",
     "summary": "Avval yuborilgan xabar matni/tugmalarini tahrirlaydi",
-    "agentCategory": "edit",
-    "buttonEdge": true
+    "agentCategory": "edit"
   },
   {
     "type": "EditOrSendMessageNode",
@@ -2780,8 +2729,7 @@
         "label": "Xabar matni",
         "i18n": true,
         "intro": "Callback bo'lsa xabarni tahrirlaydi, aks holda yangi xabar yuboradi",
-        "helpText": "O'zgaruvchilarni {{ }} ichida yozing.\nMisol: {{user.first_name}}, {{vars.summa}}\nRo'yxat: {{#each collection.items}} {{this.nom}} {{/each}}",
-        "description": "Message text. {{var}} supported. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "helpText": "O'zgaruvchilarni {{ }} ichida yozing.\nMisol: {{user.first_name}}, {{vars.summa}}\nRo'yxat: {{#each collection.items}} {{this.nom}} {{/each}}"
       },
       {
         "type": "action-recipients",
@@ -2804,8 +2752,7 @@
             "label": "Reply"
           }
         ],
-        "defaultVisible": false,
-        "description": "'inline' (default) or 'reply'. Set alongside rows."
+        "defaultVisible": false
       },
       {
         "type": "nested-rows",
@@ -2871,8 +2818,7 @@
             "label": "Handle (ulanish nuqtasi)"
           }
         ],
-        "allowDynamicColumns": true,
-        "description": "Button rows. EACH row is an object {columns: [button, ...]} — NOT a bare array. Button: {text, type:'callback', value:'cb_data'}. URL: {text, type:'url', value:'https://...'}. Contact/location: {text, type:'request_contact'} | {text, type:'request_location'}. Example: [{\"columns\":[{\"text\":\"📚 Kurslar\",\"type\":\"callback\",\"value\":\"courses\"}]}]"
+        "allowDynamicColumns": true
       },
       {
         "type": "switch",
@@ -2890,8 +2836,7 @@
         "type": "switch",
         "key": "remove_keyboard",
         "label": "Reply keyboardni olib tashlash",
-        "optional": true,
-        "description": "true = remove the user's reply keyboard (Telegram ReplyKeyboardRemove) when sending this message. Only applies when the node itself has NO keyboard; if keyboard_kind/rows are set, the keyboard wins. Ignored on edit (EditOrSend edit branch) — Telegram only allows it on send."
+        "optional": true
       },
       {
         "type": "select",
@@ -2931,10 +2876,12 @@
       "keyboard_kind": "inline",
       "rows": []
     },
+    "producesState": [
+      "message_id_{{nodeId}}"
+    ],
     "aiDoc": "Mavjud bo'lsa edit qiladi, aks holda yangisini yuboradi. messageText ichida ro'yxatni BITTA xabarda chiqarish uchun {{#each KEY}}...{{/each}} (+ {{@number}}/{{@index}}/{{this}}) va bo'sh holat uchun {{^KEY}}...{{/KEY}} ishlaydi; KEY = LoadCollectionListNode contextKey (Pattern 4a). Nested each YO'Q.",
     "summary": "Xabar mavjud bo'lsa tahrirlaydi, aks holda yangisini yuboradi (ro'yxatni bitta xabarda chiqarishga qulay)",
-    "agentCategory": "send",
-    "buttonEdge": true
+    "agentCategory": "send"
   },
   {
     "type": "ForwardMessageNode",
@@ -2977,6 +2924,10 @@
         ""
       ]
     },
+    "producesState": [
+      "forward_message_id",
+      "message_id_ForwardMessageNode"
+    ],
     "aiDoc": "Xabarni forward qilish",
     "summary": "Xabarni boshqa chatga forward qiladi",
     "agentCategory": "edit"
@@ -3068,6 +3019,10 @@
         }
       }
     },
+    "producesState": [
+      "copy_message_id",
+      "message_id_CopyMessageNode"
+    ],
     "aiDoc": "Xabarni nusxalash",
     "summary": "Xabarni nusxalab yuboradi",
     "agentCategory": "edit"
@@ -3339,8 +3294,14 @@
         "key": "key",
         "label": "Saqlash nomi (state)",
         "placeholder": "yuklangan_fayl",
-        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{NOM}} = fayl UUID, {{NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun). ({{state_NOM}} EMAS — yalang'och yoz.)",
-        "description": "State key prefix for uploaded file UUID/URL."
+        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{state_NOM}} = fayl UUID, {{state_NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun).",
+        "is_state": true,
+        "stateSuffixes": [
+          "",
+          "_file_url",
+          "_file_size",
+          "_file_type"
+        ]
       },
       {
         "type": "description",
@@ -3389,8 +3350,7 @@
         "key": "jsCode",
         "outputsKey": "outputs",
         "language": "javascript",
-        "label": "JavaScript kodi",
-        "description": "JavaScript executed by Goja VM. Stored under data.jsCode — this exact key is read by the engine and rendered by the constructor UI. See prompt Pattern 7 for the full runtime API (send_*, db_*, http_*, exit, set_context, ...). To READ state/context PREFER object-access: vars.<key> (public, maps to public_<key>; state.<key> is a legacy alias that still works), private.<key> (secret), and context.<key> (raw key), e.g. vars.user_phone, context.first_name (get_state/get_context also work, but object-access is shorter/cleaner). FORMAT CLEANLY — the engine stores your code verbatim (no auto-format), so write it readable on the FIRST try: one statement per line (never several joined by ';'), consistent 2-space indent for blocks, spaces around operators (a = 1, x === y — not a=1), meaningful variable names (movie, episodes — not m/e). Never emit minified or single-line code. See docs_guide(topic='custom_code') for a clean-format example to imitate."
+        "label": "JavaScript kodi"
       }
     ],
     "defaults": {
@@ -3398,8 +3358,7 @@
       "jsCode": "// Your code here",
       "label": "custom_code_node",
       "language": "javascript",
-      "outputs": [],
-      "terminal": false
+      "outputs": []
     },
     "aiDoc": "JavaScript kod ishga tushirish (Goja VM). Kod data.jsCode da saqlanadi (engine va UI shu kalitni o'qiydi). MongoDB/HTTP async API mavjud. data.outputs=[{name}] e'lon qilinsa, exit('name') bilan `output-{name}` source handle orqali tarmoqlanadi. data.terminal=true — node leaf (o'zi javob yuborib oqimni tugatadi), keyingi edge yo'qligi normal (validator 'dead-end' ogohlantirishini o'chiradi). State/context'dan O'QISH uchun obyekt-access AFZAL: vars.<key> (ochiq, public_ ga map; state.<key> — legacy alias, hali ishlaydi) va private.<key> (maxfiy), context.<key> (xom kalit) — masalan vars.user_phone, context.first_name. jsCode'ni TOZA, ko'p qatorli yoz (engine verbatim saqlaydi) — docs_guide(topic='custom_code'). TELEGRAM API: tg_call(method, params) — xom Telegram Bot API chaqiruvi (masalan tg_call('createChatInviteLink', {chat_id: '@kanal', member_limit: 1}) → {ok, result}). Nomli wrapper'lar ham bor: send_message, send_photo, send_video, send_document, send_invoice, create_chat_invite_link, forward_message, edit_message_text, delete_message, answer_callback_query va h.k. TO'LOV: create_payment_link(amount, comment?, paymentType?) va payment_status(order_id). MUHIM: 'telegram.api' / 'bot.api' kabi obyekt YO'Q — Telegram uchun DOIM tg_call yoki nomli wrapper ishlat.",
     "summary": "Maxsus JavaScript kod ishga tushiradi (DB/HTTP bilan)",
@@ -3443,8 +3402,7 @@
     },
     "aiDoc": "Ma'lumotni state'ga saqlash. type: text/caption/callback/contact_phone_number/photo_file_id/video_file_id/audio_file_id/document_file_id/file_id/user_id/first_name/last_name/username/language_code/location_latitude/location_longitude/Custom. Custom bo'lsa customType maydonida expression yoziladi (masalan '{{inserted_id}}').",
     "summary": "Ma'lumotni (matn, kontakt, file_id...) state o'zgaruvchisiga saqlaydi",
-    "agentCategory": "data",
-    "savesState": true
+    "agentCategory": "data"
   },
   {
     "type": "CollectionNode",
@@ -3484,6 +3442,9 @@
       "collection_name": "",
       "fieldMappings": {}
     },
+    "producesState": [
+      "inserted_id"
+    ],
     "aiDoc": "MongoDB collection'ga document qo'shish. fieldMappings: {db_field: var_key} (var_key — saqlangan ochiq o'zgaruvchi nomi, prefiksiz). Saqlangandan keyin context'da '{{inserted_id}}' mavjud bo'ladi.",
     "summary": "CMS kolleksiyaga yangi yozuv qo'shadi",
     "agentCategory": "data"
@@ -3531,8 +3492,7 @@
         "type": "collection-select",
         "key": "collection",
         "withFilters": true,
-        "contextKeyField": "contextKey",
-        "description": "{name: 'collection_name'}."
+        "contextKeyField": "contextKey"
       }
     ],
     "defaults": {
@@ -3540,13 +3500,17 @@
       "contextKey": "",
       "filters": []
     },
+    "producesState": [
+      "collection_{{contextKey}}",
+      "collection_{{contextKey}}_found"
+    ],
     "aiDoc": "Bitta document yuklash. collection.name, contextKey, filters: [{field, operator:'equals', valueSource:'state'/'static', stateKey, value}]. Topilsa context'da collection_{contextKey}_{field} mavjud.",
     "summary": "CMS kolleksiyadan bitta yozuvni filter bo'yicha o'qiydi",
+    "agentCategory": "data",
     "sourceHandles": [
       "found",
       "not_found"
-    ],
-    "agentCategory": "data"
+    ]
   },
   {
     "type": "SubFlowNode",
@@ -3624,8 +3588,7 @@
         "key": "exitName",
         "label": "Chiqish nomi",
         "placeholder": "success",
-        "helpText": "SubFlow tugagandan keyin qaysi chiqish orqali davom etiladi",
-        "description": "Exit branch name returned to the parent flow."
+        "helpText": "SubFlow tugagandan keyin qaysi chiqish orqali davom etiladi"
       }
     ],
     "defaults": {
@@ -3633,8 +3596,8 @@
     },
     "aiDoc": "Subflow tugagach parent flow'ga qaytadigan chiqish nuqtasi",
     "summary": "Subflow tugagach ota-flow'ga qaytish nuqtasi",
-    "sourceHandles": [],
-    "agentCategory": "subflow"
+    "agentCategory": "subflow",
+    "sourceHandles": []
   },
   {
     "type": "IfConditionNode",
@@ -3691,13 +3654,18 @@
       "operator": "AND",
       "conditions": []
     },
+    "producesState": [
+      "condition_result",
+      "condition_matched",
+      "matched_branch"
+    ],
     "aiDoc": "Shart tekshirish. Oddiy: conditions[] + operator(AND/OR) → sourceHandle 'true'/'false'. Multi-branch: branches[{type,conditions,operator}] → sourceHandle 'branch_0','branch_1',...",
     "summary": "Shartga qarab flow'ni true/false (yoki ko'p) tarmoqqa bo'ladi",
+    "agentCategory": "flow_control",
     "sourceHandles": [
       "true",
       "false"
-    ],
-    "agentCategory": "flow_control"
+    ]
   },
   {
     "type": "ElseIfNode",
@@ -3754,6 +3722,10 @@
       "operator": "AND",
       "conditions": []
     },
+    "producesState": [
+      "condition_result",
+      "condition_matched"
+    ],
     "aiDoc": "Else-if branch (IfConditionNode'dan keyin)",
     "summary": "IfCondition'dan keyingi else-if tarmog'i",
     "agentCategory": "flow_control"
@@ -3800,6 +3772,10 @@
       }
     ],
     "defaults": {},
+    "producesState": [
+      "condition_result",
+      "condition_matched"
+    ],
     "aiDoc": "Else branch",
     "summary": "Shart bajarilmagandagi else tarmog'i",
     "agentCategory": "flow_control"
@@ -3839,8 +3815,7 @@
         "placeholder": "5",
         "min": 1,
         "max": 300,
-        "helpText": "Maksimal: 300 soniya (5 daqiqa)",
-        "description": "Wait time in seconds."
+        "helpText": "Maksimal: 300 soniya (5 daqiqa)"
       }
     ],
     "defaults": {
@@ -3988,6 +3963,9 @@
       "keyboard_kind": "inline",
       "rows": []
     },
+    "producesState": [
+      "random_selected_index"
+    ],
     "aiDoc": "Tasodifiy branch tanlash",
     "summary": "Tasodifiy tarmoqni tanlaydi",
     "agentCategory": "flow_control"
@@ -4064,7 +4042,8 @@
         "key": "variableName",
         "label": "O'zgaruvchi nomi",
         "placeholder": "my_variable",
-        "helpText": "Keyingi node'larda {{vars.my_variable}} yoki {{my_variable}} sifatida o'qiladi."
+        "helpText": "Keyingi node'larda {{vars.my_variable}} yoki {{my_variable}} sifatida o'qiladi.",
+        "is_state": true
       },
       {
         "type": "text",
@@ -4075,8 +4054,7 @@
         "visibleWhen": {
           "key": "operation",
           "notEquals": "delete"
-        },
-        "description": "Value for set/increment/append. Skipped for clear."
+        }
       }
     ],
     "defaults": {
@@ -4159,8 +4137,7 @@
             "placeholder": "@username yoki -100123456789"
           }
         ],
-        "optional": true,
-        "description": "Tekshiriladigan kanallar ro'yxati: [{value: '@channel'}]."
+        "optional": true
       },
       {
         "type": "text",
@@ -4168,8 +4145,7 @@
         "label": "Kanallar kolleksiyasi (dinamik)",
         "placeholder": "channels",
         "optional": true,
-        "helpText": "Kanallarni collection'dan dinamik o'qish — flow'ni tahrirlamasdan",
-        "description": "Kanallarni DINAMIK olish: collection nomi (masalan 'channels'). Admin kanallarni collection orqali boshqaradi — flow'ni tahrirlamasdan. Har hujjatdagi channelsField (default 'value') ustuni @username yoki raqamli id."
+        "helpText": "Kanallarni collection'dan dinamik o'qish — flow'ni tahrirlamasdan"
       },
       {
         "type": "text",
@@ -4177,8 +4153,7 @@
         "label": "Kanal ustuni",
         "placeholder": "value",
         "optional": true,
-        "helpText": "channelsCollection hujjatlaridagi kanal ustuni (default: value)",
-        "description": "channelsCollection hujjatlaridagi kanal ustuni nomi (default: 'value')."
+        "helpText": "channelsCollection hujjatlaridagi kanal ustuni (default: value)"
       },
       {
         "type": "text",
@@ -4186,21 +4161,27 @@
         "label": "Kanal (legacy)",
         "placeholder": "@channel yoki -100...",
         "optional": true,
-        "helpText": "LEGACY: bitta kanal. Yangi flow'da channels ishlating",
-        "description": "LEGACY alias (bitta kanal @username yoki id). Yangi flow'da channels ishlating."
+        "helpText": "LEGACY: bitta kanal. Yangi flow'da channels ishlating"
       }
     ],
     "defaults": {
       "channels": [],
       "inputType": "username"
     },
+    "producesState": [
+      "is_member",
+      "membership_status",
+      "non_member_channel",
+      "membership_statuses",
+      "checked_channels_count"
+    ],
     "aiDoc": "Foydalanuvchi kanal/guruh a'zosi ekanligini tekshirish",
     "summary": "Foydalanuvchi kanal/guruh a'zosi ekanini tekshiradi",
+    "agentCategory": "integration",
     "sourceHandles": [
       "is-member",
       "not-member"
-    ],
-    "agentCategory": "integration"
+    ]
   },
   {
     "type": "FormNode",
@@ -4345,20 +4326,29 @@
         "type": "text",
         "key": "itemVariable",
         "label": "Element o'zgaruvchisi",
-        "placeholder": "item"
+        "placeholder": "item",
+        "is_state": true
       }
     ],
     "defaults": {
       "dataKey": "",
       "itemVariable": "item"
     },
+    "producesState": [
+      "loop_has_items",
+      "loop_total_items",
+      "loop_current_index",
+      "loop_is_first",
+      "loop_is_last",
+      "loop_has_more"
+    ],
     "aiDoc": "Massiv ustidan iteration. FAQAT IKKI handle: `loop-body` (har element uchun) va `no-items` (massiv bo'sh). `loop-done`/`loop-continue` HANDLE YO'Q — oxiriga ForLoopContinueNode ulanadi. Context: 'loop_item','loop_current_index'.",
     "summary": "Massiv elementlari ustida takrorlaydi (loop)",
+    "agentCategory": "flow_control",
     "sourceHandles": [
       "loop-body",
       "no-items"
-    ],
-    "agentCategory": "flow_control"
+    ]
   },
   {
     "type": "ForLoopContinueNode",
@@ -4456,8 +4446,7 @@
         "key": "url",
         "label": "URL",
         "placeholder": "https://api.example.com/endpoint",
-        "helpText": "To'liq URL manzil. O'zgaruvchi ishlatish mumkin: https://api.example.com/users/{{user.id}}",
-        "description": "Full URL. Supports {{var}}."
+        "helpText": "To'liq URL manzil. O'zgaruvchi ishlatish mumkin: https://api.example.com/users/{{user.id}}"
       },
       {
         "type": "textarea",
@@ -4489,7 +4478,15 @@
         "key": "responseVariable",
         "label": "Javob o'zgaruvchisi",
         "placeholder": "response",
-        "helpText": "API javobi shu nom bilan saqlanadi. Keyingi node'larda {{vars.response}} yoki {{response}} sifatida ishlatiladi."
+        "helpText": "API javobi shu nom bilan saqlanadi. Keyingi node'larda {{vars.response}} yoki {{response}} sifatida ishlatiladi.",
+        "is_state": true,
+        "stateDefault": "http_response",
+        "stateSuffixes": [
+          "",
+          "_status",
+          "_success",
+          "_headers"
+        ]
       },
       {
         "type": "number",
@@ -4516,8 +4513,8 @@
       "storeHeaders": false
     },
     "producesState": [
-      "http_response",
-      "http_success"
+      "http_success",
+      "http_error"
     ],
     "aiDoc": "HTTP request (GET/POST/PUT/DELETE). SSRF protection enabled.",
     "summary": "Tashqi HTTP so'rov yuboradi (GET/POST/...)",
@@ -4705,21 +4702,13 @@
         "optional": true
       },
       {
-        "type": "switch",
-        "key": "save_state",
-        "label": "Ma'lumotni saqlash",
-        "optional": true
-      },
-      {
         "type": "text",
         "key": "state_key",
-        "label": "State Key",
+        "label": "Ma'lumotni saqlash — State Key",
         "placeholder": "Masalan: user_message, phone, etc.",
         "helpText": "Ma'lumot shu kalitga saqlanadi",
-        "visibleWhen": {
-          "key": "save_state",
-          "equals": true
-        }
+        "optional": true,
+        "is_state": true
       },
       {
         "type": "select",
@@ -4756,8 +4745,8 @@
           }
         ],
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       },
       {
@@ -4767,8 +4756,8 @@
         "helpText": "Yoqilsa, bu qiymat {{private.key}} sifatida saqlanadi",
         "optional": true,
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       }
     ],
@@ -4823,21 +4812,13 @@
         "optional": true
       },
       {
-        "type": "switch",
-        "key": "save_state",
-        "label": "Ma'lumotni saqlash",
-        "optional": true
-      },
-      {
         "type": "text",
         "key": "state_key",
-        "label": "State Key",
+        "label": "Ma'lumotni saqlash — State Key",
         "placeholder": "Masalan: user_message, phone, etc.",
         "helpText": "Ma'lumot shu kalitga saqlanadi",
-        "visibleWhen": {
-          "key": "save_state",
-          "equals": true
-        }
+        "optional": true,
+        "is_state": true
       },
       {
         "type": "select",
@@ -4870,8 +4851,8 @@
           }
         ],
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       },
       {
@@ -4881,8 +4862,8 @@
         "helpText": "Yoqilsa, bu qiymat {{private.key}} sifatida saqlanadi",
         "optional": true,
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       }
     ],
@@ -4963,8 +4944,7 @@
         "label": "System Prompt",
         "placeholder": "You are a helpful assistant...",
         "rows": 3,
-        "helpText": "Instructions that define the agent's behavior and persona.",
-        "description": "System prompt. Supports {{var}}/$var substitutions."
+        "helpText": "Instructions that define the agent's behavior and persona."
       },
       {
         "type": "text",
@@ -4972,8 +4952,7 @@
         "labelKey": "constructor.ai.agent.fields.userInput",
         "label": "User Input",
         "placeholder": "{{message.text}} or literal text",
-        "helpText": "The user message sent to the agent. Use {{message.text}} to pass the incoming message.",
-        "description": "Literal/templated user turn override; if non-empty, used instead of userInputSource."
+        "helpText": "The user message sent to the agent. Use {{message.text}} to pass the incoming message."
       },
       {
         "type": "text",
@@ -4983,30 +4962,21 @@
         "placeholder": "agent_output",
         "helpText": "Context key where the agent's reply will be stored.",
         "is_state": true,
-        "description": "Context key the final text is written to. Read as {{agent_output}}."
-      },
-      {
-        "type": "switch",
-        "key": "structuredOutput",
-        "labelKey": "constructor.ai.agent.fields.structuredOutput",
-        "label": "Structured Output (JSON Schema)",
-        "optional": true,
-        "description": "Enable PROVIDER-LEVEL structured output. When true, supply `jsonSchema` and the engine forces the model to return JSON matching that schema; the parsed object is written to outputKey (read as {{outputKey.fieldName}}). USE THIS instead of telling the model 'return JSON' in systemPrompt — that is unreliable. Requires a provider that supports structured output (OpenAI/Gemini). On parse failure the raw text goes to outputKey and an error to errorOutputKey."
+        "stateDefault": "agent_output",
+        "stateSuffixes": [
+          "",
+          "_json"
+        ]
       },
       {
         "type": "textarea",
         "key": "jsonSchema",
         "labelKey": "constructor.ai.agent.fields.jsonSchema",
-        "label": "JSON Schema",
+        "label": "Structured Output (JSON Schema)",
         "placeholder": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"answer\": { \"type\": \"string\" }\n  }\n}",
         "rows": 5,
-        "helpText": "JSON Schema the agent must conform to when structuredOutput is enabled.",
-        "visibleWhen": {
-          "key": "structuredOutput",
-          "equals": true
-        },
-        "optional": true,
-        "description": "JSON Schema as a STRING (the whole schema serialized), used ONLY when structuredOutput=true. Example: '{\"type\":\"object\",\"properties\":{\"intent\":{\"type\":\"string\"},\"amount\":{\"type\":\"number\"}},\"required\":[\"intent\"]}'. Invalid JSON is ignored (structured output silently disabled)."
+        "helpText": "Schema kiritilsa Structured Output avtomatik yoqiladi. Maydonni olib tashlasangiz oddiy text output ishlaydi.",
+        "optional": true
       },
       {
         "type": "number",
@@ -5014,8 +4984,7 @@
         "label": "Max Iterations",
         "min": 1,
         "max": 10,
-        "optional": true,
-        "description": "Max tool-call loop iterations (hard cap 10)."
+        "optional": true
       },
       {
         "type": "select",
@@ -5032,15 +5001,7 @@
           }
         ],
         "optional": true,
-        "variant": "tabs",
-        "description": "'text' returns plain string; 'json' also stores parsed JSON under outputKey_json. NOTE: for guaranteed-valid JSON prefer structuredOutput+jsonSchema (below) — that constrains the model at the provider level; returnMode='json' only best-effort parses free text."
-      },
-      {
-        "type": "switch",
-        "key": "autoHistory",
-        "label": "Auto conversation memory",
-        "optional": true,
-        "description": "When true, the engine keeps a SEPARATE conversation history per chat automatically (no historyKey needed) — the agent remembers earlier turns. Use for chatbots/assistants. Ignored if historyKey is set."
+        "variant": "tabs"
       },
       {
         "type": "text",
@@ -5048,8 +5009,7 @@
         "label": "History Key",
         "placeholder": "{{chat_id}} = per-user memory; empty = disable",
         "helpText": "Conversation memory key. Default {{chat_id}} keeps a separate history per user (the agent remembers earlier turns). Clear it to make the agent stateless.",
-        "optional": true,
-        "description": "Optional context key holding prior messages[] to seed the conversation. Manual mode: builder assembles the [{role,content}] array. For a chat/conversational agent prefer autoHistory=true instead — the engine then manages history for you."
+        "optional": true
       },
       {
         "type": "text",
@@ -5057,7 +5017,8 @@
         "label": "Error Output Key",
         "placeholder": "agent_error",
         "optional": true,
-        "description": "Context key for error string on failure. Branch on this with IfConditionNode."
+        "is_state": true,
+        "stateDefault": "agent_error"
       }
     ],
     "defaults": {
@@ -5070,18 +5031,20 @@
       "returnMode": "text",
       "historyKey": "{{chat_id}}",
       "errorOutputKey": "agent_error",
-      "structuredOutput": false,
       "jsonSchema": ""
     },
-    "aiDoc": "LLM agent node. Bitta provider sub-node (acc:ai_model portiga) va ixtiyoriy tool sub-node'lar (acc:ai_tool portiga) ulanadi. systemPrompt + userInputSource → LLM tool-calling loop → natija outputKey context o'zgaruvchisiga yoziladi (standart: agent_output). Keyingi nodelar {{agent_output}} orqali foydalanadi. Bog'lash: flow.connect(source=<provider_id>, source_handle='source-default', target=<agent_id>, target_handle='acc:ai_model'). Tavsiya: OpenAI yoki Ollama provider'i bilan boshlang. SUHBAT XOTIRASI: chatbot / suhbatdosh / savdo-agent uchun autoHistory=true qo'y — engine har chat uchun dialogni avtomatik eslaydi. Aks holda bot amneziyali bo'ladi (har xabarda oldingi gapni unutadi). TOOL ISHLAT: agent shunchaki matn yozmasin — real ma'lumot/harakat kerak bo'lsa acc:ai_tool'ga tool ula. Tool'siz agent uydirma javob berishi mumkin. TOOL TANLASH YO'RIQNOMASI: • dinamik DB ma'lumoti (katalog, buyurtma, foydalanuvchi) o'qish/yozish → AICollectionToolNode (read uchun operations=['read']); • tashqi REST API chaqirish → AIHTTPToolNode (natija status-aware: model 4xx/5xx xatoni ko'radi); • murakkab mantiq/hisob-kitob yoki bir nechta amal birga → AICustomCodeToolNode (kuchli — Mongo yoz, Telegram yubor, http; ehtiyot bo'l); • hujjat/bilim bazasi bo'yicha semantic (RAG) qidiruv → AIKnowledgeToolNode, LEKIN faqat tashqi Qdrant URL + embedding kaliti aniq mavjud bo'lsa (built-in vector DB YO'Q; aks holda tool jimgina tushib qoladi — o'rniga collection/http ishlat). Masalan 'narxni ayt' → AICollectionToolNode (real katalog), 'buyurtma yarat' → collection create yoki custom_code; • joriy sana/vaqt yoki sana hisobi (bron/jadval/eslatma) → AIDateTimeToolNode (credential YO'Q); • Google Sheet o'qish/yozish (lookup, log, buyurtma jurnali) → AIGoogleSheetsToolNode (type_key='google_sheets' OAuth credential, dashboard'da Connect with Google); • AI dinamik to'lov havolasi yaratsin (sotuv-agent narx aytib hisob chiqarsin) → AIPaymentLinkToolNode (paymentType click|paycue — qurishdan oldin SO'RA, payme YO'Q; maxAmount build-time injection-guard); • AI to'lov BUYURTMASI holatini tekshirsin (paid/pending/failed; 'to'ladim' deganda tasdiq) → AIPaymentStatusToolNode (order_id runtime arg, konfiguratsiya/credential YO'Q); STRUCTURED JSON: agent JSON qaytarishi kerak bo'lsa systemPrompt'da 'JSON qaytar' DEMA (ishonchsiz) — `structuredOutput:true` + `jsonSchema` (schema string) qo'y. Engine model'ni provider darajasida shu schema'ga majburlaydi va parse qilingan obyektni outputKey'ga yozadi ({{agent_output.field}}). Faqat schema'siz erkin matn kerak bo'lsa returnMode='json' (best-effort parse). XATO SEMANTIKASI (engine): SUCCESS bo'lsa errorOutputKey TOZALANADI (oldingi xato qoldig'i qolmaydi); provider XATO bersa outputKey bo'sh, errorOutputKey saqlanadi va flow KEYINGI node'ga DAVOM etadi (graceful) — shuning uchun errorOutputKey ustidan IfConditionNode bilan branch qilib xato holatini alohida ko'rsatish mumkin.",
+    "producesState": [
+      "agent_tool_build_errors"
+    ],
+    "aiDoc": "LLM agent node. Bitta provider sub-node (acc:ai_model portiga) va ixtiyoriy tool sub-node'lar (acc:ai_tool portiga) ulanadi. systemPrompt + userInputSource → LLM tool-calling loop → natija outputKey context o'zgaruvchisiga yoziladi (standart: agent_output). Keyingi nodelar {{agent_output}} orqali foydalanadi. Bog'lash: flow.connect(source=<provider_id>, source_handle='source-default', target=<agent_id>, target_handle='acc:ai_model'). Tavsiya: OpenAI yoki Ollama provider'i bilan boshlang. SUHBAT XOTIRASI: chatbot / suhbatdosh / savdo-agent uchun historyKey='{{chat_id}}' qoldir — engine har chat uchun dialogni alohida eslaydi. historyKey bo'sh bo'lsa agent stateless ishlaydi. TOOL ISHLAT: agent shunchaki matn yozmasin — real ma'lumot/harakat kerak bo'lsa acc:ai_tool'ga tool ula. Tool'siz agent uydirma javob berishi mumkin. TOOL TANLASH YO'RIQNOMASI: • dinamik DB ma'lumoti (katalog, buyurtma, foydalanuvchi) o'qish/yozish → AICollectionToolNode (read uchun operations=['read']); • tashqi REST API chaqirish → AIHTTPToolNode (natija status-aware: model 4xx/5xx xatoni ko'radi); • murakkab mantiq/hisob-kitob yoki bir nechta amal birga → AICustomCodeToolNode (kuchli — Mongo yoz, Telegram yubor, http; ehtiyot bo'l); • hujjat/bilim bazasi bo'yicha semantic (RAG) qidiruv → AIKnowledgeToolNode, LEKIN faqat tashqi Qdrant URL + embedding kaliti aniq mavjud bo'lsa (built-in vector DB YO'Q; aks holda tool jimgina tushib qoladi — o'rniga collection/http ishlat). Masalan 'narxni ayt' → AICollectionToolNode (real katalog), 'buyurtma yarat' → collection create yoki custom_code; • joriy sana/vaqt yoki sana hisobi (bron/jadval/eslatma) → AIDateTimeToolNode (credential YO'Q); • Google Sheet o'qish/yozish (lookup, log, buyurtma jurnali) → AIGoogleSheetsToolNode (type_key='google_sheets' OAuth credential, dashboard'da Connect with Google); • AI dinamik to'lov havolasi yaratsin (sotuv-agent narx aytib hisob chiqarsin) → AIPaymentLinkToolNode (paymentType click|paycue — qurishdan oldin SO'RA, payme YO'Q; maxAmount build-time injection-guard); • AI to'lov BUYURTMASI holatini tekshirsin (paid/pending/failed; 'to'ladim' deganda tasdiq) → AIPaymentStatusToolNode (order_id runtime arg, konfiguratsiya/credential YO'Q); STRUCTURED JSON: agent JSON qaytarishi kerak bo'lsa systemPrompt'da 'JSON qaytar' DEMA (ishonchsiz) — optional `jsonSchema` maydonini qo'shib schema string yoz; alohida switch yo'q va bo'sh bo'lmagan schema structured output'ni avtomatik yoqadi. Engine model'ni provider darajasida shu schema'ga majburlaydi va parse qilingan obyektni outputKey'ga yozadi ({{agent_output.field}}). Faqat schema'siz erkin matn kerak bo'lsa returnMode='json' (best-effort parse). XATO SEMANTIKASI (engine): SUCCESS bo'lsa errorOutputKey TOZALANADI (oldingi xato qoldig'i qolmaydi); provider XATO bersa outputKey bo'sh, errorOutputKey saqlanadi va flow KEYINGI node'ga DAVOM etadi (graceful) — shuning uchun errorOutputKey ustidan IfConditionNode bilan branch qilib xato holatini alohida ko'rsatish mumkin.",
     "summary": "LLM agent: provider va tool'lar bilan suhbatlashib javob beradi",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
     "targetHandles": [
       "target-default"
-    ],
-    "agentCategory": "ai"
+    ]
   },
   {
     "type": "AIOpenAIProviderNode",
@@ -5117,15 +5080,13 @@
         "key": "credential_id",
         "credentialType": "openai",
         "label": "Credential",
-        "required": true,
-        "description": "Stored credential id (PREFERRED). credentials.list(type_key=...) bilan topiladi yoki foydalanuvchidan so'raladi. Engine uni runtime'da api_key/base_url'ga aylantiradi (apiKey'ni override qiladi)."
+        "required": true
       },
       {
         "type": "text",
         "key": "model",
         "label": "Model",
-        "placeholder": "gpt-4o-mini",
-        "description": "Model id. Leave empty to use node-type default."
+        "placeholder": "gpt-4o-mini"
       },
       {
         "type": "number",
@@ -5133,16 +5094,14 @@
         "label": "Temperature",
         "min": 0,
         "max": 2,
-        "step": 0.1,
-        "description": "Sampling temperature."
+        "step": 0.1
       },
       {
         "type": "number",
         "key": "maxTokens",
         "label": "Max Tokens",
         "min": 1,
-        "step": 1,
-        "description": "Max response tokens."
+        "step": 1
       }
     ],
     "defaults": {
@@ -5156,11 +5115,11 @@
     },
     "aiDoc": "OpenAI provider sub-node. AIAgentNode'ning acc:ai_model portiga ulanadi. provider='openai', default model='gpt-4o-mini'. KALIT: manual apiKey EMAS — credential_id (type_key 'openai') bering (credentials.list(type_key='openai')). Engine runtime'da credential'dan api_key/base_url'ga aylantiradi (baseURL SET QILMA). Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_model'.",
     "summary": "AI agent uchun OpenAI provider (credential orqali)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIOllamaProviderNode",
@@ -5196,15 +5155,13 @@
         "key": "credential_id",
         "credentialType": "ollama",
         "label": "Credential",
-        "required": true,
-        "description": "Stored credential id (PREFERRED). credentials.list(type_key=...) bilan topiladi yoki foydalanuvchidan so'raladi. Engine uni runtime'da api_key/base_url'ga aylantiradi (apiKey'ni override qiladi)."
+        "required": true
       },
       {
         "type": "text",
         "key": "model",
         "label": "Model",
-        "placeholder": "gpt-oss:120b",
-        "description": "Model id. Leave empty to use node-type default."
+        "placeholder": "gpt-oss:120b"
       },
       {
         "type": "number",
@@ -5213,8 +5170,7 @@
         "min": 0,
         "max": 2,
         "step": 0.1,
-        "optional": true,
-        "description": "Sampling temperature."
+        "optional": true
       },
       {
         "type": "number",
@@ -5222,8 +5178,7 @@
         "label": "Max Tokens",
         "min": 1,
         "step": 1,
-        "optional": true,
-        "description": "Max response tokens."
+        "optional": true
       }
     ],
     "defaults": {
@@ -5237,11 +5192,11 @@
     },
     "aiDoc": "Ollama provider sub-node. AIAgentNode'ning acc:ai_model portiga ulanadi. AFZAL (DEFAULT) AI provider — bot LLM ishlatsa shuni tanla. provider='ollama'. Endpoint (base_url) CREDENTIAL'dan keladi — baseURL SET QILMA (bo'sh qoldir; engine credential'dan oladi, bo'sh bo'lsa provider-default). AFZAL model='gemma4:31b-cloud' (cloud model) — model'ni ANIQ shunga sozla, bo'sh qoldirma (bo'sh qolsa engine eski fallback 'gpt-oss:120b'ni oladi). KALIT: credential_id (type_key 'ollama') bering (credentials.list(type_key='ollama')) — manual apiKey EMAS. Credential yo'q bo'lsa: foydalanuvchidan kalit so'rab credentials.create qiling YOKI muqobil providerni (openai / ai_studio) taklif qiling. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_model'.",
     "summary": "AI agent uchun Ollama provider (default/afzal, credential orqali)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIGeminiProviderNode",
@@ -5277,23 +5232,20 @@
         "key": "credential_id",
         "credentialType": "ai_studio",
         "label": "Credential",
-        "required": true,
-        "description": "Stored credential id (PREFERRED). credentials.list(type_key=...) bilan topiladi yoki foydalanuvchidan so'raladi. Engine uni runtime'da api_key/base_url'ga aylantiradi (apiKey'ni override qiladi)."
+        "required": true
       },
       {
         "type": "text",
         "key": "model",
         "label": "Model",
-        "placeholder": "gemini-1.5-flash",
-        "description": "Model id. Leave empty to use node-type default."
+        "placeholder": "gemini-1.5-flash"
       },
       {
         "type": "text",
         "key": "baseURL",
         "label": "Base URL",
         "placeholder": "https://generativelanguage.googleapis.com/v1beta",
-        "optinal": true,
-        "description": "DO NOT SET. The endpoint comes from the CREDENTIAL (engine resolves it at runtime; empty → provider default). Field kept only for legacy/local-Ollama (localhost) flows — leave it EMPTY for every cloud provider."
+        "optinal": true
       },
       {
         "type": "number",
@@ -5302,8 +5254,7 @@
         "min": 0,
         "max": 2,
         "step": 0.1,
-        "optional": true,
-        "description": "Sampling temperature."
+        "optional": true
       },
       {
         "type": "number",
@@ -5311,8 +5262,7 @@
         "label": "Max Tokens",
         "min": 1,
         "step": 1,
-        "optional": true,
-        "description": "Max response tokens."
+        "optional": true
       }
     ],
     "defaults": {
@@ -5327,11 +5277,11 @@
     },
     "aiDoc": "Google Gemini provider sub-node. AIAgentNode'ning acc:ai_model portiga ulanadi. provider='gemini', default model='gemini-1.5-flash'. KALIT: credential_id (type_key 'ai_studio' — Google AI Studio) bering (credentials.list(type_key='ai_studio')) — manual apiKey EMAS. base_url credential'dan keladi — baseURL SET QILMA. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_model'.",
     "summary": "AI agent uchun Google Gemini provider (credential orqali)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIAnthropicProviderNode",
@@ -5366,15 +5316,13 @@
         "type": "text",
         "key": "apiKey",
         "label": "API Key",
-        "placeholder": "sk-ant-... or {{env.ANTHROPIC_KEY}}",
-        "description": "API key. Never logged."
+        "placeholder": "sk-ant-... or {{env.ANTHROPIC_KEY}}"
       },
       {
         "type": "text",
         "key": "model",
         "label": "Model",
-        "placeholder": "claude-3-5-haiku-latest",
-        "description": "Model id. Leave empty to use node-type default."
+        "placeholder": "claude-3-5-haiku-latest"
       },
       {
         "type": "number",
@@ -5383,8 +5331,7 @@
         "min": 0,
         "max": 1,
         "step": 0.1,
-        "optional": true,
-        "description": "Sampling temperature."
+        "optional": true
       },
       {
         "type": "number",
@@ -5392,8 +5339,7 @@
         "label": "Max Tokens",
         "min": 1,
         "step": 1,
-        "optional": true,
-        "description": "Max response tokens."
+        "optional": true
       }
     ],
     "defaults": {
@@ -5407,11 +5353,11 @@
     },
     "aiDoc": "Anthropic (Claude) provider sub-node. AIAgentNode'ning acc:ai_model portiga ulanadi. provider='anthropic', default model='claude-3-5-haiku-latest'. ESLATMA: registry'da 'anthropic' credential type'i YO'Q — bu provider hanuz manual apiKey ishlatadi (ask_user bilan haqiqiy kalit ol). credential_id qo'llab-quvvatlanmaydi. baseURL SET QILMA (default ishlatiladi). Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_model'.",
     "summary": "AI agent uchun Anthropic (Claude) provider",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIHTTPToolNode",
@@ -5446,16 +5392,14 @@
         "type": "text",
         "key": "toolName",
         "label": "Tool Name",
-        "placeholder": "http_request",
-        "description": "Function name given to the LLM (^[a-zA-Z0-9_]+$)."
+        "placeholder": "http_request"
       },
       {
         "type": "textarea",
         "key": "description",
         "label": "Description (shown to LLM)",
         "placeholder": "Make an HTTP request to a URL.",
-        "rows": 2,
-        "description": "Natural-language tool description for the LLM."
+        "rows": 2
       },
       {
         "type": "select",
@@ -5486,15 +5430,22 @@
             "value": "{{from_args}}",
             "label": "From LLM args"
           }
-        ],
-        "description": "HTTP method. '{{from_args}}' lets the LLM choose."
+        ]
+      },
+      {
+        "type": "credential",
+        "key": "credential_id",
+        "credentialType": "http_api",
+        "label": "HTTP API Credential",
+        "optional": true,
+        "defaultVisible": false
       },
       {
         "type": "text",
         "key": "urlTemplate",
         "label": "URL Template",
-        "placeholder": "https://api.example.com/{{id}}",
-        "description": "URL template. Supports tool args, e.g. https://api.x/{{id}}."
+        "placeholder": "https://api.example.com/{{args.id}}",
+        "helpText": "Fixed URL kiriting. Bo'sh qoldirilsa, AI har chaqiruvda public URL'ni url parametri orqali beradi. Parametrlar uchun {{args.param_nomi}} ishlating."
       },
       {
         "type": "textarea",
@@ -5502,12 +5453,44 @@
         "label": "Payload (Body)",
         "placeholder": "{\"key\": \"{{args.value}}\"}",
         "rows": 4,
-        "helpText": "JSON yoki matn. {{args.x}} va {{context}} o'zgaruvchilar ishlatiladi. GET uchun bo'sh qoldiring.",
+        "helpText": "HTTP serverga yuboriladigan request body. Oddiy JSON/matn yozing yoki AI parametrlarini {{args.nom}} orqali joylashtiring. GET uchun bo'sh qoldiring.",
         "visibleWhen": {
           "key": "method",
           "notEquals": "GET"
+        }
+      },
+      {
+        "type": "tool-params",
+        "key": "parametersSchema",
+        "label": "AI to'ldiradigan parametrlar",
+        "hint": "Bu HTTP body emas. Bular AI toolni chaqirganda yuboradigan argumentlar. Ularni URL, Payload (Body) va Headers ichida {{args.param_nomi}} ko'rinishida ishlating. URL bo'sh bo'lsa url parametri engine tomonidan avtomatik qo'shiladi.",
+        "emptyHint": "AI uchun qo'shimcha parametr kiritilmagan."
+      },
+      {
+        "type": "array-editor",
+        "key": "headerItems",
+        "label": "Headers",
+        "addLabel": "Header qo'shish",
+        "optional": true,
+        "defaultVisible": false,
+        "defaultItem": {
+          "name": "",
+          "value": ""
         },
-        "description": "Request body template."
+        "itemFields": [
+          {
+            "key": "name",
+            "type": "text",
+            "label": "Header",
+            "placeholder": "X-Custom-Header"
+          },
+          {
+            "key": "value",
+            "type": "text",
+            "label": "Value",
+            "placeholder": "{{args.value}}"
+          }
+        ]
       },
       {
         "type": "number",
@@ -5515,8 +5498,7 @@
         "label": "Timeout (s)",
         "min": 1,
         "max": 120,
-        "step": 1,
-        "description": "Request timeout in seconds."
+        "step": 1
       }
     ],
     "defaults": {
@@ -5524,8 +5506,10 @@
       "toolName": "http_request",
       "description": "Make an HTTP request to a given URL.",
       "method": "GET",
+      "credential_id": "",
       "urlTemplate": "",
       "headers": {},
+      "headerItems": [],
       "bodyTemplate": "",
       "timeout": 30,
       "parametersSchema": {
@@ -5536,11 +5520,11 @@
     },
     "aiDoc": "HTTP request tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='http_request'. LLM urlTemplate/bodyTemplate'ni tool args bilan chaqiradi. QACHON: tashqi REST API'ga so'rov yuborish kerak bo'lganda. NATIJA STATUS-AWARE: model javobda HTTP status'ni ko'radi — non-2xx bo'lsa natijada status va ok=false bo'ladi (masalan {\"status\":404,\"ok\":false,...}), shuning uchun model 4xx/5xx xatoni muvaffaqiyatdan farqlay oladi. SSRF: ichki/private manzillar (localhost, 10/172/192.168, .internal) standart bloklanadi; ataylab ichki API kerak bo'lsa allowInternal=true yoki allowedHosts ro'yxatini ber. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun HTTP-so'rov tool'i (tashqi API chaqiradi)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AICollectionToolNode",
@@ -5572,21 +5556,12 @@
     ],
     "content": [
       {
-        "type": "text",
-        "key": "toolName",
-        "label": "Tool nomi",
-        "placeholder": "masalan: search_products",
-        "helpText": "LLM shu nom bilan tool'ni chaqiradi (snake_case).",
-        "description": "Function name given to the LLM (^[a-zA-Z0-9_]+$)."
-      },
-      {
         "type": "textarea",
         "key": "description",
         "label": "Tavsif (LLM uchun)",
         "rows": 3,
         "placeholder": "Bu tool nima qilishini LLM tushunadigan qilib yozing",
-        "helpText": "LLM qachon va nima uchun bu tool'ni ishlatishni shu tavsifdan biladi.",
-        "description": "Natural-language tool description for the LLM."
+        "helpText": "LLM qachon va nima uchun bu tool'ni ishlatishni shu tavsifdan biladi."
       },
       {
         "type": "widget",
@@ -5595,7 +5570,6 @@
     ],
     "defaults": {
       "tool": "collection",
-      "toolName": "collection",
       "collection": "",
       "action": "create",
       "createFields": [],
@@ -5626,11 +5600,11 @@
     },
     "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{<key>}}/{{user_id}}/{{username}} placeholder; saqlangan qiymat uchun yalang'och {{<key>}} — {{state_<key>}} underscore RESOLVE BO'LMAYDI — engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun CMS kolleksiya tool'i (create/read/update/delete)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AICustomCodeToolNode",
@@ -5665,28 +5639,24 @@
         "type": "text",
         "key": "toolName",
         "label": "Tool Name",
-        "placeholder": "custom_code",
-        "description": "Function name given to the LLM (^[a-zA-Z0-9_]+$)."
+        "placeholder": "custom_code"
       },
       {
         "type": "textarea",
         "key": "description",
         "label": "Description (shown to LLM)",
         "placeholder": "Runs a custom script.",
-        "rows": 2,
-        "description": "Natural-language tool description for the LLM."
+        "rows": 2
       },
       {
         "type": "tool-params",
         "key": "parametersSchema",
-        "label": "Input parametrlari (AI shularni beradi)",
-        "description": "JSON-Schema {type:'object', properties, required} the LLM fills."
+        "label": "Input parametrlari (AI shularni beradi)"
       },
       {
         "type": "code-editor",
         "key": "jsCode",
-        "label": "JavaScript kodi",
-        "description": "JavaScript. return value (or exit(value)) is the tool result. args and flow context available. Has full engine access (Mongo write, Telegram send, http) — write only the needed operation; avoid infinite loops (30s timeout). Format cleanly (stored verbatim): one statement per line, 2-space indent, spaces around operators, meaningful names — never minified/single-line. See docs_guide(topic='custom_code')."
+        "label": "JavaScript kodi"
       }
     ],
     "defaults": {
@@ -5696,17 +5666,24 @@
       "jsCode": "// return value becomes the tool result\nreturn args.input;",
       "parametersSchema": {
         "type": "object",
-        "properties": {},
-        "required": []
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Input value passed to the custom script as args.input."
+          }
+        },
+        "required": [
+          "input"
+        ]
       }
     },
     "aiDoc": "Custom JavaScript tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='custom_code'. Goja sandbox'da ishlaydi, args + flow context mavjud. QACHON: murakkab mantiq/hisob yoki bir nechta amalni birga bajarish kerak bo'lganda (oddiy DB o'qish → collection, oddiy API → http afzal). DIQQAT: to'liq engine imkoniyatiga ega — Mongo yoz (insert/update/delete), Telegram yubor, http chaqir. Faqat kerakli amal uchun ehtiyot bilan kod yoz, ataylab bo'lmagan buzg'unchi DB amallaridan saqlan, cheksiz loop yozma (30s timeout bor). Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun maxsus JavaScript tool'i",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIKnowledgeToolNode",
@@ -5742,8 +5719,7 @@
         "key": "toolName",
         "label": "Tool nomi",
         "placeholder": "masalan: search_products",
-        "helpText": "LLM shu nom bilan tool'ni chaqiradi (snake_case).",
-        "description": "Function name given to the LLM (^[a-zA-Z0-9_]+$)."
+        "helpText": "LLM shu nom bilan tool'ni chaqiradi (snake_case)."
       },
       {
         "type": "textarea",
@@ -5774,11 +5750,11 @@
     },
     "aiDoc": "RAG knowledge retrieval tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='knowledge'. Bot collection'ini vector DB'ga (lazy) embed qiladi va agent semantic qidiruv orqali tegishli hujjatlarni olishi mumkin — agent uni oddiy matnli `query` bilan chaqiradi. QACHON: faqat hujjat/bilim bazasi bo'yicha semantic (RAG) qidiruv kerak bo'lsa. OG'IR INFRA — bu tool'ni FAQAT tashqi Qdrant URL va embedding provider/kaliti aniq mavjud bo'lganda qo'sh. Built-in vector DB YO'Q: vectorDbUrl bo'sh bo'lsa engine tool'ni qura olmaydi va JIMGINA tashlab ketadi (agent tool'siz qoladi). Shubha bo'lsa AIKnowledgeToolNode QO'SHMA — o'rniga AICollectionToolNode (read) yoki AIHTTPToolNode ishlat. vectorDbUrl: MAJBURIY — tashqi Qdrant URL (masalan https://qdrant.example:6333). embeddingProvider: openai|ollama|gemini (majburiy, ishlaydigan kalit bilan). embeddingModel + embeddingApiKey: majburiy (bo'sh model/kalit → tool ishlamaydi). topK: qaytariladigan hujjatlar soni (standart 5). Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun RAG bilim-baza tool'i (semantik qidiruv)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "CallbackButtonTriggerNode",
@@ -5820,21 +5796,13 @@
         "optional": true
       },
       {
-        "type": "switch",
-        "key": "save_state",
-        "label": "Ma'lumotni saqlash",
-        "optional": true
-      },
-      {
         "type": "text",
         "key": "state_key",
-        "label": "State Key",
+        "label": "Ma'lumotni saqlash — State Key",
         "placeholder": "Masalan: user_message, phone, etc.",
         "helpText": "Ma'lumot shu kalitga saqlanadi",
-        "visibleWhen": {
-          "key": "save_state",
-          "equals": true
-        }
+        "optional": true,
+        "is_state": true
       },
       {
         "type": "select",
@@ -5871,8 +5839,8 @@
           }
         ],
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       },
       {
@@ -5882,8 +5850,8 @@
         "helpText": "Yoqilsa, bu qiymat {{private.key}} sifatida saqlanadi",
         "optional": true,
         "visibleWhen": {
-          "key": "save_state",
-          "equals": true
+          "key": "state_key",
+          "notEquals": ""
         }
       }
     ],
@@ -5940,35 +5908,31 @@
         "placeholder": "{{webhook.body.chat_id}} yoki 123456789",
         "optional": true,
         "defaultVisible": false,
-        "helpText": "Berilsa, webhook kelganda flow aynan shu chat uchun ishlaydi (context'da chat_id/user_id va o'sha foydalanuvchi state'i). Literal raqam yoki {{webhook.body.user_id}} kabi payload'dan oluvchi ifoda yozish mumkin. Bo'sh qoldirsangiz — chatsiz.",
-        "description": "Optional literal chat id or {{webhook.body.user_id}} expression."
+        "helpText": "Berilsa, webhook kelganda flow aynan shu chat uchun ishlaydi (context'da chat_id/user_id va o'sha foydalanuvchi state'i). Literal raqam yoki {{webhook.body.user_id}} kabi payload'dan oluvchi ifoda yozish mumkin. Bo'sh qoldirsangiz — chatsiz."
       },
       {
         "type": "read-only",
         "key": "webhook_url",
         "label": "Webhook URL",
         "autofill": "webhook",
-        "helpText": "Bu node'ning unique URL'i. Tashqi servisga shu URL'ni bering.",
-        "description": "Read-only constructor-filled URL; accepted for round-trip compatibility."
+        "helpText": "Bu node'ning unique URL'i. Tashqi servisga shu URL'ni bering."
       },
       {
         "type": "switch",
         "key": "wait_response",
         "label": "Javobni kutish",
-        "helpText": "Yoqilsa, flow tugagach quyidagi o'zgaruvchidagi qiymat HTTP javob sifatida qaytariladi.",
-        "description": "If true, return response_variable value as HTTP response."
+        "helpText": "Yoqilsa, flow tugagach quyidagi o'zgaruvchidagi qiymat HTTP javob sifatida qaytariladi."
       },
       {
         "type": "text",
         "key": "response_variable",
         "label": "Javob o'zgaruvchisi",
         "placeholder": "response",
-        "helpText": "Flow ichida bu o'zgaruvchiga qiymat yozing (masalan CustomCode'da set_state(\"response\", qiymat) yoki StateNode bilan), shu yerga o'sha nomni yozing. {{response}} yoki {{webhook.body}} kabi ifoda ham bo'ladi.",
+        "helpText": "Flow ichida bu o'zgaruvchiga qiymat yozing (masalan CustomCode'da set_state(\"response\", qiymat) yoki StateNode bilan), shu yerga o'sha nomni yozing. {{state.response}} yoki {{webhook.body}} kabi ifoda ham bo'ladi.",
         "visibleWhen": {
           "key": "wait_response",
           "equals": true
-        },
-        "description": "Context/state variable to return when wait_response=true."
+        }
       }
     ],
     "defaults": {
@@ -6013,30 +5977,28 @@
         "key": "latitude",
         "label": "Latitude",
         "placeholder": "41.311151",
-        "step": 1e-06
+        "step": 0.000001
       },
       {
         "type": "number",
         "key": "longitude",
         "label": "Longitude",
         "placeholder": "69.279737",
-        "step": 1e-06
+        "step": 0.000001
       },
       {
         "type": "text",
         "key": "title",
         "label": "Joy nomi",
         "placeholder": "Samarqand Metro",
-        "i18n": true,
-        "description": "Venue title. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "i18n": true
       },
       {
         "type": "text",
         "key": "address",
         "label": "Manzil",
         "placeholder": "Samarqand ko'chasi, 1",
-        "i18n": true,
-        "description": "Venue address. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "i18n": true
       },
       {
         "type": "action-recipients",
@@ -6123,9 +6085,8 @@
         "type": "text",
         "key": "scheduledAt",
         "label": "Vaqt (ISO yoki {{var}})",
-        "placeholder": "2025-12-31T23:59:59Z yoki {{scheduled_time}}",
-        "helpText": "ISO 8601 formatida vaqt yoki state o'zgaruvchisi",
-        "description": "ISO 8601 datetime or {{key}} expression (bare name; NOT {{state_key}} underscore)."
+        "placeholder": "2025-12-31T23:59:59Z yoki {{state.scheduled_time}}",
+        "helpText": "ISO 8601 formatida vaqt yoki state o'zgaruvchisi"
       }
     ],
     "defaults": {
@@ -6175,6 +6136,11 @@
       "limit": 10,
       "resultKey": "collection_results"
     },
+    "producesState": [
+      "{{resultKey}}",
+      "{{resultKey}}_found",
+      "{{resultKey}}_count"
+    ],
     "aiDoc": "Documents ro'yxatini context'ga yuklaydi (massiv contextKey kalitiga). ⚠️ BRANCH HANDLE YO'Q (found/not_found YO'Q — bu source-handler'li ODDIY node). Bo'sh ro'yxatni keyingi xabar MATNIDA {{^KEY}}Bo'sh{{/KEY}} bilan tekshir, EDGE bilan emas. (found/not_found FAQAT LoadCollectionItemNode'da — adashtirma: Item=branch, List=template render.) Ro'yxatni BITTA xabar matnida ko'rsatish uchun keyingi EditOrSend matnida {{#each KEY}}{{@number}}. {{field}}\\n{{/each}}{{^KEY}}Bo'sh.{{/KEY}} ishlat — KEY = contextKey (CustomCode/ForLoop EMAS — flow_builder Pattern 4a).",
     "summary": "CMS kolleksiyadan yozuvlar ro'yxatini (massiv) yuklaydi",
     "agentCategory": "data"
@@ -6218,7 +6184,7 @@
         "type": "textarea",
         "key": "filter",
         "label": "Filter (JSON)",
-        "placeholder": "{\"_id\": \"{{item_id}}\"}",
+        "placeholder": "{\"_id\": \"{{state.item_id}}\"}",
         "helpText": "Qaysi documentni yangilash kerakligini belgilaydi"
       },
       {
@@ -6234,6 +6200,11 @@
       "filter": "{}",
       "update": "{\"$set\": {}}"
     },
+    "producesState": [
+      "update_matched_count",
+      "update_modified_count",
+      "update_success"
+    ],
     "aiDoc": "Document update",
     "summary": "CMS kolleksiyadagi yozuvni yangilaydi",
     "agentCategory": "data"
@@ -6277,7 +6248,7 @@
         "type": "textarea",
         "key": "filter",
         "label": "Filter (JSON)",
-        "placeholder": "{\"_id\": \"{{item_id}}\"}",
+        "placeholder": "{\"_id\": \"{{state.item_id}}\"}",
         "helpText": "Qaysi documentni o'chirish kerakligini belgilaydi"
       }
     ],
@@ -6285,6 +6256,10 @@
       "collection_name": "",
       "filter": "{}"
     },
+    "producesState": [
+      "delete_count",
+      "delete_success"
+    ],
     "aiDoc": "Document delete",
     "summary": "CMS kolleksiyadan yozuvni o'chiradi",
     "agentCategory": "data"
@@ -6321,9 +6296,8 @@
         "type": "text",
         "key": "fileId",
         "label": "File ID",
-        "placeholder": "{{file_id}} yoki to'g'ridan-to'g'ri ID",
-        "helpText": "Telegram file_id — state o'zgaruvchisi yoki statik qiymat",
-        "description": "Telegram file_id or {{file_id}} (saqlangan ochiq qiymat)."
+        "placeholder": "{{state.file_id}} yoki to'g'ridan-to'g'ri ID",
+        "helpText": "Telegram file_id — state o'zgaruvchisi yoki statik qiymat"
       },
       {
         "type": "text",
@@ -6331,7 +6305,13 @@
         "label": "Saqlash kaliti",
         "placeholder": "downloaded_file",
         "helpText": "State ichida URL saqlanadigan kalit nomi",
-        "description": "State key for the local file path / URL."
+        "is_state": true,
+        "stateSuffixes": [
+          "",
+          "_file_url",
+          "_file_size",
+          "_file_type"
+        ]
       }
     ],
     "defaults": {
@@ -6417,8 +6397,7 @@
         "label": "Natijalar (JSON massiv)",
         "placeholder": "[{\"type\": \"article\", \"id\": \"1\", \"title\": \"Sarlavha\", \"input_message_content\": {\"message_text\": \"Matn\"}}]",
         "helpText": "Telegram InlineQueryResult massivi — JSON formatida",
-        "rows": 6,
-        "description": "Inline query result objects."
+        "rows": 6
       }
     ],
     "defaults": {
@@ -6427,6 +6406,447 @@
     "aiDoc": "Inline query'ga natijalar qaytarish",
     "summary": "Inline query'ga natijalar qaytaradi",
     "agentCategory": "interaction"
+  },
+  {
+    "type": "SendInvoiceNode",
+    "status": "runtime",
+    "category": "actions",
+    "titleKey": "constructor.actions.invoice.name",
+    "descriptionKey": "constructor.actions.invoice.description",
+    "titleFallback": "To'lov (Invoice)",
+    "descriptionFallback": "Telegram to'lov invoice yuboradi.",
+    "iconName": "credit-card",
+    "colorToken": "action-emerald",
+    "size": {
+      "width": 200
+    },
+    "sidebar": {
+      "enabled": false,
+      "groupId": "actions",
+      "sortOrder": 145,
+      "elementType": "invoice"
+    },
+    "handles": [
+      {
+        "preset": "target-default"
+      },
+      {
+        "preset": "source-default"
+      }
+    ],
+    "content": [
+      {
+        "type": "text",
+        "key": "title",
+        "label": "Sarlavha",
+        "placeholder": "Mahsulot nomi yoki {{state.product_name}}"
+      },
+      {
+        "type": "textarea",
+        "key": "description",
+        "label": "Tavsif",
+        "placeholder": "To'lov haqida qisqacha ma'lumot",
+        "rows": 2
+      },
+      {
+        "type": "text",
+        "key": "payload",
+        "label": "Payload (ichki ID)",
+        "placeholder": "order_123 yoki {{state.order_id}}",
+        "helpText": "To'lov triggerida bu qiymat qaytariladi"
+      },
+      {
+        "type": "text",
+        "key": "providerToken",
+        "label": "Provider Token (ixtiyoriy)",
+        "placeholder": "Bo'sh qoldirsangiz Telegram Stars (XTR)",
+        "helpText": "Bo'sh qoldirsangiz Telegram Stars (XTR) ishlatiladi",
+        "optional": true
+      },
+      {
+        "type": "select",
+        "key": "currency",
+        "label": "Valyuta",
+        "options": [
+          {
+            "value": "XTR",
+            "label": "XTR (Telegram Stars)"
+          },
+          {
+            "value": "USD",
+            "label": "USD"
+          },
+          {
+            "value": "EUR",
+            "label": "EUR"
+          },
+          {
+            "value": "RUB",
+            "label": "RUB"
+          },
+          {
+            "value": "UZS",
+            "label": "UZS"
+          }
+        ]
+      },
+      {
+        "type": "array-editor",
+        "key": "prices",
+        "label": "Narxlar ro'yxati",
+        "addLabel": "Narx qo'shish",
+        "defaultItem": {
+          "label": "",
+          "amount": 0
+        },
+        "itemFields": [
+          {
+            "key": "label",
+            "type": "text",
+            "label": "Nomi",
+            "placeholder": "Masalan: Asosiy narx"
+          },
+          {
+            "key": "amount",
+            "type": "number",
+            "label": "Miqdor (eng kichik birlikda)",
+            "placeholder": "XTR uchun stars soni, USD uchun sentlar"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "key": "photoUrl",
+        "label": "Rasm URL (ixtiyoriy)",
+        "placeholder": "https://example.com/product.jpg",
+        "optional": true
+      },
+      {
+        "type": "switch",
+        "key": "needName",
+        "label": "Ism talab qilinsin",
+        "optional": true
+      },
+      {
+        "type": "switch",
+        "key": "needPhone",
+        "label": "Telefon raqam talab qilinsin",
+        "optional": true
+      },
+      {
+        "type": "switch",
+        "key": "needEmail",
+        "label": "Email talab qilinsin",
+        "optional": true
+      },
+      {
+        "type": "switch",
+        "key": "needShippingAddress",
+        "label": "Yetkazib berish manzili talab qilinsin",
+        "optional": true
+      },
+      {
+        "type": "action-recipients",
+        "label": "Qabul qiluvchilar",
+        "optional": true
+      }
+    ],
+    "defaults": {
+      "currency": "XTR",
+      "prices": [
+        {
+          "label": "Narx",
+          "amount": 1
+        }
+      ]
+    },
+    "producesState": [
+      "message_id_{{nodeId}}"
+    ],
+    "summary": "Telegram invoice yuboradi.",
+    "agentCategory": "payments",
+    "aiDoc": "Telegram-native invoice yuboradi. To'lov natijasiga reaksiya kerak bo'lsa SendInvoiceNode → PreCheckoutTriggerNode → SuccessfulPaymentTriggerNode zanjirini qur. providerToken bo'sh va currency='XTR' bo'lsa Telegram Stars ishlaydi. Har bir node alohida global trigger ekanini hisobga ol."
+  },
+  {
+    "type": "PreCheckoutTriggerNode",
+    "status": "runtime",
+    "category": "triggers",
+    "titleKey": "constructor.triggers.preCheckout.name",
+    "descriptionKey": "constructor.triggers.preCheckout.description",
+    "titleFallback": "To'lov tasdiqlash (Pre-checkout)",
+    "descriptionFallback": "Foydalanuvchi to'lovni tasdiqlashdan oldin chaqiriladi.",
+    "iconName": "credit-card",
+    "colorToken": "trigger-blue",
+    "size": {
+      "width": 200
+    },
+    "sidebar": {
+      "enabled": true,
+      "groupId": "triggers",
+      "sortOrder": 35,
+      "elementType": "pre_checkout"
+    },
+    "handles": [
+      {
+        "preset": "target-default"
+      },
+      {
+        "preset": "source-default"
+      }
+    ],
+    "content": [
+      {
+        "type": "select",
+        "key": "filter",
+        "label": "Payload filtri",
+        "options": [
+          {
+            "value": "any",
+            "label": "Har qanday"
+          },
+          {
+            "value": "equals",
+            "label": "Teng"
+          },
+          {
+            "value": "starts_with",
+            "label": "Boshlanadi"
+          },
+          {
+            "value": "contains",
+            "label": "O'z ichiga oladi"
+          }
+        ],
+        "variant": "tabs"
+      },
+      {
+        "type": "text",
+        "key": "value",
+        "label": "Qiymat",
+        "placeholder": "Payload qiymati",
+        "visibleWhen": {
+          "key": "filter",
+          "notEquals": "any"
+        }
+      },
+      {
+        "type": "switch",
+        "key": "autoAnswer",
+        "label": "Avtomatik tasdiqlash",
+        "helpText": "Avtomatik tasdiqlash (10 soniya ichida javob bermasa to'lov bekor bo'ladi)"
+      },
+      {
+        "type": "switch",
+        "key": "global",
+        "label": "Global",
+        "optional": true
+      }
+    ],
+    "footer": [
+      {
+        "type": "actionPanel",
+        "variant": "messageBasic",
+        "hideHandlers": true
+      }
+    ],
+    "defaults": {
+      "filter": "any",
+      "autoAnswer": true,
+      "global": true
+    },
+    "producesState": [
+      "pre_checkout_payload",
+      "pre_checkout_total_amount",
+      "pre_checkout_currency"
+    ],
+    "summary": "Telegram pre-checkout so'rovini qabul qiladi.",
+    "agentCategory": "payments",
+    "aiDoc": "Telegram invoice to'lovining pre-checkout bosqichi uchun global trigger. Odatda autoAnswer=true. SendInvoiceNode bilan bir xil payload/filter orqali bog'la; bu oddiy edge bilan ulanadigan action emas, alohida trigger."
+  },
+  {
+    "type": "SuccessfulPaymentTriggerNode",
+    "status": "runtime",
+    "category": "triggers",
+    "titleKey": "constructor.triggers.successfulPayment.name",
+    "descriptionKey": "constructor.triggers.successfulPayment.description",
+    "titleFallback": "Muvaffaqiyatli to'lov",
+    "descriptionFallback": "To'lov muvaffaqiyatli amalga oshganda chaqiriladi.",
+    "iconName": "badge-check",
+    "colorToken": "trigger-blue",
+    "size": {
+      "width": 200
+    },
+    "sidebar": {
+      "enabled": true,
+      "groupId": "triggers",
+      "sortOrder": 36,
+      "elementType": "successful_payment"
+    },
+    "handles": [
+      {
+        "preset": "target-default"
+      },
+      {
+        "preset": "source-default"
+      }
+    ],
+    "content": [
+      {
+        "type": "select",
+        "key": "filter",
+        "label": "Payload filtri",
+        "options": [
+          {
+            "value": "any",
+            "label": "Har qanday"
+          },
+          {
+            "value": "equals",
+            "label": "Teng"
+          },
+          {
+            "value": "starts_with",
+            "label": "Boshlanadi"
+          },
+          {
+            "value": "contains",
+            "label": "O'z ichiga oladi"
+          }
+        ],
+        "variant": "tabs"
+      },
+      {
+        "type": "text",
+        "key": "value",
+        "label": "Qiymat",
+        "placeholder": "Payload qiymati",
+        "visibleWhen": {
+          "key": "filter",
+          "notEquals": "any"
+        }
+      },
+      {
+        "type": "switch",
+        "key": "global",
+        "label": "Global",
+        "optional": true
+      }
+    ],
+    "defaults": {
+      "filter": "any",
+      "global": true
+    },
+    "producesState": [
+      "payment_payload",
+      "payment_total_amount",
+      "payment_currency",
+      "payment_telegram_charge_id"
+    ],
+    "summary": "Telegram to'lovi muvaffaqiyatli bo'lganda ishga tushadi.",
+    "agentCategory": "payments",
+    "aiDoc": "Telegram-native invoice muvaffaqiyatli to'langanda ishlaydigan global trigger. payment_payload/payment_total_amount/payment_currency contextlarini beradi. SendInvoiceNode bilan bir xil payload filter ishlat."
+  },
+  {
+    "type": "PaymentStatusTriggerNode",
+    "status": "runtime",
+    "category": "triggers",
+    "titleKey": "constructor.triggers.paymentStatus.name",
+    "descriptionKey": "constructor.triggers.paymentStatus.description",
+    "titleFallback": "To'lov statusi",
+    "descriptionFallback": "Payment Link order statusi kelganda chaqiriladi.",
+    "iconName": "credit-card",
+    "colorToken": "trigger-blue",
+    "size": {
+      "width": 200
+    },
+    "sidebar": {
+      "enabled": false,
+      "groupId": "triggers",
+      "sortOrder": 37,
+      "elementType": "payment_status"
+    },
+    "handles": [
+      {
+        "preset": "target-default"
+      },
+      {
+        "preset": "source-default"
+      }
+    ],
+    "content": [
+      {
+        "type": "select",
+        "key": "status",
+        "label": "Status",
+        "options": [
+          {
+            "value": "any",
+            "label": "Har qanday"
+          },
+          {
+            "value": "paid",
+            "label": "Paid"
+          },
+          {
+            "value": "failed",
+            "label": "Failed"
+          }
+        ],
+        "variant": "tabs"
+      },
+      {
+        "type": "text",
+        "key": "orderId",
+        "label": "Order ID",
+        "placeholder": "{{payment_order_id}} yoki bo'sh"
+      },
+      {
+        "type": "select",
+        "key": "provider",
+        "label": "Provider",
+        "options": [
+          {
+            "value": "",
+            "label": "Har qanday"
+          },
+          {
+            "value": "click",
+            "label": "Click"
+          },
+          {
+            "value": "paycue",
+            "label": "Paycue"
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "key": "global",
+        "label": "Global",
+        "optional": true
+      }
+    ],
+    "defaults": {
+      "status": "paid",
+      "provider": "",
+      "global": true
+    },
+    "producesState": [
+      "payment_order_id",
+      "payment_status",
+      "payment_amount",
+      "payment_net",
+      "payment_commission",
+      "payment_comment",
+      "payment_provider",
+      "order_id",
+      "status",
+      "amount",
+      "provider"
+    ],
+    "summary": "Botspace payment callback holatini qabul qiladi.",
+    "agentCategory": "payments",
+    "aiDoc": "Click/Paycue payment callback kelganda ishlaydigan global trigger. PaymentNode yoki payment_link order holatiga reaksiya qilish uchun status/orderId/provider filterlarini ishlatadi; payment context qiymatlarini chiqaradi."
   },
   {
     "type": "ChatJoinRequestTriggerNode",
@@ -6460,8 +6880,7 @@
         "type": "switch",
         "key": "global",
         "label": "Global",
-        "optional": true,
-        "description": "Always-global trigger; fires on any chat join request."
+        "optional": true
       }
     ],
     "defaults": {
@@ -6529,22 +6948,19 @@
             "label": "Paycue"
           }
         ],
-        "variant": "tabs",
-        "description": "To'lov provayderi — qurishdan OLDIN foydalanuvchidan SO'RA (ask_user select: 'click' yoki 'paycue'). FAQAT 'click' (Click pay-link) yoki 'paycue' (Humo-karta — foydalanuvchi aniq summani kartaga o'tkazadi, avtomatik tasdiqlanadi). Boshqasini (payme, uzcard...) O'YLAB TOPMA."
+        "variant": "tabs"
       },
       {
         "type": "text",
         "key": "amount",
         "label": "Miqdor",
-        "placeholder": "10000 yoki {{summa}}",
-        "description": "To'lov summasi — son yoki {{var}} (masalan {{total}} yoki {{public.total}})."
+        "placeholder": "10000 yoki {{state.summa}}"
       },
       {
         "type": "text",
         "key": "comment",
         "label": "Izoh (mijozga ko'rinadigan)",
-        "placeholder": "Buyurtma #{{order_id}} uchun to'lov",
-        "description": "To'lov izohi. {{}} o'zgaruvchilar qo'llab-quvvatlanadi."
+        "placeholder": "Buyurtma #{{state.order_id}} uchun to'lov"
       },
       {
         "type": "text",
@@ -6552,21 +6968,23 @@
         "label": "Tugma matni",
         "placeholder": "💳 To'lash",
         "optional": true,
-        "i18n": true,
-        "description": "Mijozga ko'rinadigan 'To'lash' tugmasi matni. i18n: oddiy string YOKI marker obyekt {\"__i18n\": true, \"en\": \"...\", \"uz\": \"...\", \"ru\": \"...\"} — ko'p tilli botda marker ishlat (flow.set_languages oldin chaqirilsin)."
+        "i18n": true
       }
     ],
     "defaults": {
       "paymentType": "click",
       "buttonText": "💳 To'lash"
     },
+    "producesState": [
+      "payment_error"
+    ],
     "aiDoc": "Botspace orqali to'lov. ⚠️ QURISHDAN OLDIN foydalanuvchidan to'lov tizimini SO'RA (ask_user select: 'click' yoki 'paycue') va javobni paymentType'ga ber. paymentType FAQAT 'click' (Click pay-link tugmasi) yoki 'paycue' (Humo-karta — mijozga aniq summani kartaga o'tkazish ko'rsatmasi yuboriladi, tugma bo'lmaydi, avtomatik tasdiqlanadi) — boshqasini o'ylab topma. Egasi to'lov tizimi bilan o'zi integratsiya QILMAYDI. To'lov tasdiqlansa 'paid', aks holda 'failed'. amount: son yoki {{var}}. To'lovdan keyin context: payment_order_id, payment_amount, payment_net, payment_status, payment_comment, payment_provider. Eslatma: bu Telegram Stars EMAS — lokal kartalar (Click). Telegram Stars uchun alohida invoice (SendInvoiceNode) mexanizmi ishlatiladi.",
     "summary": "Botspace orqali to'lov qabul qiladi (Click/Paycue)",
+    "agentCategory": "payment",
     "sourceHandles": [
       "paid",
       "failed"
-    ],
-    "agentCategory": "payment"
+    ]
   },
   {
     "type": "ApproveChatJoinRequestNode",
@@ -6601,16 +7019,14 @@
         "key": "chatId",
         "label": "Chat ID",
         "placeholder": "Bo'sh = so'rov kelgan guruh ({{join_request_chat_id}})",
-        "optional": true,
-        "description": "Chat id yoki {{var}}. Bo'sh bo'lsa context: join_request_chat_id."
+        "optional": true
       },
       {
         "type": "text",
         "key": "userId",
         "label": "User ID",
         "placeholder": "Bo'sh = so'rovchi ({{join_request_user_id}})",
-        "optional": true,
-        "description": "User id yoki {{var}}. Bo'sh bo'lsa context: join_request_user_id."
+        "optional": true
       }
     ],
     "defaults": {},
@@ -6651,16 +7067,14 @@
         "key": "chatId",
         "label": "Chat ID",
         "placeholder": "Bo'sh = so'rov kelgan guruh ({{join_request_chat_id}})",
-        "optional": true,
-        "description": "Chat id yoki {{var}}. Bo'sh bo'lsa context: join_request_chat_id."
+        "optional": true
       },
       {
         "type": "text",
         "key": "userId",
         "label": "User ID",
         "placeholder": "Bo'sh = so'rovchi ({{join_request_user_id}})",
-        "optional": true,
-        "description": "User id yoki {{var}}. Bo'sh bo'lsa context: join_request_user_id."
+        "optional": true
       }
     ],
     "defaults": {},
@@ -6701,39 +7115,34 @@
         "key": "chatId",
         "label": "Chat ID",
         "placeholder": "Bo'sh = joriy chat (kanal id: -100...)",
-        "optional": true,
-        "description": "Kanal/guruh id yoki {{var}}. Bo'sh bo'lsa joriy chat ishlatiladi."
+        "optional": true
       },
       {
         "type": "text",
         "key": "name",
         "label": "Havola nomi",
         "placeholder": "Ixtiyoriy (admin ko'radi)",
-        "optional": true,
-        "description": "Havola nomi (faqat admin ko'radi). Ixtiyoriy. {{var}} mumkin."
+        "optional": true
       },
       {
         "type": "number",
         "key": "memberLimit",
         "label": "A'zolar chegarasi",
         "placeholder": "1 = shaxsiy havola",
-        "optional": true,
-        "description": "Havoladan necha kishi foydalana oladi (1..99999). Shaxsiy havola uchun 1."
+        "optional": true
       },
       {
         "type": "number",
         "key": "expireDate",
         "label": "Amal qilish muddati (unix)",
         "placeholder": "Ixtiyoriy",
-        "optional": true,
-        "description": "Amal qilish muddati — unix sekund. Ixtiyoriy."
+        "optional": true
       },
       {
         "type": "switch",
         "key": "createsJoinRequest",
         "label": "Qo'shilish so'rovini talab qilish",
-        "optional": true,
-        "description": "True bo'lsa a'zolik admin tasdig'ini talab qiladi."
+        "optional": true
       },
       {
         "type": "text",
@@ -6741,13 +7150,15 @@
         "label": "Natija o'zgaruvchisi",
         "placeholder": "invite_link",
         "optional": true,
-        "is_state": true,
-        "description": "Havola saqlanadigan context o'zgaruvchisi. Default: invite_link."
+        "is_state": true
       }
     ],
     "defaults": {
       "resultVar": "invite_link"
     },
+    "producesState": [
+      "invite_link_error"
+    ],
     "aiDoc": "Kanal/guruh (xususiy kanal ham) uchun join (invite) HAVOLA yaratadi — Telegram createChatInviteLink. Bot o'sha kanalda admin va 'invite via link' huquqiga ega bo'lishi shart. Yaratilgan havola context'ga `resultVar` (default `invite_link`) bilan yoziladi — keyin SendTextMessageNode'da {{invite_link}} sifatida yuboriladi. Oddiy action, bitta chiqish. Tipik foydalanish: to'lov o'tgach shaxsiy bir martalik (memberLimit=1) havola berish: PaymentNode → CreateInviteLinkNode → SendTextMessageNode({{invite_link}}).",
     "summary": "Kanal/guruh uchun taklif (invite) havolasi yaratadi",
     "agentCategory": "integration"
@@ -6784,8 +7195,7 @@
         "type": "credential",
         "key": "credential_id",
         "credentialType": "google_sheets",
-        "label": "Google Sheets credential",
-        "description": "type_key 'google_sheets' bo'lgan oauth2 credential id'si."
+        "label": "Google Sheets credential"
       },
       {
         "type": "select",
@@ -6808,16 +7218,14 @@
             "value": "clear",
             "label": "Tozalash"
           }
-        ],
-        "description": "append: qator qo'shish | read: o'qish | update: yangilash | clear: tozalash."
+        ]
       },
       {
         "type": "dynamic_select",
         "key": "spreadsheet_id",
         "label": "Jadval (Spreadsheet)",
         "resource": "google_spreadsheets",
-        "credentialKey": "credential_id",
-        "description": "Spreadsheet ID (URL'dagi /d/<ID>/). {{var}} qo'llab-quvvatlanadi."
+        "credentialKey": "credential_id"
       },
       {
         "type": "dynamic_select",
@@ -6827,16 +7235,14 @@
         "credentialKey": "credential_id",
         "dependsOn": [
           "spreadsheet_id"
-        ],
-        "description": "Sheet/tab nomi (masalan 'Sheet1'). range'da '!' bo'lmasa engine sheet + range'ni birlashtiradi → 'Sheet1!A1:C10'. {{var}} qo'llanadi."
+        ]
       },
       {
         "type": "text",
         "key": "range",
         "label": "Range (ixtiyoriy)",
         "placeholder": "A1 yoki A1:C10",
-        "optional": true,
-        "description": "A1 range. To'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10'. sheet ham, range ham bo'sh bo'lmasligi kerak. {{var}} qo'llanadi."
+        "optional": true
       },
       {
         "type": "dynamic_inputs",
@@ -6855,8 +7261,7 @@
             "append",
             "update"
           ]
-        },
-        "description": "JSON 2D massiv, masalan [[\"a\",\"b\"],[\"c\",\"d\"]]. append/update uchun. {{var}} qo'llanadi."
+        }
       },
       {
         "type": "text",
@@ -6864,7 +7269,13 @@
         "label": "Natija o'zgaruvchisi",
         "placeholder": "sheets_response",
         "optional": true,
-        "description": "XOM Google API javobi saqlanadigan context kaliti (default 'sheets_response'). read'da shakl {majorDimension, range, values} — values 2D massiv, 1-qator sarlavha. Bu OBYEKT, {{#each}} bilan ISHLAMAYDI; ro'yxat uchun rowsVariable'ni ishlat."
+        "is_state": true,
+        "stateDefault": "sheets_response",
+        "stateSuffixes": [
+          "",
+          "_status",
+          "_rows"
+        ]
       },
       {
         "type": "text",
@@ -6873,7 +7284,7 @@
         "placeholder": "sheets_response_rows",
         "helpText": "Toza qatorlar (array-of-objects) shu context kalitiga saqlanadi. Default: <responseVariable>_rows. Xabarda {{#each shu_kalit}}{{ustun_nomi}}{{/each}} bilan ishlatiladi.",
         "optional": true,
-        "description": "read uchun TOZA rows saqlanadigan context kaliti (ixtiyoriy; default '<responseVariable>_rows' = 'sheets_response_rows'). Engine values'ning 1-qatorini sarlavha (kalit) qilib array-of-objects yozadi: [{ustun_nomi: qiymat, ...}, ...]. Matnda `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` bilan ishlat — ro'yxat chiqarishda XOM responseVariable o'rniga ALBATTA SHUNI ishlat."
+        "is_state": true
       },
       {
         "type": "condition-list",
@@ -6900,9 +7311,8 @@
       "filterConditions": []
     },
     "producesState": [
-      "sheets_response",
-      "sheets_response_rows",
-      "sheets_success"
+      "sheets_success",
+      "google_error"
     ],
     "aiDoc": "Google Sheets (v4) — oauth2 credential orqali. credential_id type_key 'google_sheets' bo'lgan credential'ga ishora qiladi (secret flow'da emas, engine runtime'da access_token'ga aylantiradi). operation: append/read/update/clear. spreadsheet_id majburiy. range to'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10' (engine sheet+range birlashtiradi) — sheet yoki range'dan kamida biri bo'lishi shart. values JSON 2D massiv (append/update). JAVOB SHAKLI (read): context[responseVariable] (default 'sheets_response') = XOM Google API javobi {majorDimension, range, values} — values 2D massiv, 1-QATOR SARLAVHA, qolganlari ma'lumot; bu OBYEKT, {{#each}} bilan ISHLAMAYDI. Engine yana context[rowsVariable] (default '<responseVariable>_rows' = 'sheets_response_rows') ga TOZA array-of-objects yozadi (sarlavha qatori kalit): [{ustun_nomi: qiymat}, ...]. Ro'yxatni xabarda chiqarish uchun ALBATTA rowsVariable'ni ishlat: `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` — XOM responseVariable'ni {{#each}} bilan ISHLATMA. Yana context[responseVariable+'_status'], context['sheets_success'] ham yoziladi. READ FILTER (in-memory, STATIK — AI-slot YO'Q): faqat ayrim qatorlar kerak bo'lsa filterConditions bilan rowsni field/op/value bo'yicha filterla, filterMatch ('and'|'or', default 'and') ularni birlashtiradi. op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists; field — ustun nomi (1-qator sarlavhasi); value'da {{chat_id}}/{{<key>}} (saqlangan ochiq qiymat — yalang'och nom; {{state_<key>}} underscore RESOLVE BO'LMAYDI) ishlaydi (masalan price>100000 yoki category=={{category}}). Filterlangan natija ham rowsVariable'ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
     "summary": "Google Sheets bilan ishlaydi (append/read/update/clear)",
@@ -6940,8 +7350,7 @@
         "type": "credential",
         "key": "credential_id",
         "credentialType": "google_drive",
-        "label": "Google Drive credential",
-        "description": "type_key 'google_drive' bo'lgan oauth2 credential id'si."
+        "label": "Google Drive credential"
       },
       {
         "type": "select",
@@ -6964,8 +7373,7 @@
             "value": "delete",
             "label": "O'chirish"
           }
-        ],
-        "description": "list: ro'yxat | create_folder: papka | upload: matn fayl | delete: o'chirish."
+        ]
       },
       {
         "type": "text",
@@ -6975,8 +7383,7 @@
         "visibleWhen": {
           "key": "operation",
           "equals": "list"
-        },
-        "description": "list uchun Drive q filtri, masalan \"name contains 'report'\". {{var}} qo'llanadi."
+        }
       },
       {
         "type": "text",
@@ -6989,8 +7396,7 @@
             "create_folder",
             "upload"
           ]
-        },
-        "description": "create_folder / upload uchun fayl yoki papka nomi."
+        }
       },
       {
         "type": "dynamic_select",
@@ -7005,8 +7411,7 @@
             "create_folder",
             "upload"
           ]
-        },
-        "description": "Ota-papka id'si (ixtiyoriy)."
+        }
       },
       {
         "type": "textarea",
@@ -7016,8 +7421,7 @@
         "visibleWhen": {
           "key": "operation",
           "equals": "upload"
-        },
-        "description": "upload uchun matn kontent (v1 = text/plain). {{var}} qo'llanadi."
+        }
       },
       {
         "type": "dynamic_select",
@@ -7029,8 +7433,7 @@
         "visibleWhen": {
           "key": "operation",
           "equals": "delete"
-        },
-        "description": "delete uchun fayl id'si."
+        }
       },
       {
         "type": "text",
@@ -7038,7 +7441,12 @@
         "label": "Natija o'zgaruvchisi",
         "placeholder": "drive_response",
         "optional": true,
-        "description": "Natija saqlanadigan context kaliti (default 'drive_response')."
+        "is_state": true,
+        "stateDefault": "drive_response",
+        "stateSuffixes": [
+          "",
+          "_status"
+        ]
       }
     ],
     "defaults": {
@@ -7051,8 +7459,8 @@
       "responseVariable": "drive_response"
     },
     "producesState": [
-      "drive_response",
-      "drive_success"
+      "drive_success",
+      "google_error"
     ],
     "aiDoc": "Google Drive (v3) — oauth2 credential orqali. credential_id type_key 'google_drive' bo'lgan credential'ga ishora qiladi. operation: list/create_folder/upload/delete. list uchun query (Drive q filtri); create_folder/upload uchun file_name; folder_id ota-papka; upload uchun content (matn) + mime_type (default 'text/plain'); delete uchun file_id. Natija context[responseVariable] (default 'drive_response'), _status, context['drive_success'] ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_drive'); yo'q bo'lsa credentials.connect_oauth(type_key='google_drive') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
     "summary": "Google Drive bilan ishlaydi (list/create_folder/upload/delete)",
@@ -7092,16 +7500,14 @@
         "key": "tz",
         "label": "Timezone",
         "placeholder": "UTC",
-        "helpText": "IANA timezone, e.g. Asia/Tashkent. Defaults to UTC.",
-        "description": "IANA timezone the tool computes in (e.g. 'Asia/Tashkent'). Default 'UTC'."
+        "helpText": "IANA timezone, e.g. Asia/Tashkent. Defaults to UTC."
       },
       {
         "type": "text",
         "key": "format",
         "label": "Date Format",
-        "placeholder": "2006-01-02 15:04:05",
-        "helpText": "Go time layout or leave empty for ISO 8601.",
-        "description": "Optional output format hint (e.g. an strftime/layout string). Empty = engine default (ISO 8601)."
+        "placeholder": "DD.MM.YYYY HH:mm",
+        "helpText": "Tokenlar: YYYY, MM, DD, HH, mm, ss. Bo'sh qolsa YYYY-MM-DD HH:mm:ss."
       }
     ],
     "defaults": {
@@ -7111,11 +7517,11 @@
     },
     "aiDoc": "Date/time tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='datetime'. Credential YO'Q. Agentga haqiqiy soat + sana hisobini beradi — u 'bugun'/'hozir'ni taxmin qilmaydi, sanalarni o'z 'boshida' hisoblamaydi. LLM runtime args: op (now|add|diff), amount, unit (minutes|hours|days|weeks|months|years), from, to (ISO). QACHON: bron/jadval/eslatma botlari joriy sana yoki '3 kundan keyin' / 'X gacha necha kun' kerak bo'lganda. Ixtiyoriy data: tz (IANA, default UTC), format. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun sana/vaqt tool'i (haqiqiy soat va sana)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIGoogleSheetsToolNode",
@@ -7151,23 +7557,20 @@
         "key": "credential_id",
         "credentialType": "google_sheets",
         "label": "Google Sheets Credential",
-        "required": true,
-        "description": "type_key 'google_sheets' OAuth credential id (REQUIRED). credentials.list(type_key='google_sheets')."
+        "required": true
       },
       {
         "type": "text",
         "key": "spreadsheetId",
         "label": "Spreadsheet ID",
         "placeholder": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
-        "helpText": "Google Sheets spreadsheet ID from the URL.",
-        "description": "Default spreadsheet ID (URL /d/<ID>/) used when the LLM omits spreadsheet_id. Optional."
+        "helpText": "Google Sheets spreadsheet ID from the URL."
       },
       {
         "type": "text",
         "key": "sheet",
         "label": "Sheet Name",
-        "placeholder": "Sheet1",
-        "description": "Default sheet/tab name (e.g. 'Sheet1') used when the LLM omits sheet. Optional."
+        "placeholder": "Sheet1"
       },
       {
         "type": "select",
@@ -7181,10 +7584,25 @@
           {
             "value": "append",
             "label": "Append"
+          },
+          {
+            "value": "update",
+            "label": "Update"
+          },
+          {
+            "value": "clear",
+            "label": "Clear"
+          },
+          {
+            "value": "list_tabs",
+            "label": "List tabs"
+          },
+          {
+            "value": "list_spreadsheets",
+            "label": "List spreadsheets"
           }
         ],
-        "variant": "tabs",
-        "description": "Default operation when the LLM omits it (the LLM normally picks at runtime): 'read' | 'append' | 'update' | 'clear' | 'list_tabs'."
+        "variant": "tabs"
       }
     ],
     "defaults": {
@@ -7196,11 +7614,11 @@
     },
     "aiDoc": "Google Sheets tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='google_sheets'. Credential bilan sheet'ni KO'RISH (read, list_tabs) va BOSHQARISH (append, update, clear) — lookup jadval, log, buyurtma jurnali. LLM runtime'da operation'ni O'ZI tanlaydi (node'da static EMAS). Operatsiyalar: read (range'dan qatorlar o'qish), append (qator(lar) qo'shish, values 2D), update (range'ga values yozish, values 2D), clear (range'ni tozalash), list_tabs (sahifa/tab nomlari ro'yxati). Runtime args: operation, spreadsheet_id, sheet, range, values. CREDENTIAL MAJBURIY: credential_id — type_key 'google_sheets' OAuth. Qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (API orqali YARATIB BO'LMAYDI); ulangach qayta list qilib credential_id ol. Ixtiyoriy default'lar: spreadsheetId, sheet, operation. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun Google Sheets tool'i (o'qish/boshqarish)",
+    "agentCategory": "ai",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "ai"
+    "targetHandles": []
   },
   {
     "type": "AIPaymentLinkToolNode",
@@ -7245,8 +7663,7 @@
             "label": "PayCue"
           }
         ],
-        "variant": "tabs",
-        "description": "Payment provider (REQUIRED — ASK the user first): 'click' or 'paycue'. No 'payme'."
+        "variant": "tabs"
       },
       {
         "type": "number",
@@ -7255,8 +7672,7 @@
         "placeholder": "100000000",
         "optional": true,
         "defaultVisible": false,
-        "min": 1,
-        "description": "Build-time injection guard (NOT chosen by the LLM). Engine clamps the runtime `amount` arg to this ceiling so an injected user cannot bill a huge sum. Default 100000000."
+        "min": 1
       },
       {
         "type": "widget",
@@ -7270,11 +7686,11 @@
     },
     "aiDoc": "Dinamik to'lov-havola tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='payment_link'. Agent uchib to'lov havolasi yaratadi (sotuv-agent narx aytib so'ng hisob chiqaradi). LLM runtime args: amount (MAJBURIY), description. paymentType qurish vaqtida belgilanadi, LLM tanlamaydi. ⚠️ FIRE-AND-FORGET: bu tool faqat to'lov HAVOLASINI qaytaradi — to'lov TASDIG'I (callback/paid event) YO'Q. Agent havola berdi, tugadi; bot to'langan-to'lanmaganini BILMAYDI va unga reaksiya QILA OLMAYDI. QACHON ISHLAT: faqat 'shunchaki to'lov havolasini ko'rsat' holati uchun. Agar to'lov muvaffaqiyatiga REAKSIYA kerak bo'lsa (to'lasa tovar/xizmat ber, kanalga qo'sh, buyurtmani tasdiqla) — bu tool EMAS, balki: (a) PaymentNode (Click/Paycue, paid/failed tarmoqlari — bot to'lovni KUTADI va branch qiladi), YOKI (b) Telegram-native invoice: SendInvoiceNode → PreCheckoutTriggerNode (autoAnswer) → SuccessfulPaymentTriggerNode (to'lov o'tganda global trigger ishga tushadi). QURISH QOIDASI (PaymentNode kabi): qo'shishdan oldin foydalanuvchidan provayderni SO'RA — 'click' yoki 'paycue' FAQAT, 'payme' O'YLAB TOPMA. ⚠️ INJECTION-GUARD: paymentType VA maxAmount (default 100000000) qurish vaqtida qotiriladi, LLM o'zgartira OLMAYDI — engine runtime `amount`ni maxAmount'ga clamp qiladi (injektsiya qilingan user ulkan summa yozolmaydi). Havola to'langan-to'lanmaganini KEYIN tekshirish kerak bo'lsa shu agentga AIPaymentStatusToolNode (tool='payment_status') ham ula. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun dinamik to'lov-havola yaratish tool'i",
+    "agentCategory": "payment",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "payment"
+    "targetHandles": []
   },
   {
     "type": "AIPaymentStatusToolNode",
@@ -7306,11 +7722,6 @@
     ],
     "content": [
       {
-        "type": "description",
-        "textKey": "constructor.ai.paymentStatusTool.info",
-        "textFallback": "AI checks payment status (paid/pending/failed). The order_id is determined by the AI agent; project_id is provided automatically by the engine."
-      },
-      {
         "type": "widget",
         "widgetKey": "aiToolParamConfig"
       }
@@ -7320,11 +7731,11 @@
     },
     "aiDoc": "To'lov-status tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='payment_status'. Agent to'lov BUYURTMASINING holatini tekshiradi (paid/pending/failed) — masalan payment_link'dan keyin user 'to'ladim' desa, tovar berishdan oldin agent TEKSHIRADI. LLM runtime arg: order_id (MAJBURIY — oldingi payment_link / PaymentNode qaytargan order id). Engine qidiruvni JORIY loyihaga cheklaydi (boshqa loyiha buyurtmalarini o'qiy olmaydi). Qurish konfiguratsiyasi YO'Q, credential YO'Q. payment_link bilan JUFT: payment_link faqat havola YARATADI (tasdiq yo'q), payment_status esa to'langanini O'QIYDI — sotuv-agentga ikkalasini ham ula. Qattiq 'to'lasa-tovar' branch kerak bo'lsa baribir PaymentNode (paid/failed) afzal — agent tool maslahatchi, eshik EMAS. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun to'lov buyurtmasi statusini tekshirish tool'i",
+    "agentCategory": "payment",
     "sourceHandles": [
       "source-default"
     ],
-    "targetHandles": [],
-    "agentCategory": "payment"
+    "targetHandles": []
   },
   {
     "type": "SwitchNode",
@@ -7362,8 +7773,7 @@
         "type": "text",
         "key": "value",
         "label": "Qiymat",
-        "placeholder": "{{status}}",
-        "description": "Expression/value to compare, e.g. {{status}}."
+        "placeholder": "{{state.status}}"
       },
       {
         "type": "array-editor",
@@ -7402,12 +7812,15 @@
       "cases": [],
       "default": false
     },
+    "producesState": [
+      "exit_output"
+    ],
     "aiDoc": "Bitta value'ni cases[].match bilan solishtiradi. Mos case output-<case.id> yoki id bo'sh bo'lsa output-case_<index> handle'iga chiqadi; default=true bo'lsa mos kelmaganda output-default.",
     "summary": "Bitta qiymatni case'lar bilan solishtirib mos tarmoqqa yo'naltiradi",
+    "agentCategory": "flow_control",
     "sourceHandles": [
       "output-default"
-    ],
-    "agentCategory": "flow_control"
+    ]
   },
   {
     "type": "SetLanguageNode",
@@ -7442,13 +7855,19 @@
         "key": "language",
         "label": "Til (kodi)",
         "placeholder": "uz",
-        "helpText": "Foydalanuvchi uchun o'rnatiladigan til kodini kiriting (masalan: uz, ru, en) yoki {{callback_data}} kabi o'zgaruvchi. Bo'sh qoldirilsa, til o'rnatilmaydi — lekin til ro'yxati kontekstga yuklanadi.\n\nEngine chiqaruvchi o'zgaruvchilar:\n• {{public_lang}} — o'rnatilgan til kodi\n• {{languages}} — barcha tillar ro'yxati (kodlar massivi)\n• {{language_options}} — [{code, name, flag}] formatida tillar (menyu qurish uchun)\n• {{current_lang}} — hozirgi faol til kodi\n\nMenyu misoli (CustomCode yoki SendText ichida):\n{{#each language_options}}{{this.flag}} {{this.name}}|set_lang_{{this.code}}\n{{/each}}",
-        "description": "Language code or {{callback_data}}; empty only exposes language helpers."
+        "helpText": "Foydalanuvchi uchun o'rnatiladigan til kodini kiriting (masalan: uz, ru, en) yoki {{callback_data}} kabi o'zgaruvchi. Bo'sh qoldirilsa, til o'rnatilmaydi — lekin til ro'yxati kontekstga yuklanadi.\n\nEngine chiqaruvchi o'zgaruvchilar:\n• {{public_lang}} — o'rnatilgan til kodi\n• {{languages}} — barcha tillar ro'yxati (kodlar massivi)\n• {{language_options}} — [{code, name, flag}] formatida tillar (menyu qurish uchun)\n• {{current_lang}} — hozirgi faol til kodi\n\nMenyu misoli (CustomCode yoki SendText ichida):\n{{#each language_options}}{{this.flag}} {{this.name}}|set_lang_{{this.code}}\n{{/each}}"
       }
     ],
     "defaults": {
       "language": ""
     },
+    "producesState": [
+      "lang",
+      "languages",
+      "language_options",
+      "current_lang",
+      "set_language_error"
+    ],
     "aiDoc": "Foydalanuvchi tilini o'rnatadi va languages/language_options/current_lang contextlarini ochadi. language bo'sh bo'lsa faqat til ro'yxati yuklanadi.",
     "summary": "Foydalanuvchi tilini o'rnatadi (i18n)",
     "agentCategory": "data"
