@@ -6286,7 +6286,7 @@
       "width": 200
     },
     "sidebar": {
-      "enabled": true,
+      "enabled": false,
       "groupId": "integrations",
       "sortOrder": 20,
       "elementType": "download"
@@ -6326,9 +6326,10 @@
       "fileId": "",
       "saveAs": "downloaded_file"
     },
-    "aiDoc": "Telegram file/photo'ni yuklab olib state'ga saqlash",
-    "summary": "Telegram fayl/rasmni yuklab state'ga saqlaydi",
-    "agentCategory": "integration"
+    "aiDoc": "LEGACY alias — yangi flow'da ishlatma. Engine fileId maydonini o'qimaydi; node amalda DownloadFileNode bilan bir xil joriy Telegram message faylini yuklaydi. Mavjud eski flow'ni render qilish uchun saqlangan. Yangi flow uchun aniq DownloadFileNode ishlat.",
+    "summary": "Legacy DownloadFileNode alias (yangi flow'da ishlatilmaydi)",
+    "agentCategory": "integration",
+    "agentHidden": true
   },
   {
     "type": "CronNode",
@@ -6344,7 +6345,7 @@
       "width": 200
     },
     "sidebar": {
-      "enabled": true,
+      "enabled": false,
       "groupId": "triggers",
       "sortOrder": 28,
       "elementType": "cron"
@@ -6367,9 +6368,10 @@
     "defaults": {
       "cronExpression": "0 9 * * *"
     },
-    "aiDoc": "Inline cron — periodic task in middle of flow",
-    "summary": "Flow o'rtasida davriy (cron) vazifa bajaradi",
-    "agentCategory": "integration"
+    "aiDoc": "LEGACY/NO-OP — yangi flow'da ishlatma. Engine CronNode handler faqat log yozadi, scheduler uni schedule qilmaydi. Periodik flow uchun root CronTriggerNode ishlat; bir martalik kelajakdagi davom uchun SchedulerNode ishlat.",
+    "summary": "Legacy no-op cron (CronTriggerNode ishlating)",
+    "agentCategory": "integration",
+    "agentHidden": true
   },
   {
     "type": "AnswerInlineQueryNode",
