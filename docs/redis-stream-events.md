@@ -19,8 +19,8 @@ talks to.
   `engine.redis_host`/`engine.redis_port`/`engine.redis_password`, i.e.
   `APP_ENGINE_REDIS_HOST` etc. — no new config).
 
-Producer (engine-golang, **not yet implemented** — this is the contract to
-build against):
+Producer (engine-golang `internal/eventstream`, live when
+`BACKEND_EVENTS_STREAM=true`):
 
 ```
 XADD backend:events * payload '{"task":"<event-type>","args":{...}}'
@@ -70,6 +70,36 @@ an int or a string ref, and this is the raw engine reference either way).
 from `internal/modules/release`'s usecase (deploy/stop/reconcile), not this
 consumer — see `internal/modules/release/ws_events.go`.
 
+### `execution.lifecycle` — IMPLEMENTED (durable execution ledger)
+
+Emitted synchronously at the start boundary, before any node child event,
+and asynchronously at the waiting/terminal boundary. `execution_id` is a
+stable UUID for the run. Redelivery is idempotent.
+
+```json
+{
+  "task": "execution.lifecycle",
+  "args": {
+    "execution_id": "cff89b0f-bd95-41ec-8b80-c5a9744c803d",
+    "runtime_mode": "release",
+    "project_id": "1408",
+    "chat_id": 123456789,
+    "telegram_update_id": 991,
+    "run_id": 42,
+    "trigger_type": "command",
+    "flow_hash": "",
+    "status": "running",
+    "error": "",
+    "ts": 1735689600
+  }
+}
+```
+
+The terminal event uses the same identity and one of `waiting`, `succeeded`,
+`failed`, or `cancelled`. Rows are stored in `execution` (migration `000038`).
+Read APIs are `GET /api/v1/executions` and
+`GET /api/v1/executions/{id}`, both JWT owner-scoped.
+
 ### `debug.error_event` — IMPLEMENTED (consumer + persistence + read API live), forwarded as WS `error`
 
 Replaces the old synchronous `POST {API_URL}/api/debug/error-event/` /
@@ -118,10 +148,16 @@ for a future "node execution history" read API, but does not expose one yet
     "error": null,
     "ts": 1735689600,
     "run_id": 42,
-    "seq": 7
+    "seq": 7,
+    "execution_id": "cff89b0f-bd95-41ec-8b80-c5a9744c803d",
+    "attempt": 1
   }
 }
 ```
+
+When `execution_id` is present, the same event idempotently upserts an
+`execution_node_run` row. Older engines may omit it and continue to populate
+only the legacy `debug_node_event` table.
 
 ### `debug.context_event` — IMPLEMENTED (Redis-cache consumer live), forwarded as WS `context`
 

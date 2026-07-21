@@ -1,5 +1,80 @@
 basePath: /api/v1
 definitions:
+  execution.DetailResponse:
+    properties:
+      execution:
+        $ref: '#/definitions/execution.Response'
+      node_runs:
+        items:
+          $ref: '#/definitions/execution.NodeRunResponse'
+        type: array
+    type: object
+  execution.NodeRunResponse:
+    properties:
+      attempt:
+        type: integer
+      error:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: string
+      node_id:
+        type: string
+      node_type:
+        type: string
+      sequence:
+        type: integer
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/execution.Status'
+    type: object
+  execution.Response:
+    properties:
+      chat_id:
+        type: integer
+      current_node_id:
+        type: string
+      error:
+        type: string
+      finished_at:
+        type: string
+      flow_hash:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      release_id:
+        type: string
+      run_id:
+        type: integer
+      runtime_mode:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/execution.Status'
+      telegram_update_id:
+        type: integer
+      trigger_type:
+        type: string
+    type: object
+  execution.Status:
+    enum:
+    - running
+    - waiting
+    - succeeded
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - StatusRunning
+    - StatusWaiting
+    - StatusSucceeded
+    - StatusFailed
+    - StatusCancelled
   github_com_botspace_backend_internal_shared_httpx.ErrorBody:
     properties:
       code:
@@ -316,6 +391,9 @@ definitions:
         type: string
       id:
         type: string
+      is_new:
+        description: IsNew flags a first-ever sign-in so the client can start onboarding.
+        type: boolean
       last_name:
         type: string
       phone:
@@ -519,6 +597,14 @@ definitions:
     type: object
   internal_modules_config.builtinNodeManifestsResponse:
     properties:
+      categories:
+        description: |-
+          Categories: {category_key: {label, doc}} — category-level docs so the
+          agent shows a short description per category and lazy-loads a category's
+          nodes on demand. Sourced from plugin's embedded node_categories.json.
+        items:
+          type: integer
+        type: array
       manifests:
         items:
           items:
@@ -630,6 +716,31 @@ definitions:
     properties:
       authorize_url:
         type: string
+    type: object
+  internal_modules_credential.OptionItem:
+    properties:
+      label:
+        type: string
+      value:
+        type: string
+    type: object
+  internal_modules_credential.OptionsRequest:
+    properties:
+      credential_id:
+        type: string
+      params:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - credential_id
+    type: object
+  internal_modules_credential.OptionsResponse:
+    properties:
+      options:
+        items:
+          $ref: '#/definitions/internal_modules_credential.OptionItem'
+        type: array
     type: object
   internal_modules_credential.TypeDef:
     properties:
@@ -1773,10 +1884,14 @@ definitions:
         type: integer
       id:
         type: string
+      is_template:
+        type: boolean
       memory_bytes:
         type: integer
       name:
         type: string
+      net_bytes:
+        type: integer
       owner_id:
         type: string
       owner_phone:
@@ -2776,6 +2891,11 @@ definitions:
         $ref: '#/definitions/internal_modules_user.SubscriptionResponse'
       template_balance:
         type: string
+      tokens_used_total:
+        description: |-
+          TokensUsedTotal is the user's AI-agent token usage. Populated only by
+          the admin listing (GET /users); 0 on every other projection.
+        type: integer
       updated_at:
         type: string
       username:
@@ -2916,6 +3036,11 @@ definitions:
         type: string
       template_balance:
         type: string
+      tokens_used_total:
+        description: |-
+          TokensUsedTotal is the user's AI-agent token usage. Populated only by
+          the admin listing (GET /users); 0 on every other projection.
+        type: integer
       updated_at:
         type: string
       username:
@@ -4902,6 +5027,42 @@ paths:
       summary: Begin an OAuth2 consent flow for an oauth2-mode credential type
       tags:
       - credentials
+  /credentials/options/{resource}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Resource name (google_spreadsheets/google_sheet_tabs/google_sheet_columns)
+        in: path
+        name: resource
+        required: true
+        type: string
+      - description: Credential and dependency params
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_credential.OptionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_credential.OptionsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Load dynamic credential-backed field options
+      tags:
+      - credentials
   /credentials/types:
     get:
       produces:
@@ -5023,6 +5184,93 @@ paths:
       summary: Delete an environment variable
       tags:
       - enviroment
+  /executions:
+    get:
+      description: Returns owner-scoped execution history ordered newest first.
+      parameters:
+      - description: Project ID (uuid)
+        in: query
+        name: project_id
+        required: true
+        type: string
+      - description: running, waiting, succeeded, failed, cancelled
+        in: query
+        name: status
+        type: string
+      - description: debug or release
+        in: query
+        name: runtime_mode
+        type: string
+      - description: Page size (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/execution.Response'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List workflow executions for a project
+      tags:
+      - executions
+  /executions/{id}:
+    get:
+      parameters:
+      - description: Execution ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/execution.DetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one workflow execution and its node runs
+      tags:
+      - executions
   /file:
     get:
       parameters:
@@ -5194,9 +5442,10 @@ paths:
         name: X-Internal-Token
         required: true
         type: string
-      - description: Project id — cross-tenant owner guard
+      - description: Project id — mandatory cross-tenant owner guard
         in: header
         name: X-Project-Id
+        required: true
         type: string
       - description: Credential id
         in: path
@@ -5210,6 +5459,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/internal_modules_credential.InternalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
         "403":
           description: Forbidden
           schema:
@@ -5707,18 +5960,6 @@ paths:
       summary: Update a broadcast message
       tags:
       - messages
-  /module-file:
-    post:
-      responses: {}
-      summary: Module-scoped file upload (HMAC bearer token)
-      tags:
-      - module-file
-  /module-file/{uuid}:
-    delete:
-      responses: {}
-      summary: Module-scoped file delete (HMAC bearer token)
-      tags:
-      - module-file
   /module-trigger/{project_uuid}:
     post:
       responses: {}
@@ -5886,6 +6127,28 @@ paths:
       summary: Create a simple balance top-up pay link (Click/Payme)
       tags:
       - payment
+  /payment/paycue/update:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Paycue webhook secret
+        in: header
+        name: X-API-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Paycue payment webhook
+      tags:
+      - payment-webhooks
   /payment/transactions:
     get:
       produces:

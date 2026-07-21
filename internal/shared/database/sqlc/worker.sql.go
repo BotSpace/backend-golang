@@ -189,6 +189,41 @@ func (q *Queries) ListExpiredRunningDebugs(ctx context.Context, updatedAt time.T
 	return items, nil
 }
 
+const listLiveEngineServiceIDs = `-- name: ListLiveEngineServiceIDs :many
+SELECT service_id FROM relase
+  WHERE service_id IS NOT NULL AND service_id <> ''
+    AND status NOT IN ('stopped', 'deleted')
+UNION
+SELECT service_id FROM debug
+  WHERE service_id IS NOT NULL AND service_id <> ''
+    AND status NOT IN ('stopped', 'deleted')
+`
+
+// Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
+// definitively-terminal state, i.e. the deployment SHOULD still exist. The
+// orphan sweep deletes any engine-managed Deployment in the namespace whose
+// name is absent from this set (its owning row was reaped/deleted, so the
+// Deployment + its -env/-flow/bot-<uuid> resources leaked).
+func (q *Queries) ListLiveEngineServiceIDs(ctx context.Context) ([]*string, error) {
+	rows, err := q.db.Query(ctx, listLiveEngineServiceIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*string{}
+	for rows.Next() {
+		var service_id *string
+		if err := rows.Scan(&service_id); err != nil {
+			return nil, err
+		}
+		items = append(items, service_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsWithReleaseToken = `-- name: ListProjectsWithReleaseToken :many
 SELECT p.id, p.username, p.avatar_file_id, e.value AS bot_token
 FROM projects p
@@ -286,41 +321,6 @@ func (q *Queries) ListReleasedProjectsForDisk(ctx context.Context) ([]ListReleas
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLiveEngineServiceIDs = `-- name: ListLiveEngineServiceIDs :many
-SELECT service_id FROM relase
-  WHERE service_id IS NOT NULL AND service_id <> ''
-    AND status NOT IN ('stopped', 'deleted')
-UNION
-SELECT service_id FROM debug
-  WHERE service_id IS NOT NULL AND service_id <> ''
-    AND status NOT IN ('stopped', 'deleted')
-`
-
-// Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
-// definitively-terminal state, i.e. the deployment SHOULD still exist. The
-// orphan sweep deletes any engine-managed Deployment in the namespace whose
-// name is absent from this set (its owning row was reaped/deleted, so the
-// Deployment + its -env/-flow/bot-<uuid> resources leaked).
-func (q *Queries) ListLiveEngineServiceIDs(ctx context.Context) ([]*string, error) {
-	rows, err := q.db.Query(ctx, listLiveEngineServiceIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []*string{}
-	for rows.Next() {
-		var service_id *string
-		if err := rows.Scan(&service_id); err != nil {
-			return nil, err
-		}
-		items = append(items, service_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -2951,6 +2951,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/credentials/options/{resource}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "credentials"
+                ],
+                "summary": "Load dynamic credential-backed field options",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Resource name (google_spreadsheets/google_sheet_tabs/google_sheet_columns)",
+                        "name": "resource",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Credential and dependency params",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_credential.OptionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_credential.OptionsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/credentials/types": {
             "get": {
                 "security": [
@@ -3260,6 +3317,142 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/executions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns owner-scoped execution history ordered newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "executions"
+                ],
+                "summary": "List workflow executions for a project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID (uuid)",
+                        "name": "project_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "running, waiting, succeeded, failed, cancelled",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "debug or release",
+                        "name": "runtime_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/execution.Response"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/executions/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "executions"
+                ],
+                "summary": "Get one workflow execution and its node runs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Execution ID (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/execution.DetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
                         }
@@ -3603,9 +3796,10 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Project id — cross-tenant owner guard",
+                        "description": "Project id — mandatory cross-tenant owner guard",
                         "name": "X-Project-Id",
-                        "in": "header"
+                        "in": "header",
+                        "required": true
                     },
                     {
                         "type": "string",
@@ -3620,6 +3814,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_credential.InternalResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
                         }
                     },
                     "403": {
@@ -4351,24 +4551,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/module-file": {
-            "post": {
-                "tags": [
-                    "module-file"
-                ],
-                "summary": "Module-scoped file upload (HMAC bearer token)",
-                "responses": {}
-            }
-        },
-        "/module-file/{uuid}": {
-            "delete": {
-                "tags": [
-                    "module-file"
-                ],
-                "summary": "Module-scoped file delete (HMAC bearer token)",
-                "responses": {}
-            }
-        },
         "/module-trigger/{project_uuid}": {
             "post": {
                 "tags": [
@@ -4641,6 +4823,40 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_payment.PaymentLinkResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/payment/paycue/update": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payment-webhooks"
+                ],
+                "summary": "Paycue payment webhook",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Paycue webhook secret",
+                        "name": "X-API-Key",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
                         }
                     }
                 }
@@ -7689,6 +7905,116 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "execution.DetailResponse": {
+            "type": "object",
+            "properties": {
+                "execution": {
+                    "$ref": "#/definitions/execution.Response"
+                },
+                "node_runs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/execution.NodeRunResponse"
+                    }
+                }
+            }
+        },
+        "execution.NodeRunResponse": {
+            "type": "object",
+            "properties": {
+                "attempt": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "node_type": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/execution.Status"
+                }
+            }
+        },
+        "execution.Response": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "integer"
+                },
+                "current_node_id": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "flow_hash": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "release_id": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "runtime_mode": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/execution.Status"
+                },
+                "telegram_update_id": {
+                    "type": "integer"
+                },
+                "trigger_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "execution.Status": {
+            "type": "string",
+            "enum": [
+                "running",
+                "waiting",
+                "succeeded",
+                "failed",
+                "cancelled"
+            ],
+            "x-enum-varnames": [
+                "StatusRunning",
+                "StatusWaiting",
+                "StatusSucceeded",
+                "StatusFailed",
+                "StatusCancelled"
+            ]
+        },
         "github_com_botspace_backend_internal_shared_httpx.ErrorBody": {
             "type": "object",
             "properties": {
@@ -8165,6 +8491,10 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "is_new": {
+                    "description": "IsNew flags a first-ever sign-in so the client can start onboarding.",
+                    "type": "boolean"
+                },
                 "last_name": {
                     "type": "string"
                 },
@@ -8470,6 +8800,13 @@ const docTemplate = `{
         "internal_modules_config.builtinNodeManifestsResponse": {
             "type": "object",
             "properties": {
+                "categories": {
+                    "description": "Categories: {category_key: {label, doc}} — category-level docs so the\nagent shows a short description per category and lazy-loads a category's\nnodes on demand. Sourced from plugin's embedded node_categories.json.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "manifests": {
                     "type": "array",
                     "items": {
@@ -8634,6 +8971,45 @@ const docTemplate = `{
             "properties": {
                 "authorize_url": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_credential.OptionItem": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_credential.OptionsRequest": {
+            "type": "object",
+            "required": [
+                "credential_id"
+            ],
+            "properties": {
+                "credential_id": {
+                    "type": "string"
+                },
+                "params": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_modules_credential.OptionsResponse": {
+            "type": "object",
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_credential.OptionItem"
+                    }
                 }
             }
         },
@@ -10336,11 +10712,17 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "is_template": {
+                    "type": "boolean"
+                },
                 "memory_bytes": {
                     "type": "integer"
                 },
                 "name": {
                     "type": "string"
+                },
+                "net_bytes": {
+                    "type": "integer"
                 },
                 "owner_id": {
                     "type": "string"
@@ -11828,6 +12210,10 @@ const docTemplate = `{
                 "template_balance": {
                     "type": "string"
                 },
+                "tokens_used_total": {
+                    "description": "TokensUsedTotal is the user's AI-agent token usage. Populated only by\nthe admin listing (GET /users); 0 on every other projection.",
+                    "type": "integer"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -12036,6 +12422,10 @@ const docTemplate = `{
                 },
                 "template_balance": {
                     "type": "string"
+                },
+                "tokens_used_total": {
+                    "description": "TokensUsedTotal is the user's AI-agent token usage. Populated only by\nthe admin listing (GET /users); 0 on every other projection.",
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"

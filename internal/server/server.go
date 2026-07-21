@@ -18,6 +18,7 @@ import (
 	adminconfig "github.com/botspace/backend/internal/modules/config"
 	"github.com/botspace/backend/internal/modules/credential"
 	debugmod "github.com/botspace/backend/internal/modules/debug"
+	executionmod "github.com/botspace/backend/internal/modules/execution"
 	"github.com/botspace/backend/internal/modules/file"
 	"github.com/botspace/backend/internal/modules/kyc"
 	"github.com/botspace/backend/internal/modules/message"
@@ -437,6 +438,12 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	}
 	debugmod.RegisterRoutes(v1, debugmod.NewHandler(debugUC), tokens)
 
+	// execution — durable per-update and per-node lifecycle history. The write
+	// side shares the ordered Redis Stream used by debug events; the read side
+	// is owner-scoped and independent from debug mode.
+	executionUC := executionmod.NewUsecase(executionmod.NewPostgresRepository(s.pool))
+	executionmod.RegisterRoutes(v1, executionmod.NewHandler(executionUC), tokens)
+
 	// Redis Stream consumer — engine-golang -> backend WRITE path (bot-user
 	// upsert, flow/debug errors, token usage, ...). Reuses the same
 	// engine.redis_host/port/password config already used to inject
@@ -447,7 +454,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// publisher wired into releaseUC above) lets this also forward
 	// node_execution/context/error events to the constructor's WS room —
 	// see the consumer.Register bodies below.
-	s.startEventConsumer(ctx, debugUC, wsPub)
+	s.startEventConsumer(ctx, debugUC, executionUC, wsPub)
 }
 
 const (
@@ -467,13 +474,48 @@ const (
 // comment). Each event's own "project" field keeps the engine's raw
 // payload.ProjectID as-is (that's what the constructor's client-side filter
 // compares against project.id).
-func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, wsPub wsevents.Publisher) {
+func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, executionUC executionmod.Usecase, wsPub wsevents.Publisher) {
 	addr := s.cfg.Engine.RedisAddr()
 	if addr == "" {
 		s.log.Warn("redisq: engine.redis_host not configured — engine event consumer disabled")
 		return
 	}
 	consumer := redisq.NewConsumer(addr, s.cfg.Engine.RedisPassword, eventsStreamName, eventsGroupName, "backend-1", s.log)
+
+	consumer.Register("execution.lifecycle", func(ctx context.Context, args json.RawMessage) error {
+		var payload executionLifecyclePayload
+		if err := json.Unmarshal(args, &payload); err != nil {
+			return fmt.Errorf("decode execution.lifecycle: %w", err)
+		}
+		executionID, err := uuid.Parse(payload.ExecutionID)
+		if err != nil {
+			return fmt.Errorf("decode execution.lifecycle execution_id: %w", err)
+		}
+		eventTS := time.Now().UTC()
+		if payload.TS != 0 {
+			eventTS = time.Unix(payload.TS, 0).UTC()
+		}
+		if payload.Status == string(executionmod.StatusRunning) {
+			projectID, err := debugUC.ResolveProjectRef(ctx, payload.ProjectID)
+			if err != nil {
+				return err
+			}
+			var updateID *int64
+			if payload.TelegramUpdateID != 0 {
+				updateID = &payload.TelegramUpdateID
+			}
+			return executionUC.Start(ctx, executionmod.StartInput{
+				ID: executionID, ProjectID: projectID, ChatID: payload.ChatID,
+				TelegramUpdateID: updateID, RunID: payload.RunID,
+				TriggerType: payload.TriggerType, RuntimeMode: payload.RuntimeMode,
+				FlowHash: payload.FlowHash, EventTS: eventTS,
+			})
+		}
+		return executionUC.Finish(ctx, executionmod.FinishInput{
+			ID: executionID, Status: executionmod.Status(payload.Status),
+			Error: payload.Error, EventTS: eventTS,
+		})
+	})
 
 	consumer.Register("debug.error_event", func(ctx context.Context, args json.RawMessage) error {
 		var payload debugErrorEventPayload
@@ -540,6 +582,26 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			EventTS:    eventTS,
 		}); err != nil {
 			return err
+		}
+		if payload.ExecutionID != "" {
+			executionID, err := uuid.Parse(payload.ExecutionID)
+			if err != nil {
+				return fmt.Errorf("decode debug.node_event execution_id: %w", err)
+			}
+			status := executionmod.Status(payload.Status)
+			switch payload.Status {
+			case "success":
+				status = executionmod.StatusSucceeded
+			case "error":
+				status = executionmod.StatusFailed
+			}
+			if err := executionUC.RecordNodeRun(ctx, executionmod.NodeRunInput{
+				ExecutionID: executionID, NodeID: payload.NodeID, NodeType: payload.NodeType,
+				Attempt: payload.Attempt, Status: status, Error: payload.Error,
+				Sequence: payload.Seq, EventTS: eventTSOrNow(eventTS),
+			}); err != nil {
+				return err
+			}
 		}
 		if wsPub != nil {
 			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
@@ -664,15 +726,41 @@ type debugErrorEventPayload struct {
 // debugNodeEventPayload is the "args" shape for the "debug.node_event"
 // redis stream task — see docs/redis-stream-events.md.
 type debugNodeEventPayload struct {
-	ProjectID string `json:"project_id"`
-	ChatID    int64  `json:"chat_id"`
-	NodeID    string `json:"node_id"`
-	NodeType  string `json:"node_type"`
-	Status    string `json:"status"`
-	Error     string `json:"error"`
-	TS        int64  `json:"ts"`
-	RunID     int64  `json:"run_id"`
-	Seq       int64  `json:"seq"`
+	ProjectID   string `json:"project_id"`
+	ChatID      int64  `json:"chat_id"`
+	NodeID      string `json:"node_id"`
+	NodeType    string `json:"node_type"`
+	Status      string `json:"status"`
+	Error       string `json:"error"`
+	TS          int64  `json:"ts"`
+	RunID       int64  `json:"run_id"`
+	Seq         int64  `json:"seq"`
+	ExecutionID string `json:"execution_id"`
+	Attempt     int32  `json:"attempt"`
+}
+
+// executionLifecyclePayload is emitted at the boundary of one inbound update.
+// Running events carry project metadata; terminal/waiting events only need the
+// stable execution id.
+type executionLifecyclePayload struct {
+	ExecutionID      string `json:"execution_id"`
+	ProjectID        string `json:"project_id"`
+	ChatID           int64  `json:"chat_id"`
+	TelegramUpdateID int64  `json:"telegram_update_id"`
+	RunID            int64  `json:"run_id"`
+	TriggerType      string `json:"trigger_type"`
+	RuntimeMode      string `json:"runtime_mode"`
+	FlowHash         string `json:"flow_hash"`
+	Status           string `json:"status"`
+	Error            string `json:"error"`
+	TS               int64  `json:"ts"`
+}
+
+func eventTSOrNow(ts *time.Time) time.Time {
+	if ts != nil {
+		return *ts
+	}
+	return time.Now().UTC()
 }
 
 // debugContextEventPayload is the "args" shape for the "debug.context_event"
