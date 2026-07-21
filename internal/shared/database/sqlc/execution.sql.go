@@ -20,17 +20,20 @@ SET status = CASE
         ELSE $1::text
     END,
     error = CASE WHEN $2::text = '' THEN execution.error ELSE $2::text END,
-    finished_at = CASE WHEN $1::text = 'waiting' THEN NULL ELSE $3 END,
+    finished_at = CASE
+        WHEN $1::text = 'waiting' THEN NULL::timestamptz
+        ELSE $3::timestamptz
+    END,
     updated_at = NOW()
 WHERE id = $4
 RETURNING id, project_id, release_id, chat_id, telegram_update_id, run_id, trigger_type, runtime_mode, flow_hash, status, current_node_id, error, started_at, finished_at, created_at, updated_at
 `
 
 type FinishExecutionParams struct {
-	Status  string     `json:"status"`
-	Error   string     `json:"error"`
-	EventTs *time.Time `json:"event_ts"`
-	ID      uuid.UUID  `json:"id"`
+	Status  string    `json:"status"`
+	Error   string    `json:"error"`
+	EventTs time.Time `json:"event_ts"`
+	ID      uuid.UUID `json:"id"`
 }
 
 func (q *Queries) FinishExecution(ctx context.Context, arg FinishExecutionParams) (Execution, error) {
@@ -251,8 +254,12 @@ INSERT INTO execution_node_run (
 VALUES (
     $1, $2, $3,
     $4, $5, $6, $7,
-    $8,
-    CASE WHEN $5 IN ('succeeded', 'failed', 'cancelled') THEN $8 ELSE NULL END
+    $8::timestamptz,
+    CASE
+        WHEN $5::text IN ('succeeded', 'failed', 'cancelled')
+            THEN $8::timestamptz
+        ELSE NULL::timestamptz
+    END
 )
 ON CONFLICT (execution_id, node_id, attempt) DO UPDATE SET
     node_type = EXCLUDED.node_type,

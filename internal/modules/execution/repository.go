@@ -35,7 +35,7 @@ func (r *pgRepo) Start(ctx context.Context, in StartInput) (*Execution, error) {
 func (r *pgRepo) Finish(ctx context.Context, in FinishInput) (*Execution, error) {
 	eventTS := in.EventTS
 	row, err := r.queries.FinishExecution(ctx, sqlcdb.FinishExecutionParams{
-		ID: in.ID, Status: string(in.Status), Error: in.Error, EventTs: &eventTS,
+		ID: in.ID, Status: string(in.Status), Error: in.Error, EventTs: eventTS,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, database.ErrNotFound
