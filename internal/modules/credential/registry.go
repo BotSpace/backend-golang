@@ -70,6 +70,20 @@ var Types = []TypeDef{
 			{Name: "api_key", Label: "API key", Type: "password", Secret: true},
 		},
 	},
+	{
+		Key: "http_api", Label: "HTTP API", Icon: "globe", Color: "#6366F1", Mode: ModeHeader,
+		Fields: []Field{
+			{Name: "auth_type", Label: "Authentication", Type: "select", Required: true, Default: "bearer", Options: []FieldOption{
+				{Label: "Bearer token", Value: "bearer"},
+				{Label: "API key header", Value: "api_key"},
+				{Label: "Basic auth", Value: "basic"},
+			}},
+			{Name: "token", Label: "Token / API key", Type: "password", Secret: true},
+			{Name: "header_name", Label: "API key header name", Type: "text", Default: "X-API-Key"},
+			{Name: "username", Label: "Username", Type: "text"},
+			{Name: "password", Label: "Password", Type: "password", Secret: true},
+		},
+	},
 	// --- Messaging ---
 	{
 		Key: "telegram", Label: "Telegram", Icon: "send", Color: "#229ED9", Mode: ModeNone,
