@@ -24,7 +24,10 @@ SET status = CASE
         ELSE sqlc.arg('status')::text
     END,
     error = CASE WHEN sqlc.arg('error')::text = '' THEN execution.error ELSE sqlc.arg('error')::text END,
-    finished_at = CASE WHEN sqlc.arg('status')::text = 'waiting' THEN NULL ELSE sqlc.arg('event_ts') END,
+    finished_at = CASE
+        WHEN sqlc.arg('status')::text = 'waiting' THEN NULL::timestamptz
+        ELSE sqlc.arg('event_ts')::timestamptz
+    END,
     updated_at = NOW()
 WHERE id = sqlc.arg('id')
 RETURNING *;
@@ -37,8 +40,12 @@ INSERT INTO execution_node_run (
 VALUES (
     sqlc.arg('execution_id'), sqlc.arg('node_id'), sqlc.arg('node_type'),
     sqlc.arg('attempt'), sqlc.arg('status'), sqlc.arg('error'), sqlc.arg('sequence'),
-    sqlc.arg('event_ts'),
-    CASE WHEN sqlc.arg('status') IN ('succeeded', 'failed', 'cancelled') THEN sqlc.arg('event_ts') ELSE NULL END
+    sqlc.arg('event_ts')::timestamptz,
+    CASE
+        WHEN sqlc.arg('status')::text IN ('succeeded', 'failed', 'cancelled')
+            THEN sqlc.arg('event_ts')::timestamptz
+        ELSE NULL::timestamptz
+    END
 )
 ON CONFLICT (execution_id, node_id, attempt) DO UPDATE SET
     node_type = EXCLUDED.node_type,

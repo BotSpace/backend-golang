@@ -583,6 +583,14 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 		}); err != nil {
 			return err
 		}
+		// Live canvas feedback must not depend on the durable execution ledger.
+		// Publish first; if the idempotent ledger write below fails, Redis keeps
+		// the event pending and retries it after restart without freezing the UI.
+		if wsPub != nil {
+			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
+				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, nodeExecutionWSPayload(project, payload))
+			}
+		}
 		if payload.ExecutionID != "" {
 			executionID, err := uuid.Parse(payload.ExecutionID)
 			if err != nil {
@@ -601,11 +609,6 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 				Sequence: payload.Seq, EventTS: eventTSOrNow(eventTS),
 			}); err != nil {
 				return err
-			}
-		}
-		if wsPub != nil {
-			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
-				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, nodeExecutionWSPayload(project, payload))
 			}
 		}
 		return nil
