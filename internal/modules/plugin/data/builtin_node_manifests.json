@@ -106,7 +106,7 @@
       "withArgs": false,
       "global": true
     },
-    "aiDoc": "Telegram /command trigger. global:true har yerda ishlaydi. withArgs:true bo'lsa argument qabul qiladi. state: {key, type:'text'} — komanda argumentini saqlaydi.",
+    "aiDoc": "Telegram /command trigger. global:true har yerda ishlaydi. withArgs:true bo'lsa argument qabul qiladi. Argumentni saqlash uchun FLAT state_key + state_type:'text' ishlat; keyingi node qiymatni `{{state_key}}` emas, state_key nomi bilan o'qiydi (masalan state_key='ref' → `{{ref}}`). Alohida save_state switch kerak emas.",
     "summary": "/command (masalan /start) kelganda flow'ni boshlaydi",
     "agentCategory": "trigger"
   },
@@ -4740,6 +4740,14 @@
             "label": "Callback data (tugma bosilganda)"
           },
           {
+            "value": "collection_id",
+            "label": "Collection ID (prefixsiz ID)"
+          },
+          {
+            "value": "full_data",
+            "label": "Collection hujjati (to'liq obyekt)"
+          },
+          {
             "value": "any",
             "label": "any"
           }
@@ -4768,7 +4776,7 @@
         "value": ""
       }
     },
-    "aiDoc": "Inline button callback trigger. filter: any/equals/contains/starts_with/regex. context.value: mos keladigan callback_data. global:true bo'lsa har yerda ishlaydi. state: {key, type} — callback data'ni saqlaydi (type: 'callback'/'data'/'collection_id').",
+    "aiDoc": "Inline button callback trigger. filter: any/equals/contains/starts_with/regex; context.value — mos callback_data/prefix. global:false odatda oldingi actiondan keyin foydalanuvchi javobini kutadi. Saqlash uchun FLAT state_key + state_type ishlat (alohida save_state kerak emas). state_type='collection_id' `collection:<name>:<id>` dan faqat ID'ni saqlaydi; state_type='full_data' shu collection hujjatini yuklab state_key ostiga obyekt qilib yozadi. Masalan state_key='selected_course', state_type='full_data' bo'lsa keyingi node `{{selected_course.title}}` ishlatadi — qo'shimcha LoadCollectionItemNode yoki CustomCodeNode KERAK EMAS. Oddiy callback uchun state_type='callback'. `{{state_selected_course}}` noto'g'ri; public qiymat `{{selected_course}}` bilan o'qiladi.",
     "summary": "Inline tugma bosilganda (callback) flow'ni boshlaydi yoki kutadi",
     "agentCategory": "trigger"
   },
