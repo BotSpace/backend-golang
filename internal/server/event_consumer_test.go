@@ -94,3 +94,25 @@ func TestResolveDebugEventOwner_OwnerLookupFails(t *testing.T) {
 		t.Fatal("expected an error when the owner lookup fails")
 	}
 }
+
+func TestNodeExecutionWSPayloadCarriesExecutionIdentity(t *testing.T) {
+	projectID := uuid.New()
+	executionID := uuid.NewString()
+	payload := debugNodeEventPayload{
+		ProjectID:   "1408",
+		NodeID:      "node_7",
+		Status:      "running",
+		RunID:       42,
+		Seq:         7,
+		ExecutionID: executionID,
+		Attempt:     3,
+	}
+
+	got := nodeExecutionWSPayload(projectID.String(), payload)
+	if got["execution_id"] != executionID {
+		t.Fatalf("expected execution_id %q, got %#v", executionID, got["execution_id"])
+	}
+	if got["attempt"] != int32(3) {
+		t.Fatalf("expected attempt 3, got %#v", got["attempt"])
+	}
+}

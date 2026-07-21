@@ -605,17 +605,7 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 		}
 		if wsPub != nil {
 			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
-				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, map[string]any{
-					"project":   project,
-					"chat_id":   payload.ChatID,
-					"node_id":   payload.NodeID,
-					"node_type": payload.NodeType,
-					"status":    payload.Status,
-					"error":     payload.Error,
-					"ts":        payload.TS,
-					"run_id":    payload.RunID,
-					"seq":       payload.Seq,
-				})
+				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, nodeExecutionWSPayload(project, payload))
 			}
 		}
 		return nil
@@ -737,6 +727,22 @@ type debugNodeEventPayload struct {
 	Seq         int64  `json:"seq"`
 	ExecutionID string `json:"execution_id"`
 	Attempt     int32  `json:"attempt"`
+}
+
+func nodeExecutionWSPayload(project string, payload debugNodeEventPayload) map[string]any {
+	return map[string]any{
+		"project":      project,
+		"chat_id":      payload.ChatID,
+		"node_id":      payload.NodeID,
+		"node_type":    payload.NodeType,
+		"status":       payload.Status,
+		"error":        payload.Error,
+		"ts":           payload.TS,
+		"run_id":       payload.RunID,
+		"seq":          payload.Seq,
+		"execution_id": payload.ExecutionID,
+		"attempt":      payload.Attempt,
+	}
 }
 
 // executionLifecyclePayload is emitted at the boundary of one inbound update.
