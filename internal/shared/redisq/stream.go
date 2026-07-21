@@ -104,9 +104,22 @@ func (c *Consumer) Run(ctx context.Context) error {
 		return err
 	}
 
-	c.consume(ctx, "0")
+	// XREADGROUP returns at most Count entries. Keep reading id "0" until the
+	// consumer's entire pending list is empty; a single call silently strands
+	// everything after the first batch.
 	for ctx.Err() == nil {
-		c.consume(ctx, ">")
+		received, failed := c.consume(ctx, "0")
+		if received == 0 {
+			break
+		}
+		if failed > 0 {
+			// Failed entries remain pending and will be returned again. Avoid a
+			// hot retry loop while still preserving stream order.
+			time.Sleep(2 * time.Second)
+		}
+	}
+	for ctx.Err() == nil {
+		_, _ = c.consume(ctx, ">")
 	}
 	return ctx.Err()
 }
@@ -114,7 +127,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 // Close disconnects the underlying Redis client.
 func (c *Consumer) Close() error { return c.rdb.Close() }
 
-func (c *Consumer) consume(ctx context.Context, id string) {
+func (c *Consumer) consume(ctx context.Context, id string) (received, failed int) {
 	res, err := c.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    c.group,
 		Consumer: c.consumer,
@@ -127,35 +140,40 @@ func (c *Consumer) consume(ctx context.Context, id string) {
 			c.log.Warn("redisq: xreadgroup", logger.Err(err))
 			time.Sleep(2 * time.Second)
 		}
-		return
+		return 0, 0
 	}
 	for _, stream := range res {
 		for _, msg := range stream.Messages {
-			c.handle(ctx, msg)
+			received++
+			if !c.handle(ctx, msg) {
+				failed++
+			}
 		}
 	}
+	return received, failed
 }
 
-func (c *Consumer) handle(ctx context.Context, msg redis.XMessage) {
+func (c *Consumer) handle(ctx context.Context, msg redis.XMessage) bool {
 	payload, _ := msg.Values["payload"].(string)
 	var ev Event
 	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 		c.log.Error("redisq: malformed payload", logger.String("id", msg.ID), logger.Err(err))
 		c.rdb.XAck(ctx, c.stream, c.group, msg.ID) // unparseable — retrying never helps
-		return
+		return true
 	}
 	h, ok := c.handlers[ev.Task]
 	if !ok {
 		c.log.Error("redisq: no handler registered", logger.String("task", ev.Task))
 		c.rdb.XAck(ctx, c.stream, c.group, msg.ID)
-		return
+		return true
 	}
 	if err := h(ctx, ev.Args); err != nil {
 		// No ack — redelivered as a pending entry after a restart/rebalance.
 		// No per-task retry cap: handlers must be idempotent and cheap to
 		// retry rather than the consumer tracking attempt counts.
 		c.log.Error("redisq: handler failed", logger.String("task", ev.Task), logger.Err(err))
-		return
+		return false
 	}
 	c.rdb.XAck(ctx, c.stream, c.group, msg.ID)
+	return true
 }
