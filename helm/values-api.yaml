@@ -66,7 +66,7 @@ env:
   - name: APP_OTP_PROD
     value: "true"
   - name: APP_ENGINE_IMAGE_TAG
-    value: "3.5.150-prod"
+    value: "3.5.151-prod"
   # B2/S3 object-storage write credentials for the file-upload handler. Sourced
   # from the legacy Django secret (botmother-secret) so uploads land in the same
   # media bucket the worker cleanup and public media URLs already use. Injected
