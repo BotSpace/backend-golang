@@ -155,6 +155,42 @@ type Enviroment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type Execution struct {
+	ID               uuid.UUID  `json:"id"`
+	ProjectID        uuid.UUID  `json:"project_id"`
+	ReleaseID        *uuid.UUID `json:"release_id"`
+	ChatID           int64      `json:"chat_id"`
+	TelegramUpdateID *int64     `json:"telegram_update_id"`
+	RunID            int64      `json:"run_id"`
+	TriggerType      string     `json:"trigger_type"`
+	RuntimeMode      string     `json:"runtime_mode"`
+	FlowHash         string     `json:"flow_hash"`
+	Status           string     `json:"status"`
+	CurrentNodeID    string     `json:"current_node_id"`
+	Error            string     `json:"error"`
+	StartedAt        time.Time  `json:"started_at"`
+	FinishedAt       *time.Time `json:"finished_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type ExecutionNodeRun struct {
+	ID          uuid.UUID  `json:"id"`
+	ExecutionID uuid.UUID  `json:"execution_id"`
+	NodeID      string     `json:"node_id"`
+	NodeType    string     `json:"node_type"`
+	Attempt     int32      `json:"attempt"`
+	Status      string     `json:"status"`
+	InputData   []byte     `json:"input_data"`
+	OutputData  []byte     `json:"output_data"`
+	Error       string     `json:"error"`
+	Sequence    int64      `json:"sequence"`
+	StartedAt   time.Time  `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
 type Field struct {
 	ID                   uuid.UUID  `json:"id"`
 	CollectionID         uuid.UUID  `json:"collection_id"`
@@ -242,6 +278,30 @@ type Module struct {
 	IsDefault         bool       `json:"is_default"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type OauthAuthorizationCode struct {
+	Code                string    `json:"code"`
+	ClientID            string    `json:"client_id"`
+	UserID              uuid.UUID `json:"user_id"`
+	RedirectUri         string    `json:"redirect_uri"`
+	CodeChallenge       string    `json:"code_challenge"`
+	CodeChallengeMethod string    `json:"code_challenge_method"`
+	Scope               string    `json:"scope"`
+	Resource            string    `json:"resource"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+type OauthClient struct {
+	ID                      uuid.UUID `json:"id"`
+	ClientID                string    `json:"client_id"`
+	ClientName              string    `json:"client_name"`
+	RedirectUris            []string  `json:"redirect_uris"`
+	GrantTypes              []string  `json:"grant_types"`
+	ResponseTypes           []string  `json:"response_types"`
+	TokenEndpointAuthMethod string    `json:"token_endpoint_auth_method"`
+	CreatedAt               time.Time `json:"created_at"`
 }
 
 type PaymentOrder struct {

@@ -232,6 +232,7 @@ type Querier interface {
 	// Lets the "used" usecase 404 on a project the caller does not own instead
 	// of silently returning zeroed totals.
 	FileProjectOwnedByOwner(ctx context.Context, arg FileProjectOwnedByOwnerParams) (bool, error)
+	FinishExecution(ctx context.Context, arg FinishExecutionParams) (Execution, error)
 	// Used by subscription upgrade: a target plan must be active to buy into it.
 	GetActivePlanByID(ctx context.Context, id uuid.UUID) (Plan, error)
 	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
@@ -251,6 +252,7 @@ type Querier interface {
 	// Debug (one row per project). Upsert mirrors Django's get_or_create.
 	GetDebugForOwner(ctx context.Context, arg GetDebugForOwnerParams) (Debug, error)
 	GetEnviromentForOwner(ctx context.Context, arg GetEnviromentForOwnerParams) (Enviroment, error)
+	GetExecutionForOwner(ctx context.Context, arg GetExecutionForOwnerParams) (Execution, error)
 	// Intentionally public (no ownership check) — mirrors Django's AllowAny
 	// retrieve, since file URLs are embedded in bot messages/CMS content that
 	// end users open unauthenticated.
@@ -347,6 +349,8 @@ type Querier interface {
 	// (e.g. inside a release/debug deploy that just loaded the project row).
 	ListEnviromentsByProject(ctx context.Context, projectID uuid.UUID) ([]Enviroment, error)
 	ListEnviromentsForOwner(ctx context.Context, arg ListEnviromentsForOwnerParams) ([]Enviroment, error)
+	ListExecutionNodeRunsForOwner(ctx context.Context, arg ListExecutionNodeRunsForOwnerParams) ([]ExecutionNodeRun, error)
+	ListExecutionsForOwner(ctx context.Context, arg ListExecutionsForOwnerParams) ([]Execution, error)
 	ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, error)
 	ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error)
 	// project_id/filetype nargs let the caller optionally narrow the listing;
@@ -411,6 +415,7 @@ type Querier interface {
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
 	MarkDebugFailedByService(ctx context.Context, serviceID *string) (int64, error)
 	MarkDebugStopping(ctx context.Context, id uuid.UUID) error
+	MarkExecutionNode(ctx context.Context, arg MarkExecutionNodeParams) error
 	// Marks a managed bot consumed once its token has been attached to a
 	// project's RELEASE_BOT_TOKEN — mirrors Django's
 	// ManagedBotModel.used = True; managed_bot.save(update_fields=["used"]).
@@ -646,6 +651,8 @@ type Querier interface {
 	// Enviroment: create/update is an upsert on (key, project_id), owner-scoped
 	// through a CTE so a foreign project silently yields zero rows -> ErrNotFound.
 	UpsertEnviromentForOwner(ctx context.Context, arg UpsertEnviromentForOwnerParams) (Enviroment, error)
+	UpsertExecutionNodeRun(ctx context.Context, arg UpsertExecutionNodeRunParams) (ExecutionNodeRun, error)
+	UpsertExecutionStarted(ctx context.Context, arg UpsertExecutionStartedParams) (Execution, error)
 	// Keyed by the Telegram bot id (manager-bot webhook is idempotent per bot).
 	// owner_id is intentionally overwritten on every call, including with NULL,
 	// to mirror the Django update_or_create(defaults={"owner": owner, ...}).
