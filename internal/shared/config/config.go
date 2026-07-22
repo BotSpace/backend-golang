@@ -247,7 +247,7 @@ func Load() (*Config, error) {
 		"engine.mode", "engine.image_repository", "engine.image_tag",
 		"engine.internal_token", "engine.redis_host", "engine.redis_port", "engine.redis_password",
 		"engine.test_bot_token", "engine.mongo_addr", "engine.mongo_db_name",
-		"engine.api_url",
+		"engine.api_url", "engine.plugin_api_key",
 		"monitoring.prometheus_url",
 	} {
 		_ = v.BindEnv(key)
