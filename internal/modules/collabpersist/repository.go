@@ -2,19 +2,23 @@ package collabpersist
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
+	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type pgRepo struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	queries *sqlcdb.Queries
 }
 
 func NewPostgresRepository(pool *pgxpool.Pool) Repository {
-	return &pgRepo{pool: pool}
+	return &pgRepo{pool: pool, queries: sqlcdb.New(pool)}
 }
 
 func (r *pgRepo) PersistOp(ctx context.Context, projectRef string, op map[string]any) (string, bool, error) {
@@ -24,7 +28,8 @@ func (r *pgRepo) PersistOp(ctx context.Context, projectRef string, op map[string
 	}
 	defer tx.Rollback(ctx)
 
-	projectID, flowRaw, err := lockProjectFlow(ctx, tx, projectRef)
+	qtx := r.queries.WithTx(tx)
+	projectID, flowRaw, err := lockProjectFlow(ctx, qtx, projectRef)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return "", false, fmt.Errorf("project not found for ref %q", projectRef)
@@ -40,8 +45,16 @@ func (r *pgRepo) PersistOp(ctx context.Context, projectRef string, op map[string
 		return projectID, false, tx.Commit(ctx)
 	}
 
-	if _, err := tx.Exec(ctx, `UPDATE projects SET flow = $2, updated_at = now() WHERE id = $1`, projectID, next); err != nil {
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return "", false, fmt.Errorf("parse project id: %w", err)
+	}
+	rows, err := qtx.PersistCollaborativeProjectFlow(ctx, sqlcdb.PersistCollaborativeProjectFlowParams{ID: projectUUID, Flow: next})
+	if err != nil {
 		return "", false, fmt.Errorf("update flow: %w", err)
+	}
+	if rows != 1 {
+		return "", false, fmt.Errorf("update flow affected %d rows", rows)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return "", false, fmt.Errorf("commit: %w", err)
@@ -49,22 +62,28 @@ func (r *pgRepo) PersistOp(ctx context.Context, projectRef string, op map[string
 	return projectID, true, nil
 }
 
-func lockProjectFlow(ctx context.Context, tx pgx.Tx, ref string) (string, []byte, error) {
-	var id string
-	var flow []byte
+func lockProjectFlow(ctx context.Context, q *sqlcdb.Queries, ref string) (string, []byte, error) {
 	if n, err := strconv.ParseInt(ref, 10, 32); err == nil {
-		err := tx.QueryRow(ctx, `
-SELECT id::text, flow FROM projects
-WHERE legacy_id = $1 AND deleted_at IS NULL
-FOR UPDATE
-`, int32(n)).Scan(&id, &flow)
-		return id, flow, err
+		legacyID := int32(n)
+		row, err := q.LockCollaborativeProjectFlowByLegacyID(ctx, &legacyID)
+		return row.ID.String(), row.Flow, err
 	}
+	id, err := uuid.Parse(ref)
+	if err != nil {
+		return "", nil, pgx.ErrNoRows
+	}
+	row, err := q.LockCollaborativeProjectFlowByID(ctx, id)
+	return row.ID.String(), row.Flow, err
+}
 
-	err := tx.QueryRow(ctx, `
-SELECT id::text, flow FROM projects
-WHERE (id = $1::uuid OR uuid = $1::uuid) AND deleted_at IS NULL
-FOR UPDATE
-`, ref).Scan(&id, &flow)
-	return id, flow, err
+func (r *pgRepo) RuntimeSnapshot(ctx context.Context, projectID string) (string, json.RawMessage, error) {
+	id, err := uuid.Parse(projectID)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse project id: %w", err)
+	}
+	row, err := r.queries.GetCollaborativeRuntimeSnapshot(ctx, id)
+	if err != nil {
+		return "", nil, err
+	}
+	return row.DebugWebhookUuid.String(), row.Flow, nil
 }

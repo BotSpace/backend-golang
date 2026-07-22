@@ -110,7 +110,8 @@ func main() {
 	chatSend := &chatsend.Usecase{Repo: chatsend.NewPostgresRepository(pool), Storage: storage, Log: log}
 	subsExpiry := &subscriptions.Usecase{Repo: subscriptions.NewPostgresRepository(pool), Log: log}
 	authClean := &authcleanup.Usecase{Repo: authcleanup.NewPostgresRepository(pool), Log: log}
-	collabPersist := &collabpersist.Usecase{Repo: collabpersist.NewPostgresRepository(pool), Redis: rdbClient, Log: log}
+	collabRepo := collabpersist.NewPostgresRepository(pool)
+	collabPersist := &collabpersist.Usecase{Repo: collabRepo, Redis: rdbClient, Log: log, Reloader: collabpersist.NewPoolReloader(collabRepo, rdbClient, log)}
 
 	// --- Cron (celery beat jadvali) ---
 	c := cron.New()

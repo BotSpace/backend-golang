@@ -243,10 +243,8 @@ type Querier interface {
 	// of silently returning zeroed totals.
 	FileProjectOwnedByOwner(ctx context.Context, arg FileProjectOwnedByOwnerParams) (bool, error)
 	FinishExecution(ctx context.Context, arg FinishExecutionParams) (Execution, error)
-	GetActiveDebugRuntimeMigrationOwner(ctx context.Context, arg GetActiveDebugRuntimeMigrationOwnerParams) (uuid.UUID, error)
 	// Used by subscription upgrade: a target plan must be active to buy into it.
 	GetActivePlanByID(ctx context.Context, id uuid.UUID) (Plan, error)
-	GetActiveReleaseRuntimeMigrationOwner(ctx context.Context, arg GetActiveReleaseRuntimeMigrationOwnerParams) (uuid.UUID, error)
 	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	// Resolves a submitted code together with its BotUser in one round-trip
 	// (Django: LoginSerializer.validate_code + code.user).
@@ -255,6 +253,7 @@ type Querier interface {
 	// (create/update/get) without joining the main queries above.
 	GetBlogAuthorDisplay(ctx context.Context, id uuid.UUID) (GetBlogAuthorDisplayRow, error)
 	GetBlogPostByID(ctx context.Context, id uuid.UUID) (BlogPost, error)
+	GetCollaborativeRuntimeSnapshot(ctx context.Context, id uuid.UUID) (GetCollaborativeRuntimeSnapshotRow, error)
 	GetConfig(ctx context.Context, key string) (Config, error)
 	// Unscoped by owner — internal/engine reads only, guarded by X-Internal-Token
 	// and an explicit owner check in the usecase layer.
@@ -444,6 +443,8 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
 	LockArchivedKanbanCardForRestore(ctx context.Context, arg LockArchivedKanbanCardForRestoreParams) (KanbanCard, error)
+	LockCollaborativeProjectFlowByID(ctx context.Context, id uuid.UUID) (LockCollaborativeProjectFlowByIDRow, error)
+	LockCollaborativeProjectFlowByLegacyID(ctx context.Context, legacyID *int32) (LockCollaborativeProjectFlowByLegacyIDRow, error)
 	LockKanbanBoardForColumnCreate(ctx context.Context, arg LockKanbanBoardForColumnCreateParams) (uuid.UUID, error)
 	LockKanbanCardForMove(ctx context.Context, arg LockKanbanCardForMoveParams) (LockKanbanCardForMoveRow, error)
 	LockKanbanColumnForCreate(ctx context.Context, arg LockKanbanColumnForCreateParams) (*int32, error)
@@ -469,6 +470,7 @@ type Querier interface {
 	NextKanbanCardPosition(ctx context.Context, arg NextKanbanCardPositionParams) (int32, error)
 	// Bot-by-bot income breakdown for the earnings dashboard (by_bot payload).
 	PaymentEarningsByProject(ctx context.Context, ownerID uuid.UUID) ([]PaymentEarningsByProjectRow, error)
+	PersistCollaborativeProjectFlow(ctx context.Context, arg PersistCollaborativeProjectFlowParams) (int64, error)
 	// Disk-usage time series from the hourly disksnap snapshots, for the monitoring
 	// Disk chart. Prometheus has no filesystem metric for the engine pods (its disk
 	// range query returns nothing), so the chart sources disk history from here.
@@ -480,11 +482,8 @@ type Querier interface {
 	// Callers must have already verified ownership via whatever row
 	// (release/debug) carried this project_id.
 	ReleaseGetProjectOwnerID(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
-	ReplaceLegacyDebugRuntimeServiceID(ctx context.Context, arg ReplaceLegacyDebugRuntimeServiceIDParams) (int64, error)
-	ReplaceLegacyReleaseRuntimeServiceID(ctx context.Context, arg ReplaceLegacyReleaseRuntimeServiceIDParams) (int64, error)
 	ResolveKanbanProjectByLegacyRef(ctx context.Context, legacyID *int32) (uuid.UUID, error)
 	ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
-	ResolveLegacyRuntimeProject(ctx context.Context, legacyID *int32) (ResolveLegacyRuntimeProjectRow, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
 	// info plus the owning project's release/debug uuids.
 	ResolveWebhookToken(ctx context.Context, token uuid.UUID) (ResolveWebhookTokenRow, error)
