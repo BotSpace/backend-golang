@@ -106,7 +106,7 @@
       "withArgs": false,
       "global": true
     },
-    "aiDoc": "Telegram /command trigger. global:true har yerda ishlaydi. withArgs:true bo'lsa argument qabul qiladi. Argumentni saqlash uchun FLAT state_key + state_type:'text' ishlat; keyingi node qiymatni `{{state_key}}` emas, state_key nomi bilan o'qiydi (masalan state_key='ref' → `{{ref}}`). Alohida save_state switch kerak emas.",
+    "aiDoc": "Telegram /command trigger. global:true har yerda ishlaydi. withArgs:true bo'lsa argument qabul qiladi. Argumentni saqlash uchun state_key + state_type:'text' ishlat. Masalan state_key='ref' qiymati keyingi node'da `{{ref}}` bilan o'qiladi.",
     "summary": "/command (masalan /start) kelganda flow'ni boshlaydi",
     "agentCategory": "trigger"
   },
@@ -546,7 +546,7 @@
       "global": true,
       "context": {}
     },
-    "aiDoc": "Xabar turini kutib trigger. Maydonlar FLAT (nested obyekt YO'Q). type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation (`messageType` EMAS — `type`). filter: any/equals/contains/starts_with/regex; filter qiymati `f_context_value`. global_:false bo'lsa (nom oxirida `_`, `global` EMAS) faqat pauzada ishlaydi (foydalanuvchi javobini kutish). Kelgan ma'lumotni AVTOMATIK saqlash uchun: state_key:'<nom>' + state_type:'<tur>' (nested `state:{}` EMAS, `state:true` EMAS) — public_<state_key> ga yoziladi, alohida StateNode KERAK EMAS. Misol: {\"type\":\"text\",\"global_\":false,\"state_key\":\"user_name\",\"state_type\":\"text\"} → {{user_name}} orqali ishlatiladi.",
+    "aiDoc": "Xabarni kutadigan trigger. type: text/photo/video/audio/voice/video_note/document/contact/location/sticker/animation. filter: any/equals/contains/starts_with/regex; filter qiymati context.value orqali beriladi. global:false oldingi actiondan keyingi foydalanuvchi javobini kutadi; global:true root trigger sifatida har doim tinglaydi. Qiymatni saqlash uchun state_key + state_type ishlat. Matn misoli: {\"type\":\"text\",\"global\":false,\"state_key\":\"user_name\",\"state_type\":\"text\"} → keyingi node `{{user_name}}`. Kontakt misoli: type:'contact', state_type:'phone_number'.",
     "summary": "Foydalanuvchi xabari (matn/rasm/kontakt...) kelganda flow'ni boshlaydi yoki javobni kutadi",
     "agentCategory": "trigger"
   },
@@ -3294,7 +3294,7 @@
         "key": "key",
         "label": "Saqlash nomi (state)",
         "placeholder": "yuklangan_fayl",
-        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{state_NOM}} = fayl UUID, {{state_NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun).",
+        "helpText": "Yuklangan fayl shu nom bilan saqlanadi: {{NOM}} = fayl UUID, {{NOM_file_url}} = yuklab olish URL'i (masalan Gemini STT audio uchun).",
         "is_state": true,
         "stateSuffixes": [
           "",
@@ -3400,7 +3400,7 @@
       "key": "state_key",
       "type": "user_id"
     },
-    "aiDoc": "Ma'lumotni state'ga saqlash. type: text/caption/callback/contact_phone_number/photo_file_id/video_file_id/audio_file_id/document_file_id/file_id/user_id/first_name/last_name/username/language_code/location_latitude/location_longitude/Custom. Custom bo'lsa customType maydonida expression yoziladi (masalan '{{inserted_id}}').",
+    "aiDoc": "Qiymatni key nomi bilan saqlaydi. type: text/caption/callback/contact_phone_number/photo_file_id/video_file_id/audio_file_id/document_file_id/file_id/user_id/first_name/last_name/username/language_code/location_latitude/location_longitude/static/Custom. Doimiy qiymat uchun type='static' + value; Custom bo'lsa customType maydonida expression yoziladi (masalan '{{inserted_id}}').",
     "summary": "Ma'lumotni (matn, kontakt, file_id...) state o'zgaruvchisiga saqlaydi",
     "agentCategory": "data"
   },
@@ -3637,7 +3637,7 @@
       {
         "kind": "source",
         "side": "right",
-        "id": "next",
+        "id": "false",
         "offsetClass": "translate-y-[200%]",
         "styleVariant": "danger",
         "label": "Yo’q"
@@ -3705,7 +3705,7 @@
       {
         "kind": "source",
         "side": "right",
-        "id": "next",
+        "id": "false",
         "offsetClass": "translate-y-[200%]",
         "styleVariant": "danger",
         "label": "Yo’q"
@@ -3728,7 +3728,11 @@
     ],
     "aiDoc": "Else-if branch (IfConditionNode'dan keyin)",
     "summary": "IfCondition'dan keyingi else-if tarmog'i",
-    "agentCategory": "flow_control"
+    "agentCategory": "flow_control",
+    "sourceHandles": [
+      "true",
+      "false"
+    ]
   },
   {
     "type": "ElseNode",
@@ -3778,7 +3782,10 @@
     ],
     "aiDoc": "Else branch",
     "summary": "Shart bajarilmagandagi else tarmog'i",
-    "agentCategory": "flow_control"
+    "agentCategory": "flow_control",
+    "sourceHandles": [
+      "true"
+    ]
   },
   {
     "type": "DelayNode",
@@ -4748,6 +4755,10 @@
             "label": "Collection hujjati (to'liq obyekt)"
           },
           {
+            "value": "static",
+            "label": "Doimiy qiymat"
+          },
+          {
             "value": "any",
             "label": "any"
           }
@@ -4755,6 +4766,17 @@
         "visibleWhen": {
           "key": "state_key",
           "notEquals": ""
+        }
+      },
+      {
+        "type": "text",
+        "key": "state_value",
+        "label": "Saqlanadigan doimiy qiymat",
+        "placeholder": "Masalan: premium",
+        "optional": true,
+        "visibleWhen": {
+          "key": "state_type",
+          "equals": "static"
         }
       },
       {
@@ -4776,7 +4798,7 @@
         "value": ""
       }
     },
-    "aiDoc": "Inline button callback trigger. filter: any/equals/contains/starts_with/regex; context.value — mos callback_data/prefix. global:false odatda oldingi actiondan keyin foydalanuvchi javobini kutadi. Saqlash uchun FLAT state_key + state_type ishlat (alohida save_state kerak emas). state_type='collection_id' `collection:<name>:<id>` dan faqat ID'ni saqlaydi; state_type='full_data' shu collection hujjatini yuklab state_key ostiga obyekt qilib yozadi. Masalan state_key='selected_course', state_type='full_data' bo'lsa keyingi node `{{selected_course.title}}` ishlatadi — qo'shimcha LoadCollectionItemNode yoki CustomCodeNode KERAK EMAS. Oddiy callback uchun state_type='callback'. `{{state_selected_course}}` noto'g'ri; public qiymat `{{selected_course}}` bilan o'qiladi.",
+    "aiDoc": "Inline button callback trigger. filter: any/equals/contains/starts_with/regex; context.value — mos callback_data/prefix. global:false oldingi actiondan keyingi javobni kutadi. Saqlash uchun state_key + state_type ishlat. state_type='collection_id' `collection:<name>:<id>` dan ID'ni saqlaydi; state_type='full_data' collection hujjatini obyekt qilib yozadi. Masalan state_key='selected_course', state_type='full_data' qiymati keyingi node'da `{{selected_course.title}}` bilan o'qiladi. Oddiy callback uchun state_type='callback'. Belgilangan qiymatni saqlash uchun state_type='static' + state_value ishlat.",
     "summary": "Inline tugma bosilganda (callback) flow'ni boshlaydi yoki kutadi",
     "agentCategory": "trigger"
   },
@@ -5606,7 +5628,7 @@
       "listContextKey": "",
       "description": ""
     },
-    "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{<key>}}/{{user_id}}/{{username}} placeholder; saqlangan qiymat uchun yalang'och {{<key>}} — {{state_<key>}} underscore RESOLVE BO'LMAYDI — engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
+    "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{<key>}}/{{user_id}}/{{username}} placeholder; saqlangan qiymat uchun {{<key>}} ishlatiladi va engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun CMS kolleksiya tool'i (create/read/update/delete)",
     "agentCategory": "ai",
     "sourceHandles": [
@@ -7324,7 +7346,7 @@
       "sheets_success",
       "google_error"
     ],
-    "aiDoc": "Google Sheets (v4) — oauth2 credential orqali. credential_id type_key 'google_sheets' bo'lgan credential'ga ishora qiladi (secret flow'da emas, engine runtime'da access_token'ga aylantiradi). operation: append/read/update/clear. spreadsheet_id majburiy. range to'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10' (engine sheet+range birlashtiradi) — sheet yoki range'dan kamida biri bo'lishi shart. values JSON 2D massiv (append/update). JAVOB SHAKLI (read): context[responseVariable] (default 'sheets_response') = XOM Google API javobi {majorDimension, range, values} — values 2D massiv, 1-QATOR SARLAVHA, qolganlari ma'lumot; bu OBYEKT, {{#each}} bilan ISHLAMAYDI. Engine yana context[rowsVariable] (default '<responseVariable>_rows' = 'sheets_response_rows') ga TOZA array-of-objects yozadi (sarlavha qatori kalit): [{ustun_nomi: qiymat}, ...]. Ro'yxatni xabarda chiqarish uchun ALBATTA rowsVariable'ni ishlat: `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` — XOM responseVariable'ni {{#each}} bilan ISHLATMA. Yana context[responseVariable+'_status'], context['sheets_success'] ham yoziladi. READ FILTER (in-memory, STATIK — AI-slot YO'Q): faqat ayrim qatorlar kerak bo'lsa filterConditions bilan rowsni field/op/value bo'yicha filterla, filterMatch ('and'|'or', default 'and') ularni birlashtiradi. op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists; field — ustun nomi (1-qator sarlavhasi); value'da {{chat_id}}/{{<key>}} (saqlangan ochiq qiymat — yalang'och nom; {{state_<key>}} underscore RESOLVE BO'LMAYDI) ishlaydi (masalan price>100000 yoki category=={{category}}). Filterlangan natija ham rowsVariable'ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
+    "aiDoc": "Google Sheets (v4) — oauth2 credential orqali. credential_id type_key 'google_sheets' bo'lgan credential'ga ishora qiladi (secret flow'da emas, engine runtime'da access_token'ga aylantiradi). operation: append/read/update/clear. spreadsheet_id majburiy. range to'liq 'Sheet1!A1:C10' yoki sheet alohida berilsa faqat 'A1:C10' (engine sheet+range birlashtiradi) — sheet yoki range'dan kamida biri bo'lishi shart. values JSON 2D massiv (append/update). JAVOB SHAKLI (read): context[responseVariable] (default 'sheets_response') = XOM Google API javobi {majorDimension, range, values} — values 2D massiv, 1-QATOR SARLAVHA, qolganlari ma'lumot; bu OBYEKT, {{#each}} bilan ISHLAMAYDI. Engine yana context[rowsVariable] (default '<responseVariable>_rows' = 'sheets_response_rows') ga TOZA array-of-objects yozadi (sarlavha qatori kalit): [{ustun_nomi: qiymat}, ...]. Ro'yxatni xabarda chiqarish uchun ALBATTA rowsVariable'ni ishlat: `{{#each sheets_response_rows}}{{ustun_nomi}}{{/each}}` — XOM responseVariable'ni {{#each}} bilan ISHLATMA. Yana context[responseVariable+'_status'], context['sheets_success'] ham yoziladi. READ FILTER (in-memory, STATIK — AI-slot YO'Q): faqat ayrim qatorlar kerak bo'lsa filterConditions bilan rowsni field/op/value bo'yicha filterla, filterMatch ('and'|'or', default 'and') ularni birlashtiradi. op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists; field — ustun nomi (1-qator sarlavhasi); value'da {{chat_id}}/{{<key>}} (saqlangan ochiq qiymat — {{<key>}}) ishlaydi (masalan price>100000 yoki category=={{category}}). Filterlangan natija ham rowsVariable'ga yoziladi. CREDENTIAL: qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (OAuth — API orqali yaratib BO'LMAYDI); ulangach qayta list qilib credential_id ol.",
     "summary": "Google Sheets bilan ishlaydi (append/read/update/clear)",
     "agentCategory": "integration"
   },
