@@ -552,6 +552,7 @@
   },
   {
     "type": "SendTextMessageNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.textMessage.name",
@@ -740,6 +741,7 @@
   },
   {
     "type": "SendPhotoNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.photo.name",
@@ -904,6 +906,7 @@
   },
   {
     "type": "SendVideoNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.video.name",
@@ -1068,6 +1071,7 @@
   },
   {
     "type": "SendAudioNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.audio.name",
@@ -1231,6 +1235,7 @@
   },
   {
     "type": "SendFileNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.file.name",
@@ -1543,6 +1548,7 @@
   },
   {
     "type": "SendLocationNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.location.name",
@@ -1710,6 +1716,7 @@
   },
   {
     "type": "SendContactNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.contact.name",
@@ -1889,6 +1896,7 @@
   },
   {
     "type": "SendPollNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.poll.name",
@@ -2204,6 +2212,7 @@
   },
   {
     "type": "SendMediaGroupNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "actions",
     "titleKey": "constructor.actions.mediaGroup.name",
@@ -2495,6 +2504,7 @@
   },
   {
     "type": "EditMessageNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "messageOperations",
     "titleKey": "constructor.actions.editMessage.name",
@@ -2697,6 +2707,7 @@
   },
   {
     "type": "EditOrSendMessageNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "messageOperations",
     "titleKey": "constructor.actions.editOrSend.name",
@@ -3834,6 +3845,7 @@
   },
   {
     "type": "RandomNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "flowControl",
     "titleKey": "constructor.flowControl.random.name",
@@ -4529,6 +4541,7 @@
   },
   {
     "type": "CallbackQueryAnswerNode",
+    "buttonEdge": true,
     "status": "runtime",
     "category": "integrations",
     "titleKey": "constructor.integrations.callbackAnswer.name",
