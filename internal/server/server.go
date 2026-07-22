@@ -20,6 +20,7 @@ import (
 	debugmod "github.com/botspace/backend/internal/modules/debug"
 	executionmod "github.com/botspace/backend/internal/modules/execution"
 	"github.com/botspace/backend/internal/modules/file"
+	"github.com/botspace/backend/internal/modules/kanban"
 	"github.com/botspace/backend/internal/modules/kyc"
 	"github.com/botspace/backend/internal/modules/message"
 	"github.com/botspace/backend/internal/modules/oauth"
@@ -363,6 +364,12 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		projectUC = project.NewUsecaseWithCollabSigner(projectUC, collabSigner)
 	}
 	project.RegisterRoutes(v1, project.NewHandlerWithPublisher(projectUC, wsPub), tokens)
+
+	// kanban — owner-global boards optionally linked to multiple bots/projects.
+	// Bot runtimes write through its X-Internal-Token endpoint; all human CRUD
+	// remains strictly owner-scoped. Domain mutations are broadcast in real time.
+	kanbanUC := kanban.NewUsecase(kanban.NewPostgresRepository(s.pool), wsPub)
+	kanban.RegisterRoutes(v1, kanban.NewHandler(kanbanUC), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
 	planUC := plan.NewUsecase(plan.NewPostgresRepository(s.pool), userUC)

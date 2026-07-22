@@ -1200,6 +1200,66 @@
                 }
             }
         },
+        "/admin/templates/{id}/flow": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "template-admin"
+                ],
+                "summary": "Update a template source flow with an audit revision",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Flow and audit reason",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_template.UpdateAdminTemplateFlowRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/templates/{id}/reject": {
             "patch": {
                 "security": [
@@ -2357,6 +2417,629 @@
                 }
             }
         },
+        "/boards": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "List Kanban boards",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by linked bot/project",
+                        "name": "project_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Board"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Create a Kanban board",
+                "parameters": [
+                    {
+                        "description": "Board",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.CreateBoardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Board"
+                        }
+                    }
+                }
+            }
+        },
+        "/boards/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Get a Kanban board with columns and cards",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter cards by source bot/project",
+                        "name": "project_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Board"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Update a Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Board",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.UpdateBoardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Board"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Archive a Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/boards/{id}/cards": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Create a Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Card",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.CreateCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            }
+        },
+        "/boards/{id}/columns": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Create a board column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Column",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.ColumnInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Column"
+                        }
+                    }
+                }
+            }
+        },
+        "/boards/{id}/columns/{column_id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Update a board column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Column id",
+                        "name": "column_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Column",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.ColumnInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Column"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Delete an empty board column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Column id",
+                        "name": "column_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/boards/{id}/projects": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Link a bot/project to a Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Project",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.ProjectLinkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/boards/{id}/projects/{project_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Unlink a bot/project from a Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Project id",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/cards/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Get a Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Update a Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Card",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.UpdateCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Archive a Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            }
+        },
+        "/cards/{id}/activities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "List card activity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Activity"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cards/{id}/comments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "List card comments",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Comment"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Add a card comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Comment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.CommentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Comment"
+                        }
+                    }
+                }
+            }
+        },
+        "/cards/{id}/move": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Move a Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Destination",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.MoveCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            }
+        },
         "/chat/messages/{project_id}/{chat_id}": {
             "get": {
                 "security": [
@@ -3372,7 +4055,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/execution.Response"
+                                "$ref": "#/definitions/internal_modules_execution.Response"
                             }
                         }
                     },
@@ -3424,7 +4107,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/execution.DetailResponse"
+                            "$ref": "#/definitions/internal_modules_execution.DetailResponse"
                         }
                     },
                     "400": {
@@ -3907,6 +4590,60 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_payment.OrderResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/projects/{project_id}/boards/{id}/cards/upsert": {
+            "post": {
+                "tags": [
+                    "kanban-internal"
+                ],
+                "summary": "Upsert a bot-sourced Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Internal token",
+                        "name": "X-Internal-Token",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source project id",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Card",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.InternalUpsertCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
                         }
                     }
                 }
@@ -7899,116 +8636,6 @@
         }
     },
     "definitions": {
-        "execution.DetailResponse": {
-            "type": "object",
-            "properties": {
-                "execution": {
-                    "$ref": "#/definitions/execution.Response"
-                },
-                "node_runs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/execution.NodeRunResponse"
-                    }
-                }
-            }
-        },
-        "execution.NodeRunResponse": {
-            "type": "object",
-            "properties": {
-                "attempt": {
-                    "type": "integer"
-                },
-                "error": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "node_id": {
-                    "type": "string"
-                },
-                "node_type": {
-                    "type": "string"
-                },
-                "sequence": {
-                    "type": "integer"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "$ref": "#/definitions/execution.Status"
-                }
-            }
-        },
-        "execution.Response": {
-            "type": "object",
-            "properties": {
-                "chat_id": {
-                    "type": "integer"
-                },
-                "current_node_id": {
-                    "type": "string"
-                },
-                "error": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "flow_hash": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "project_id": {
-                    "type": "string"
-                },
-                "release_id": {
-                    "type": "string"
-                },
-                "run_id": {
-                    "type": "integer"
-                },
-                "runtime_mode": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "$ref": "#/definitions/execution.Status"
-                },
-                "telegram_update_id": {
-                    "type": "integer"
-                },
-                "trigger_type": {
-                    "type": "string"
-                }
-            }
-        },
-        "execution.Status": {
-            "type": "string",
-            "enum": [
-                "running",
-                "waiting",
-                "succeeded",
-                "failed",
-                "cancelled"
-            ],
-            "x-enum-varnames": [
-                "StatusRunning",
-                "StatusWaiting",
-                "StatusSucceeded",
-                "StatusFailed",
-                "StatusCancelled"
-            ]
-        },
         "github_com_botspace_backend_internal_shared_httpx.ErrorBody": {
             "type": "object",
             "properties": {
@@ -9065,6 +9692,116 @@
                 }
             }
         },
+        "internal_modules_execution.DetailResponse": {
+            "type": "object",
+            "properties": {
+                "execution": {
+                    "$ref": "#/definitions/internal_modules_execution.Response"
+                },
+                "node_runs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_execution.NodeRunResponse"
+                    }
+                }
+            }
+        },
+        "internal_modules_execution.NodeRunResponse": {
+            "type": "object",
+            "properties": {
+                "attempt": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "node_type": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/internal_modules_execution.Status"
+                }
+            }
+        },
+        "internal_modules_execution.Response": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "integer"
+                },
+                "current_node_id": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "flow_hash": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "release_id": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "runtime_mode": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/internal_modules_execution.Status"
+                },
+                "telegram_update_id": {
+                    "type": "integer"
+                },
+                "trigger_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_execution.Status": {
+            "type": "string",
+            "enum": [
+                "running",
+                "waiting",
+                "succeeded",
+                "failed",
+                "cancelled"
+            ],
+            "x-enum-varnames": [
+                "StatusRunning",
+                "StatusWaiting",
+                "StatusSucceeded",
+                "StatusFailed",
+                "StatusCancelled"
+            ]
+        },
         "internal_modules_file.ChartSeries": {
             "type": "object",
             "properties": {
@@ -9273,6 +10010,431 @@
                 },
                 "used_storage": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_modules_kanban.Activity": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string"
+                },
+                "card_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "event": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.Board": {
+            "type": "object",
+            "properties": {
+                "card_count": {
+                    "type": "integer"
+                },
+                "card_type_label": {
+                    "type": "string"
+                },
+                "cards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_kanban.Card"
+                    }
+                },
+                "color": {
+                    "type": "string"
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_kanban.Column"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "field_schema": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "project_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_kanban.ProjectLink"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.Card": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string"
+                },
+                "column_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "external_key": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "source_project_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.Column": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_terminal": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "wip_limit": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_kanban.ColumnInput": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "type": "string"
+                },
+                "is_terminal": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "wip_limit": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_kanban.Comment": {
+            "type": "object",
+            "properties": {
+                "author_id": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "card_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.CommentRequest": {
+            "type": "object",
+            "required": [
+                "body"
+            ],
+            "properties": {
+                "body": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.CreateBoardRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "card_type_label": {
+                    "type": "string"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_kanban.ColumnInput"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "field_schema": {
+                    "type": "object"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 120
+                },
+                "project_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_modules_kanban.CreateCardRequest": {
+            "type": "object",
+            "required": [
+                "column_id",
+                "title"
+            ],
+            "properties": {
+                "column_id": {
+                    "type": "string"
+                },
+                "custom_fields": {
+                    "type": "object"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "external_key": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "source_project_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 240
+                }
+            }
+        },
+        "internal_modules_kanban.InternalUpsertCardRequest": {
+            "type": "object",
+            "required": [
+                "column_id",
+                "title"
+            ],
+            "properties": {
+                "column_id": {
+                    "type": "string"
+                },
+                "custom_fields": {
+                    "type": "object"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "external_key": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 240
+                }
+            }
+        },
+        "internal_modules_kanban.MoveCardRequest": {
+            "type": "object",
+            "required": [
+                "column_id"
+            ],
+            "properties": {
+                "column_id": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "internal_modules_kanban.ProjectLink": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.ProjectLinkRequest": {
+            "type": "object",
+            "required": [
+                "project_id"
+            ],
+            "properties": {
+                "project_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.UpdateBoardRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "card_type_label": {
+                    "type": "string"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "field_schema": {
+                    "type": "object"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 120
+                }
+            }
+        },
+        "internal_modules_kanban.UpdateCardRequest": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "custom_fields": {
+                    "type": "object"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 240
                 }
             }
         },
@@ -11842,6 +13004,23 @@
                 },
                 "views": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_modules_template.UpdateAdminTemplateFlowRequest": {
+            "type": "object",
+            "required": [
+                "flow"
+            ],
+            "properties": {
+                "flow": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "reason": {
+                    "type": "string"
                 }
             }
         },

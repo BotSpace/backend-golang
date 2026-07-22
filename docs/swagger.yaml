@@ -1,80 +1,5 @@
 basePath: /api/v1
 definitions:
-  execution.DetailResponse:
-    properties:
-      execution:
-        $ref: '#/definitions/execution.Response'
-      node_runs:
-        items:
-          $ref: '#/definitions/execution.NodeRunResponse'
-        type: array
-    type: object
-  execution.NodeRunResponse:
-    properties:
-      attempt:
-        type: integer
-      error:
-        type: string
-      finished_at:
-        type: string
-      id:
-        type: string
-      node_id:
-        type: string
-      node_type:
-        type: string
-      sequence:
-        type: integer
-      started_at:
-        type: string
-      status:
-        $ref: '#/definitions/execution.Status'
-    type: object
-  execution.Response:
-    properties:
-      chat_id:
-        type: integer
-      current_node_id:
-        type: string
-      error:
-        type: string
-      finished_at:
-        type: string
-      flow_hash:
-        type: string
-      id:
-        type: string
-      project_id:
-        type: string
-      release_id:
-        type: string
-      run_id:
-        type: integer
-      runtime_mode:
-        type: string
-      started_at:
-        type: string
-      status:
-        $ref: '#/definitions/execution.Status'
-      telegram_update_id:
-        type: integer
-      trigger_type:
-        type: string
-    type: object
-  execution.Status:
-    enum:
-    - running
-    - waiting
-    - succeeded
-    - failed
-    - cancelled
-    type: string
-    x-enum-varnames:
-    - StatusRunning
-    - StatusWaiting
-    - StatusSucceeded
-    - StatusFailed
-    - StatusCancelled
   github_com_botspace_backend_internal_shared_httpx.ErrorBody:
     properties:
       code:
@@ -782,6 +707,81 @@ definitions:
         minLength: 1
         type: string
     type: object
+  internal_modules_execution.DetailResponse:
+    properties:
+      execution:
+        $ref: '#/definitions/internal_modules_execution.Response'
+      node_runs:
+        items:
+          $ref: '#/definitions/internal_modules_execution.NodeRunResponse'
+        type: array
+    type: object
+  internal_modules_execution.NodeRunResponse:
+    properties:
+      attempt:
+        type: integer
+      error:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: string
+      node_id:
+        type: string
+      node_type:
+        type: string
+      sequence:
+        type: integer
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/internal_modules_execution.Status'
+    type: object
+  internal_modules_execution.Response:
+    properties:
+      chat_id:
+        type: integer
+      current_node_id:
+        type: string
+      error:
+        type: string
+      finished_at:
+        type: string
+      flow_hash:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      release_id:
+        type: string
+      run_id:
+        type: integer
+      runtime_mode:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/internal_modules_execution.Status'
+      telegram_update_id:
+        type: integer
+      trigger_type:
+        type: string
+    type: object
+  internal_modules_execution.Status:
+    enum:
+    - running
+    - waiting
+    - succeeded
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - StatusRunning
+    - StatusWaiting
+    - StatusSucceeded
+    - StatusFailed
+    - StatusCancelled
   internal_modules_file.ChartSeries:
     properties:
       dates:
@@ -922,6 +922,287 @@ definitions:
         type: integer
       used_storage:
         type: integer
+    type: object
+  internal_modules_kanban.Activity:
+    properties:
+      actor_id:
+        type: string
+      card_id:
+        type: string
+      created_at:
+        type: string
+      data:
+        items:
+          type: integer
+        type: array
+      event:
+        type: string
+      id:
+        type: string
+    type: object
+  internal_modules_kanban.Board:
+    properties:
+      card_count:
+        type: integer
+      card_type_label:
+        type: string
+      cards:
+        items:
+          $ref: '#/definitions/internal_modules_kanban.Card'
+        type: array
+      color:
+        type: string
+      columns:
+        items:
+          $ref: '#/definitions/internal_modules_kanban.Column'
+        type: array
+      created_at:
+        type: string
+      description:
+        type: string
+      field_schema:
+        items:
+          type: integer
+        type: array
+      icon:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      owner_id:
+        type: string
+      project_ids:
+        items:
+          type: string
+        type: array
+      projects:
+        items:
+          $ref: '#/definitions/internal_modules_kanban.ProjectLink'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  internal_modules_kanban.Card:
+    properties:
+      board_id:
+        type: string
+      column_id:
+        type: string
+      created_at:
+        type: string
+      custom_fields:
+        items:
+          type: integer
+        type: array
+      description:
+        type: string
+      due_at:
+        type: string
+      external_key:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      position:
+        type: integer
+      priority:
+        type: string
+      source_project_id:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_kanban.Column:
+    properties:
+      board_id:
+        type: string
+      color:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      is_terminal:
+        type: boolean
+      name:
+        type: string
+      position:
+        type: integer
+      updated_at:
+        type: string
+      wip_limit:
+        type: integer
+    type: object
+  internal_modules_kanban.ColumnInput:
+    properties:
+      color:
+        type: string
+      is_terminal:
+        type: boolean
+      name:
+        type: string
+      wip_limit:
+        type: integer
+    type: object
+  internal_modules_kanban.Comment:
+    properties:
+      author_id:
+        type: string
+      body:
+        type: string
+      card_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_kanban.CommentRequest:
+    properties:
+      body:
+        type: string
+    required:
+    - body
+    type: object
+  internal_modules_kanban.CreateBoardRequest:
+    properties:
+      card_type_label:
+        type: string
+      color:
+        type: string
+      columns:
+        items:
+          $ref: '#/definitions/internal_modules_kanban.ColumnInput'
+        type: array
+      description:
+        type: string
+      field_schema:
+        type: object
+      icon:
+        type: string
+      name:
+        maxLength: 120
+        type: string
+      project_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    type: object
+  internal_modules_kanban.CreateCardRequest:
+    properties:
+      column_id:
+        type: string
+      custom_fields:
+        type: object
+      description:
+        type: string
+      due_at:
+        type: string
+      external_key:
+        type: string
+      kind:
+        type: string
+      priority:
+        type: string
+      source_project_id:
+        type: string
+      title:
+        maxLength: 240
+        type: string
+    required:
+    - column_id
+    - title
+    type: object
+  internal_modules_kanban.InternalUpsertCardRequest:
+    properties:
+      column_id:
+        type: string
+      custom_fields:
+        type: object
+      description:
+        type: string
+      due_at:
+        type: string
+      external_key:
+        type: string
+      kind:
+        type: string
+      priority:
+        type: string
+      title:
+        maxLength: 240
+        type: string
+    required:
+    - column_id
+    - title
+    type: object
+  internal_modules_kanban.MoveCardRequest:
+    properties:
+      column_id:
+        type: string
+      position:
+        minimum: 0
+        type: integer
+    required:
+    - column_id
+    type: object
+  internal_modules_kanban.ProjectLink:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_modules_kanban.ProjectLinkRequest:
+    properties:
+      project_id:
+        type: string
+    required:
+    - project_id
+    type: object
+  internal_modules_kanban.UpdateBoardRequest:
+    properties:
+      card_type_label:
+        type: string
+      color:
+        type: string
+      description:
+        type: string
+      field_schema:
+        type: object
+      icon:
+        type: string
+      name:
+        maxLength: 120
+        type: string
+    required:
+    - name
+    type: object
+  internal_modules_kanban.UpdateCardRequest:
+    properties:
+      custom_fields:
+        type: object
+      description:
+        type: string
+      due_at:
+        type: string
+      kind:
+        type: string
+      priority:
+        type: string
+      title:
+        maxLength: 240
+        type: string
+    required:
+    - title
     type: object
   internal_modules_kyc.AdminListResponse:
     properties:
@@ -2651,6 +2932,17 @@ definitions:
       views:
         type: integer
     type: object
+  internal_modules_template.UpdateAdminTemplateFlowRequest:
+    properties:
+      flow:
+        items:
+          type: integer
+        type: array
+      reason:
+        type: string
+    required:
+    - flow
+    type: object
   internal_modules_template.UpdateAdminTemplateRequest:
     properties:
       category_ids:
@@ -3857,6 +4149,44 @@ paths:
       summary: Update a template (admin)
       tags:
       - template-admin
+  /admin/templates/{id}/flow:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Flow and audit reason
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_template.UpdateAdminTemplateFlowRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a template source flow with an audit revision
+      tags:
+      - template-admin
   /admin/templates/{id}/reject:
     patch:
       parameters:
@@ -4595,6 +4925,388 @@ paths:
       summary: Get a published blog post by slug
       tags:
       - blog
+  /boards:
+    get:
+      parameters:
+      - description: Filter by linked bot/project
+        in: query
+        name: project_id
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Board'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List Kanban boards
+      tags:
+      - kanban
+    post:
+      parameters:
+      - description: Board
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.CreateBoardRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Board'
+      security:
+      - BearerAuth: []
+      summary: Create a Kanban board
+      tags:
+      - kanban
+  /boards/{id}:
+    delete:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Archive a Kanban board
+      tags:
+      - kanban
+    get:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Filter cards by source bot/project
+        in: query
+        name: project_id
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Board'
+      security:
+      - BearerAuth: []
+      summary: Get a Kanban board with columns and cards
+      tags:
+      - kanban
+    put:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Board
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.UpdateBoardRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Board'
+      security:
+      - BearerAuth: []
+      summary: Update a Kanban board
+      tags:
+      - kanban
+  /boards/{id}/cards:
+    post:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Card
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.CreateCardRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Create a Kanban card
+      tags:
+      - kanban
+  /boards/{id}/columns:
+    post:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.ColumnInput'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Column'
+      security:
+      - BearerAuth: []
+      summary: Create a board column
+      tags:
+      - kanban
+  /boards/{id}/columns/{column_id}:
+    delete:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column id
+        in: path
+        name: column_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete an empty board column
+      tags:
+      - kanban
+    put:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Column id
+        in: path
+        name: column_id
+        required: true
+        type: string
+      - description: Column
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.ColumnInput'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Column'
+      security:
+      - BearerAuth: []
+      summary: Update a board column
+      tags:
+      - kanban
+  /boards/{id}/projects:
+    post:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Project
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.ProjectLinkRequest'
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Link a bot/project to a Kanban board
+      tags:
+      - kanban
+  /boards/{id}/projects/{project_id}:
+    delete:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Project id
+        in: path
+        name: project_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Unlink a bot/project from a Kanban board
+      tags:
+      - kanban
+  /cards/{id}:
+    delete:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Archive a Kanban card
+      tags:
+      - kanban
+    get:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Get a Kanban card
+      tags:
+      - kanban
+    put:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Card
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.UpdateCardRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Update a Kanban card
+      tags:
+      - kanban
+  /cards/{id}/activities:
+    get:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Activity'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List card activity
+      tags:
+      - kanban
+  /cards/{id}/comments:
+    get:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Comment'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List card comments
+      tags:
+      - kanban
+    post:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Comment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.CommentRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Comment'
+      security:
+      - BearerAuth: []
+      summary: Add a card comment
+      tags:
+      - kanban
+  /cards/{id}/move:
+    post:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Destination
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.MoveCardRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Move a Kanban card
+      tags:
+      - kanban
   /chat/messages/{project_id}/{chat_id}:
     get:
       parameters:
@@ -5216,7 +5928,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/execution.Response'
+              $ref: '#/definitions/internal_modules_execution.Response'
             type: array
         "400":
           description: Bad Request
@@ -5249,7 +5961,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/execution.DetailResponse'
+            $ref: '#/definitions/internal_modules_execution.DetailResponse'
         "400":
           description: Bad Request
           schema:
@@ -5567,6 +6279,42 @@ paths:
       summary: '[internal] Engine reads a bot payment order''s status'
       tags:
       - payment-internal
+  /internal/projects/{project_id}/boards/{id}/cards/upsert:
+    post:
+      parameters:
+      - description: Internal token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Source project id
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Card
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.InternalUpsertCardRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      summary: Upsert a bot-sourced Kanban card
+      tags:
+      - kanban-internal
   /internal/webhook-hook/{token}:
     get:
       parameters:

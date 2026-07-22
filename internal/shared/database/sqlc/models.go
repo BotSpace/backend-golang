@@ -234,6 +234,74 @@ type History struct {
 	DeletedAt      *time.Time     `json:"deleted_at"`
 }
 
+type KanbanActivity struct {
+	ID        uuid.UUID  `json:"id"`
+	CardID    uuid.UUID  `json:"card_id"`
+	ActorID   *uuid.UUID `json:"actor_id"`
+	Event     string     `json:"event"`
+	Data      []byte     `json:"data"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type KanbanBoard struct {
+	ID            uuid.UUID  `json:"id"`
+	OwnerID       uuid.UUID  `json:"owner_id"`
+	Name          string     `json:"name"`
+	Description   string     `json:"description"`
+	Icon          string     `json:"icon"`
+	Color         string     `json:"color"`
+	CardTypeLabel string     `json:"card_type_label"`
+	FieldSchema   []byte     `json:"field_schema"`
+	ArchivedAt    *time.Time `json:"archived_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type KanbanBoardProject struct {
+	BoardID   uuid.UUID `json:"board_id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type KanbanCard struct {
+	ID              uuid.UUID  `json:"id"`
+	BoardID         uuid.UUID  `json:"board_id"`
+	ColumnID        uuid.UUID  `json:"column_id"`
+	SourceProjectID *uuid.UUID `json:"source_project_id"`
+	Kind            string     `json:"kind"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	Priority        string     `json:"priority"`
+	Position        int64      `json:"position"`
+	DueAt           *time.Time `json:"due_at"`
+	ExternalKey     *string    `json:"external_key"`
+	CustomFields    []byte     `json:"custom_fields"`
+	ArchivedAt      *time.Time `json:"archived_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type KanbanColumn struct {
+	ID         uuid.UUID `json:"id"`
+	BoardID    uuid.UUID `json:"board_id"`
+	Name       string    `json:"name"`
+	Color      string    `json:"color"`
+	Position   int32     `json:"position"`
+	WipLimit   *int32    `json:"wip_limit"`
+	IsTerminal bool      `json:"is_terminal"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type KanbanComment struct {
+	ID        uuid.UUID `json:"id"`
+	CardID    uuid.UUID `json:"card_id"`
+	AuthorID  uuid.UUID `json:"author_id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type ManagedBot struct {
 	ID             uuid.UUID  `json:"id"`
 	OwnerID        *uuid.UUID `json:"owner_id"`
