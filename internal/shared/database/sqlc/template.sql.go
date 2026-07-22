@@ -994,6 +994,28 @@ func (q *Queries) TemplateGetBySlugAny(ctx context.Context, slug string) (Templa
 	return i, err
 }
 
+const templateGetLinkedProjectFlowForUpdate = `-- name: TemplateGetLinkedProjectFlowForUpdate :one
+
+SELECT p.id AS project_id, p.flow
+FROM projects p
+JOIN template t ON t.project_id = p.id
+WHERE t.id = $1
+FOR UPDATE OF p
+`
+
+type TemplateGetLinkedProjectFlowForUpdateRow struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	Flow      []byte    `json:"flow"`
+}
+
+// ===================== template catalog (admin) =====================
+func (q *Queries) TemplateGetLinkedProjectFlowForUpdate(ctx context.Context, templateID uuid.UUID) (TemplateGetLinkedProjectFlowForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, templateGetLinkedProjectFlowForUpdate, templateID)
+	var i TemplateGetLinkedProjectFlowForUpdateRow
+	err := row.Scan(&i.ProjectID, &i.Flow)
+	return i, err
+}
+
 const templateGetOrderForOwner = `-- name: TemplateGetOrderForOwner :one
 SELECT id, user_id, template_id, amount, status, payment_status, commission_paid, created_at, updated_at FROM template_order WHERE id = $1 AND user_id = $2
 `
@@ -1235,6 +1257,38 @@ func (q *Queries) TemplateIncrementViews(ctx context.Context, id uuid.UUID) erro
 	return err
 }
 
+const templateInsertFlowRevision = `-- name: TemplateInsertFlowRevision :exec
+INSERT INTO template_flow_revision
+    (id, template_id, project_id, actor_id, previous_flow, new_flow, reason)
+VALUES
+    ($1, $2, $3,
+     $4, $5, $6,
+     $7)
+`
+
+type TemplateInsertFlowRevisionParams struct {
+	ID           uuid.UUID  `json:"id"`
+	TemplateID   uuid.UUID  `json:"template_id"`
+	ProjectID    uuid.UUID  `json:"project_id"`
+	ActorID      *uuid.UUID `json:"actor_id"`
+	PreviousFlow []byte     `json:"previous_flow"`
+	NewFlow      []byte     `json:"new_flow"`
+	Reason       string     `json:"reason"`
+}
+
+func (q *Queries) TemplateInsertFlowRevision(ctx context.Context, arg TemplateInsertFlowRevisionParams) error {
+	_, err := q.db.Exec(ctx, templateInsertFlowRevision,
+		arg.ID,
+		arg.TemplateID,
+		arg.ProjectID,
+		arg.ActorID,
+		arg.PreviousFlow,
+		arg.NewFlow,
+		arg.Reason,
+	)
+	return err
+}
+
 const templateInsertLike = `-- name: TemplateInsertLike :execrows
 INSERT INTO template_like (template_id, user_id) VALUES ($1, $2)
 ON CONFLICT DO NOTHING
@@ -1347,7 +1401,6 @@ type TemplateListAdminRow struct {
 	AuthorUsername  *string  `json:"author_username"`
 }
 
-// ===================== template catalog (admin) =====================
 // Unlike the public catalog above, these are not restricted to
 // is_verify = TRUE and join users for the author's display name/phone (the
 // fix for the admin panel's "#undefined" author bug — no admin template
@@ -2157,6 +2210,25 @@ func (q *Queries) TemplateSubmissionFeaturesFor(ctx context.Context, submissionI
 		return nil, err
 	}
 	return items, nil
+}
+
+const templateUpdateLinkedProjectFlow = `-- name: TemplateUpdateLinkedProjectFlow :execrows
+UPDATE projects p SET flow = $1, updated_at = NOW()
+FROM template t
+WHERE t.id = $2 AND p.id = t.project_id
+`
+
+type TemplateUpdateLinkedProjectFlowParams struct {
+	Flow       []byte    `json:"flow"`
+	TemplateID uuid.UUID `json:"template_id"`
+}
+
+func (q *Queries) TemplateUpdateLinkedProjectFlow(ctx context.Context, arg TemplateUpdateLinkedProjectFlowParams) (int64, error) {
+	result, err := q.db.Exec(ctx, templateUpdateLinkedProjectFlow, arg.Flow, arg.TemplateID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const templateUpdateSubmission = `-- name: TemplateUpdateSubmission :one

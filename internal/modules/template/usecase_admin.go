@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func (u *usecase) AdminUpdateFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage) error {
-	if err := u.repo.UpdateLinkedProjectFlow(ctx, id, flow); err != nil {
+func (u *usecase) AdminUpdateFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage, actorID uuid.UUID, reason string) error {
+	if err := u.repo.UpdateLinkedProjectFlow(ctx, id, flow, actorID, strings.TrimSpace(reason)); err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return httpx.NotFound("template.project_not_found", "linked template project not found")
 		}

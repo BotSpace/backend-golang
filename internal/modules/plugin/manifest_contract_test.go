@@ -33,13 +33,21 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 		t.Fatal("CallbackQueryTriggerNode has no content")
 	}
 	var hasStaticOption, hasStaticValue bool
+	allowedCallbackStateTypes := map[string]bool{
+		"callback": true, "data": true, "collection_id": true,
+		"full_data": true, "static": true,
+	}
 	for _, raw := range content {
 		field, _ := raw.(map[string]any)
 		switch field["key"] {
 		case "state_type":
 			for _, rawOption := range field["options"].([]any) {
 				option, _ := rawOption.(map[string]any)
-				if option["value"] == "static" {
+				value, _ := option["value"].(string)
+				if !allowedCallbackStateTypes[value] {
+					t.Errorf("callback exposes unsupported state type %q", value)
+				}
+				if value == "static" {
 					hasStaticOption = true
 				}
 			}
@@ -50,6 +58,26 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 	}
 	if !hasStaticOption || !hasStaticValue {
 		t.Fatalf("callback static capture contract missing: option=%v value=%v", hasStaticOption, hasStaticValue)
+	}
+
+	messageAllowed := map[string]bool{
+		"text": true, "caption": true, "file_id": true,
+		"phone_number": true, "contact_first_name": true,
+		"contact_last_name": true, "latitude": true,
+		"longitude": true, "static": true,
+	}
+	for _, raw := range byType["MessageTriggerNode"]["content"].([]any) {
+		field, _ := raw.(map[string]any)
+		if field["key"] != "state_type" {
+			continue
+		}
+		for _, rawOption := range field["options"].([]any) {
+			option, _ := rawOption.(map[string]any)
+			value, _ := option["value"].(string)
+			if !messageAllowed[value] {
+				t.Errorf("message trigger exposes unsupported state type %q", value)
+			}
+		}
 	}
 
 	for nodeType, node := range byType {

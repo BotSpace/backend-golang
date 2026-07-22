@@ -552,6 +552,8 @@ type Querier interface {
 	// internal RAG feed (core/apps/template/views/internal.py's
 	// get_template_with_flow, whose Django queryset has no verify restriction).
 	TemplateGetBySlugAny(ctx context.Context, slug string) (Template, error)
+	// ===================== template catalog (admin) =====================
+	TemplateGetLinkedProjectFlowForUpdate(ctx context.Context, templateID uuid.UUID) (TemplateGetLinkedProjectFlowForUpdateRow, error)
 	TemplateGetOrderForOwner(ctx context.Context, arg TemplateGetOrderForOwnerParams) (TemplateOrder, error)
 	// ===================== orders / purchase =====================
 	TemplateGetOrderForUserAndTemplate(ctx context.Context, arg TemplateGetOrderForUserAndTemplateParams) (TemplateOrder, error)
@@ -565,10 +567,10 @@ type Querier interface {
 	TemplateGetWithdrawalForOwner(ctx context.Context, arg TemplateGetWithdrawalForOwnerParams) (TemplateWithdrawalRequest, error)
 	TemplateGrantOwnership(ctx context.Context, arg TemplateGrantOwnershipParams) error
 	TemplateIncrementViews(ctx context.Context, id uuid.UUID) error
+	TemplateInsertFlowRevision(ctx context.Context, arg TemplateInsertFlowRevisionParams) error
 	TemplateInsertLike(ctx context.Context, arg TemplateInsertLikeParams) (int64, error)
 	TemplateLikeCounts(ctx context.Context, templateIds []uuid.UUID) ([]TemplateLikeCountsRow, error)
 	TemplateLikedIDsForUser(ctx context.Context, arg TemplateLikedIDsForUserParams) ([]uuid.UUID, error)
-	// ===================== template catalog (admin) =====================
 	// Unlike the public catalog above, these are not restricted to
 	// is_verify = TRUE and join users for the author's display name/phone (the
 	// fix for the admin panel's "#undefined" author bug — no admin template
@@ -604,6 +606,7 @@ type Querier interface {
 	TemplateSlugExists(ctx context.Context, slug string) (bool, error)
 	TemplateSubmissionCategoriesFor(ctx context.Context, submissionIds []uuid.UUID) ([]TemplateSubmissionCategoriesForRow, error)
 	TemplateSubmissionFeaturesFor(ctx context.Context, submissionIds []uuid.UUID) ([]TemplateSubmissionFeaturesForRow, error)
+	TemplateUpdateLinkedProjectFlow(ctx context.Context, arg TemplateUpdateLinkedProjectFlowParams) (int64, error)
 	// Only mutable while status = 'pending' (checked by the caller/usecase too).
 	TemplateUpdateSubmission(ctx context.Context, arg TemplateUpdateSubmissionParams) (TemplateSubmissionRequest, error)
 	TouchPersonalAccessToken(ctx context.Context, id uuid.UUID) error

@@ -64,29 +64,23 @@
             "label": "text"
           },
           {
-            "value": "number",
-            "label": "number"
-          },
-          {
-            "value": "photo",
-            "label": "photo"
-          },
-          {
-            "value": "video",
-            "label": "video"
-          },
-          {
-            "value": "document",
-            "label": "document"
-          },
-          {
-            "value": "any",
-            "label": "any"
+            "value": "static",
+            "label": "Doimiy qiymat"
           }
         ],
         "visibleWhen": {
           "key": "state_key",
           "notEquals": ""
+        }
+      },
+      {
+        "type": "text",
+        "key": "state_value",
+        "label": "Saqlanadigan doimiy qiymat",
+        "optional": true,
+        "visibleWhen": {
+          "key": "state_type",
+          "equals": "static"
         }
       },
       {
@@ -503,29 +497,51 @@
             "label": "text"
           },
           {
-            "value": "number",
-            "label": "number"
+            "value": "caption",
+            "label": "Media caption"
           },
           {
-            "value": "photo",
-            "label": "photo"
+            "value": "file_id",
+            "label": "Telegram file ID"
           },
           {
-            "value": "video",
-            "label": "video"
+            "value": "phone_number",
+            "label": "Telefon raqami"
           },
           {
-            "value": "document",
-            "label": "document"
+            "value": "contact_first_name",
+            "label": "Kontakt ismi"
           },
           {
-            "value": "any",
-            "label": "any"
+            "value": "contact_last_name",
+            "label": "Kontakt familiyasi"
+          },
+          {
+            "value": "latitude",
+            "label": "Latitude"
+          },
+          {
+            "value": "longitude",
+            "label": "Longitude"
+          },
+          {
+            "value": "static",
+            "label": "Doimiy qiymat"
           }
         ],
         "visibleWhen": {
           "key": "state_key",
           "notEquals": ""
+        }
+      },
+      {
+        "type": "text",
+        "key": "state_value",
+        "label": "Saqlanadigan doimiy qiymat",
+        "optional": true,
+        "visibleWhen": {
+          "key": "state_type",
+          "equals": "static"
         }
       },
       {
@@ -4736,28 +4752,12 @@
         "label": "Ma'lumot Turi",
         "options": [
           {
-            "value": "text",
-            "label": "text"
-          },
-          {
-            "value": "number",
-            "label": "number"
-          },
-          {
-            "value": "photo",
-            "label": "photo"
-          },
-          {
-            "value": "video",
-            "label": "video"
-          },
-          {
-            "value": "document",
-            "label": "document"
-          },
-          {
             "value": "callback",
             "label": "Callback data (tugma bosilganda)"
+          },
+          {
+            "value": "data",
+            "label": "Callback qiymati"
           },
           {
             "value": "collection_id",
@@ -4770,10 +4770,6 @@
           {
             "value": "static",
             "label": "Doimiy qiymat"
-          },
-          {
-            "value": "any",
-            "label": "any"
           }
         ],
         "visibleWhen": {

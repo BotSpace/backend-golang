@@ -35,6 +35,8 @@ type DeploySpec struct {
 	Version     int
 	Debug       bool
 	Flow        []byte // constructor graph JSON
+	Schemas     []byte // collection -> field -> CMS kind JSON
+	Modules     []byte // {"modules": [...]} runtime module routing JSON
 	Env         map[string]string
 
 	// Name overrides how KubernetesOrchestrator derives the Deployment/Service

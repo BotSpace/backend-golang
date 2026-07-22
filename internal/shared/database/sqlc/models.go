@@ -515,6 +515,17 @@ type TemplateFeatureMap struct {
 	FeatureID  uuid.UUID `json:"feature_id"`
 }
 
+type TemplateFlowRevision struct {
+	ID           uuid.UUID  `json:"id"`
+	TemplateID   uuid.UUID  `json:"template_id"`
+	ProjectID    uuid.UUID  `json:"project_id"`
+	ActorID      *uuid.UUID `json:"actor_id"`
+	PreviousFlow []byte     `json:"previous_flow"`
+	NewFlow      []byte     `json:"new_flow"`
+	Reason       string     `json:"reason"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
 type TemplateLike struct {
 	ID         uuid.UUID  `json:"id"`
 	TemplateID uuid.UUID  `json:"template_id"`

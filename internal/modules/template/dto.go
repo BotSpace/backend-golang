@@ -318,7 +318,8 @@ type UpdateAdminTemplateRequest struct {
 }
 
 type UpdateAdminTemplateFlowRequest struct {
-	Flow json.RawMessage `json:"flow" validate:"required"`
+	Flow   json.RawMessage `json:"flow" validate:"required"`
+	Reason string          `json:"reason"`
 }
 
 // ===================== submissions =====================

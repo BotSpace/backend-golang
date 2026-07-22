@@ -116,6 +116,27 @@ ON CONFLICT DO NOTHING;
 DELETE FROM template_like WHERE template_id = sqlc.arg('template_id') AND user_id = sqlc.arg('user_id');
 
 -- ===================== template catalog (admin) =====================
+
+-- name: TemplateGetLinkedProjectFlowForUpdate :one
+SELECT p.id AS project_id, p.flow
+FROM projects p
+JOIN template t ON t.project_id = p.id
+WHERE t.id = sqlc.arg('template_id')
+FOR UPDATE OF p;
+
+-- name: TemplateUpdateLinkedProjectFlow :execrows
+UPDATE projects p SET flow = sqlc.arg('flow'), updated_at = NOW()
+FROM template t
+WHERE t.id = sqlc.arg('template_id') AND p.id = t.project_id;
+
+-- name: TemplateInsertFlowRevision :exec
+INSERT INTO template_flow_revision
+    (id, template_id, project_id, actor_id, previous_flow, new_flow, reason)
+VALUES
+    (sqlc.arg('id'), sqlc.arg('template_id'), sqlc.arg('project_id'),
+     sqlc.narg('actor_id'), sqlc.arg('previous_flow'), sqlc.arg('new_flow'),
+     sqlc.arg('reason'));
+
 -- Unlike the public catalog above, these are not restricted to
 -- is_verify = TRUE and join users for the author's display name/phone (the
 -- fix for the admin panel's "#undefined" author bug — no admin template

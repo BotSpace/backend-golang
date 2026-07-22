@@ -42,7 +42,7 @@ type Usecase interface {
 	AdminGet(ctx context.Context, id uuid.UUID) (*AdminTemplateSummary, error)
 	AdminCreate(ctx context.Context, in CreateAdminTemplateInput) (*Template, error)
 	AdminUpdate(ctx context.Context, id uuid.UUID, in UpdateAdminTemplateInput) (*Template, error)
-	AdminUpdateFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage) error
+	AdminUpdateFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage, actorID uuid.UUID, reason string) error
 	AdminDelete(ctx context.Context, id uuid.UUID) error
 	AdminSetVerify(ctx context.Context, id uuid.UUID, verify bool) (*Template, error)
 
