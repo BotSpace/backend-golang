@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -42,14 +41,11 @@ func NewMongoDB(ctx context.Context, dbName string) (*MongoDB, error) {
 	if dbName == "" {
 		dbName = "botspace_cms"
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	client, err := mongo.Connect(dialCtx, options.Client().ApplyURI(uri))
+	// Do not Ping during route construction. The Mongo driver reconnects on
+	// demand, so chat routes remain available when Mongo starts after backend.
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		return nil, fmt.Errorf("connect mongo: %w", err)
-	}
-	if err := client.Ping(dialCtx, nil); err != nil {
-		return nil, fmt.Errorf("ping mongo: %w", err)
 	}
 	return &MongoDB{client: client, dbName: dbName}, nil
 }

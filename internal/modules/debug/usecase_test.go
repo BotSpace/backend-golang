@@ -26,6 +26,19 @@ type fakeCache struct {
 	snaps map[uuid.UUID][]ContextSnapshot
 }
 
+type queuedNodeRun struct {
+	projectID uuid.UUID
+	chatID    int64
+	nodeID    string
+}
+
+type fakeCommandQueue struct{ runs []queuedNodeRun }
+
+func (q *fakeCommandQueue) EnqueueNodeRun(_ context.Context, projectID uuid.UUID, chatID int64, nodeID string) error {
+	q.runs = append(q.runs, queuedNodeRun{projectID: projectID, chatID: chatID, nodeID: nodeID})
+	return nil
+}
+
 func newFakeCache() *fakeCache {
 	return &fakeCache{sets: map[string]json.RawMessage{}, snaps: map[uuid.UUID][]ContextSnapshot{}}
 }
@@ -305,5 +318,40 @@ func TestListContext_NoopsWithoutCache(t *testing.T) {
 	items, err := uc.ListContext(context.Background(), owner, internal)
 	if err != nil || items != nil {
 		t.Fatalf("expected (nil, nil) without a cache, got (%#v, %v)", items, err)
+	}
+}
+
+func TestRunNode_QueuesLatestOwnedDebugChat(t *testing.T) {
+	repo := newFakeRepo()
+	owner, projectID := uuid.New(), uuid.New()
+	repo.owners[projectID] = owner
+	cache := newFakeCache()
+	newer, older := int64(200), int64(100)
+	cache.snaps[projectID] = []ContextSnapshot{
+		{ChatID: 22, TS: &newer},
+		{ChatID: 11, TS: &older},
+	}
+	queue := &fakeCommandQueue{}
+	uc := NewUsecaseWithDebugCommands(repo, cache, queue)
+
+	result, err := uc.RunNode(context.Background(), owner, projectID, "send-message")
+	if err != nil {
+		t.Fatalf("run node: %v", err)
+	}
+	if !result.Queued || result.ChatID != 22 || result.NodeID != "send-message" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if len(queue.runs) != 1 || queue.runs[0] != (queuedNodeRun{projectID: projectID, chatID: 22, nodeID: "send-message"}) {
+		t.Fatalf("unexpected queue: %#v", queue.runs)
+	}
+}
+
+func TestRunNode_RequiresExistingContext(t *testing.T) {
+	repo := newFakeRepo()
+	owner, projectID := uuid.New(), uuid.New()
+	repo.owners[projectID] = owner
+	uc := NewUsecaseWithDebugCommands(repo, newFakeCache(), &fakeCommandQueue{})
+	if _, err := uc.RunNode(context.Background(), owner, projectID, "n1"); status(err) != 409 {
+		t.Fatalf("expected missing-context 409, got %v", err)
 	}
 }

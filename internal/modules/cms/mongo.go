@@ -35,22 +35,19 @@ type MongoClient struct {
 	client *mongo.Client
 }
 
-// NewMongoClient dials MongoDB using APP_MONGO_URL (default
-// "mongodb://localhost:27017") and verifies connectivity with a ping.
+// NewMongoClient creates a reconnecting MongoDB client using APP_MONGO_URL.
+// mongo.Connect is intentionally lazy: routes must remain registered when
+// Mongo starts after this process (for example after a Kubernetes eviction).
+// The driver performs server selection on each operation and automatically
+// recovers when Mongo becomes reachable.
 func NewMongoClient(ctx context.Context) (*MongoClient, error) {
 	uri := os.Getenv("APP_MONGO_URL")
 	if uri == "" {
 		uri = "mongodb://localhost:27017"
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	client, err := mongo.Connect(dialCtx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		return nil, fmt.Errorf("connect mongo: %w", err)
-	}
-	if err := client.Ping(dialCtx, nil); err != nil {
-		return nil, fmt.Errorf("ping mongo: %w", err)
 	}
 	return &MongoClient{client: client}, nil
 }

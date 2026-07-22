@@ -481,7 +481,8 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	debugRepo := debugmod.NewPostgresRepository(s.pool)
 	var debugUC debugmod.Usecase
 	if addr := s.cfg.Engine.RedisAddr(); addr != "" {
-		debugUC = debugmod.NewUsecaseWithContextCache(debugRepo, debugmod.NewRedisContextCache(addr, s.cfg.Engine.RedisPassword))
+		debugRedis := debugmod.NewRedisContextCache(addr, s.cfg.Engine.RedisPassword)
+		debugUC = debugmod.NewUsecaseWithDebugCommands(debugRepo, debugRedis, debugRedis)
 	} else {
 		debugUC = debugmod.NewUsecase(debugRepo)
 	}

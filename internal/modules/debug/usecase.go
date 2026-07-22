@@ -38,6 +38,7 @@ type Usecase interface {
 	// not an error, when this usecase was built without a ContextCache (no
 	// Redis wired) — same degrade-gracefully convention as RecordContext.
 	ListContext(ctx context.Context, ownerID, projectID uuid.UUID) ([]ContextSnapshot, error)
+	RunNode(ctx context.Context, ownerID, projectID uuid.UUID, nodeID string) (*RunNodeResult, error)
 	// ResolveProjectRef is exported so other redisq event handlers wired in
 	// server.go (bot-user upsert, token usage, …) can resolve the same
 	// engine-supplied project reference without duplicating this logic.
@@ -51,8 +52,9 @@ type Usecase interface {
 }
 
 type usecase struct {
-	repo  Repository
-	cache ContextCache // nil-able — see RecordContext
+	repo     Repository
+	cache    ContextCache // nil-able — see RecordContext
+	commands CommandQueue // nil-able — exact-node execution requires Redis
 }
 
 func NewUsecase(repo Repository) Usecase { return &usecase{repo: repo} }
@@ -62,6 +64,10 @@ func NewUsecase(repo Repository) Usecase { return &usecase{repo: repo} }
 // behavior of NewUsecase.
 func NewUsecaseWithContextCache(repo Repository, cache ContextCache) Usecase {
 	return &usecase{repo: repo, cache: cache}
+}
+
+func NewUsecaseWithDebugCommands(repo Repository, cache ContextCache, commands CommandQueue) Usecase {
+	return &usecase{repo: repo, cache: cache, commands: commands}
 }
 
 func (u *usecase) RecordError(ctx context.Context, in RecordErrorInput) error {
@@ -155,6 +161,33 @@ func (u *usecase) ListContext(ctx context.Context, ownerID, projectID uuid.UUID)
 		return nil, httpx.Internal(err)
 	}
 	return items, nil
+}
+
+// RunNode queues execution for the most recently active debug chat. The
+// engine reads its own full Redis state for that chat; the context cache is
+// used only to choose which real user conversation is the latest one.
+func (u *usecase) RunNode(ctx context.Context, ownerID, projectID uuid.UUID, nodeID string) (*RunNodeResult, error) {
+	if nodeID == "" || len(nodeID) > 255 {
+		return nil, httpx.BadRequest("debug.invalid_node_id", "node_id is required")
+	}
+	if u.cache == nil || u.commands == nil {
+		return nil, httpx.Conflict("debug.runtime_unavailable", "debug runtime is unavailable")
+	}
+	items, err := u.ListContext(ctx, ownerID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, httpx.Conflict(
+			"debug.context_missing",
+			"debug botda hali user context yo'q; avval botga xabar yuboring",
+		)
+	}
+	chatID := items[0].ChatID
+	if err := u.commands.EnqueueNodeRun(ctx, projectID, chatID, nodeID); err != nil {
+		return nil, httpx.Internal(err)
+	}
+	return &RunNodeResult{NodeID: nodeID, ChatID: chatID, Queued: true}, nil
 }
 
 // ResolveProjectRef mirrors Django's cms/views/_common.py resolve_project():
