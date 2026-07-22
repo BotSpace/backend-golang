@@ -22,6 +22,22 @@ type poolReloader struct {
 	log  *zap.Logger
 }
 
+// poolRuntimeSpec intentionally matches engine supervisor RuntimeSpec field
+// order. Stable JSON avoids the reconciler treating a flow-only rewrite as a
+// second config change and starting the child twice.
+type poolRuntimeSpec struct {
+	WebhookID string            `json:"webhook_id"`
+	ProjectID string            `json:"project_id"`
+	Name      string            `json:"name"`
+	Debug     bool              `json:"debug"`
+	RoutePort int               `json:"route_port"`
+	Replicas  int               `json:"replicas,omitempty"`
+	Flow      json.RawMessage   `json:"flow"`
+	Schemas   json.RawMessage   `json:"schemas"`
+	Modules   json.RawMessage   `json:"modules"`
+	Env       map[string]string `json:"env"`
+}
+
 func NewPoolReloader(repo Repository, rdb *redis.Client, log *zap.Logger) RuntimeReloader {
 	return &poolReloader{repo: repo, rdb: rdb, log: log}
 }
@@ -83,11 +99,14 @@ func replaceRuntimeFlow(raw string, flow json.RawMessage) (string, error) {
 	if !json.Valid(flow) {
 		return "", errors.New("persisted flow is invalid JSON")
 	}
-	var spec map[string]json.RawMessage
+	var spec poolRuntimeSpec
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		return "", fmt.Errorf("decode runtime spec: %w", err)
 	}
-	spec["flow"] = append(json.RawMessage(nil), flow...)
+	if spec.WebhookID == "" || spec.ProjectID == "" {
+		return "", errors.New("runtime spec identity is missing")
+	}
+	spec.Flow = append(json.RawMessage(nil), flow...)
 	next, err := json.Marshal(spec)
 	if err != nil {
 		return "", fmt.Errorf("encode runtime spec: %w", err)
