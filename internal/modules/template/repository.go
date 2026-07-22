@@ -27,18 +27,41 @@ func NewPostgresRepository(pool *pgxpool.Pool) Repository {
 	return &pgRepo{pool: pool, queries: sqlcdb.New(pool)}
 }
 
-func (r *pgRepo) UpdateLinkedProjectFlow(ctx context.Context, templateID uuid.UUID, flow json.RawMessage) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE projects AS p
-		SET flow = $2, updated_at = NOW()
-		FROM template AS t
-		WHERE t.id = $1 AND p.id = t.project_id
-	`, templateID, flow)
+func (r *pgRepo) UpdateLinkedProjectFlow(ctx context.Context, templateID uuid.UUID, flow json.RawMessage, actorID uuid.UUID, reason string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin template flow update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.queries.WithTx(tx)
+	current, err := q.TemplateGetLinkedProjectFlowForUpdate(ctx, templateID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return database.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock linked template project flow: %w", err)
+	}
+	var actor *uuid.UUID
+	if actorID != uuid.Nil {
+		actor = &actorID
+	}
+	if err := q.TemplateInsertFlowRevision(ctx, sqlcdb.TemplateInsertFlowRevisionParams{
+		ID: uuid.New(), TemplateID: templateID, ProjectID: current.ProjectID,
+		ActorID: actor, PreviousFlow: current.Flow, NewFlow: flow, Reason: reason,
+	}); err != nil {
+		return fmt.Errorf("audit template flow update: %w", err)
+	}
+	rows, err := q.TemplateUpdateLinkedProjectFlow(ctx, sqlcdb.TemplateUpdateLinkedProjectFlowParams{
+		TemplateID: templateID, Flow: flow,
+	})
 	if err != nil {
 		return fmt.Errorf("update linked template project flow: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if rows == 0 {
 		return database.ErrNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit template flow update: %w", err)
 	}
 	return nil
 }

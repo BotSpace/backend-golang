@@ -39,11 +39,17 @@ type Usecase interface {
 }
 
 type usecase struct {
-	repo Repository
-	orch engine.Orchestrator
+	repo   Repository
+	orch   engine.Orchestrator
+	assets RuntimeAssetLoader
 	// pub is nil-able — see NewUsecaseWithEventPublisher's doc comment.
 	pub wsevents.Publisher
 }
+
+// RuntimeAssetLoader builds the project-specific CMS and module files mounted
+// into every engine pod. It lives as a function port so release does not import
+// the cms/plugin modules directly.
+type RuntimeAssetLoader func(ctx context.Context, projectID, ownerID uuid.UUID) (schemas, modules []byte, err error)
 
 func NewUsecase(repo Repository, orch engine.Orchestrator) Usecase {
 	return &usecase{repo: repo, orch: orch}
@@ -60,6 +66,21 @@ func NewUsecase(repo Repository, orch engine.Orchestrator) Usecase {
 // call below no-ops.
 func NewUsecaseWithEventPublisher(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher) Usecase {
 	return &usecase{repo: repo, orch: orch, pub: pub}
+}
+
+func NewUsecaseWithRuntimeAssets(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher, assets RuntimeAssetLoader) Usecase {
+	return &usecase{repo: repo, orch: orch, pub: pub, assets: assets}
+}
+
+func (u *usecase) runtimeAssets(ctx context.Context, projectID, ownerID uuid.UUID) ([]byte, []byte, error) {
+	if u.assets == nil {
+		return []byte(`{}`), []byte(`{"modules":[]}`), nil
+	}
+	schemas, modules, err := u.assets(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load engine runtime assets: %w", err)
+	}
+	return schemas, modules, nil
 }
 
 // CreateRelease ports Django's ReleaseView.perform_create + the RelaseSignal
@@ -102,6 +123,10 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	// this practically never fails. A failure just means the orchestrator
 	// skips creating the "bot-<uuid>" Service (deployment still proceeds).
 	releaseWebhookUUID, _, _ := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	schemas, modules, err := u.runtimeAssets(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
 		ProjectID:   projectID,
@@ -109,6 +134,8 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		Version:     int(rel.Version),
 		Debug:       false,
 		Flow:        rel.Flow,
+		Schemas:     schemas,
+		Modules:     modules,
 		Env:         env,
 		WebhookUUID: releaseWebhookUUID,
 	})
@@ -228,12 +255,18 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 	}
 
 	_, debugWebhookUUID, _ := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	schemas, modules, err := u.runtimeAssets(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
 		ProjectID:   projectID,
 		ReleaseUUID: dbg.ID,
 		Debug:       true,
 		Flow:        flow,
+		Schemas:     schemas,
+		Modules:     modules,
 		Env:         env,
 		WebhookUUID: debugWebhookUUID,
 	})

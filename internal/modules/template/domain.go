@@ -405,7 +405,7 @@ type Repository interface {
 	GetAdminByID(ctx context.Context, id uuid.UUID) (*AdminTemplateSummary, error)
 	CreateAdmin(ctx context.Context, in CreateAdminTemplateInput) (*Template, error)
 	UpdateAdmin(ctx context.Context, id uuid.UUID, in UpdateAdminTemplateInput) (*Template, error)
-	UpdateLinkedProjectFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage) error
+	UpdateLinkedProjectFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage, actorID uuid.UUID, reason string) error
 	DeleteAdmin(ctx context.Context, id uuid.UUID) error
 	SetVerify(ctx context.Context, id uuid.UUID, verify bool) (*Template, error)
 

@@ -46,6 +46,7 @@ type KubernetesConfig struct {
 	APIURL        string
 	InternalToken string
 	TestBotToken  string
+	PluginAPIKey  string
 
 	RedisAddr     string
 	RedisPassword string
@@ -134,6 +135,9 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	if o.cfg.APIURL != "" {
 		env["API_URL"] = o.cfg.APIURL
 	}
+	if o.cfg.PluginAPIKey != "" && len(spec.Flow) > 0 {
+		env["PLUGIN_API_KEY"] = o.cfg.PluginAPIKey
+	}
 
 	var volumeMounts []corev1.VolumeMount
 	var volumes []corev1.Volume
@@ -143,15 +147,7 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	// env the golang-engine binary expects.
 	if len(spec.Flow) > 0 {
 		cmName := name + "-flow"
-		// The engine's flow loader requires schemas.json AND modules.json to
-		// exist under /app/assets and parse as JSON objects — a missing (or
-		// array-shaped) schemas.json is a FATAL "failed to parse schema" at
-		// boot. DeploySpec doesn't carry the CMS field-kind map / enabled-module
-		// list yet, so ship valid EMPTY documents: the engine then falls back to
-		// heuristic coercion instead of crashing.
-		// TODO(engine): populate real schemas from the project's CMS collections
-		// (Collection→{field:kind}) + enabled modules via release.Usecase, so
-		// CMS bots get exact type coercion instead of the heuristic fallback.
+		// The engine requires all three runtime assets to exist and be valid JSON.
 		// The engine's loader.Schema is an OBJECT ({nodes,edges,...}); a brand-new
 		// project's flow defaults to an empty array `[]` (Django JSONField
 		// default=list parity), which the loader rejects with "cannot unmarshal
@@ -161,19 +157,30 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 		if flowJSON == "" || flowJSON[0] == '[' {
 			flowJSON = `{"nodes":[],"edges":[]}`
 		}
-		cmData := map[string]string{
-			"flow.json":    flowJSON,
-			"schemas.json": "{}",
-			"modules.json": `{"modules":[]}`,
+		schemasJSON := strings.TrimSpace(string(spec.Schemas))
+		if schemasJSON == "" || schemasJSON[0] != '{' {
+			schemasJSON = `{}`
 		}
+		modulesJSON := strings.TrimSpace(string(spec.Modules))
+		if modulesJSON == "" || modulesJSON[0] != '{' {
+			modulesJSON = `{"modules":[]}`
+		}
+		cmData := map[string]string{"flow.json": flowJSON, "schemas.json": schemasJSON}
 		if err := o.ensureConfigMap(ctx, cmName, cmData); err != nil {
 			return DeployResult{}, fmt.Errorf("ensure flow configmap: %w", err)
+		}
+		runtimeSecretName := name + "-runtime"
+		if err := o.ensureDataSecret(ctx, runtimeSecretName, map[string][]byte{"modules.json": []byte(modulesJSON)}); err != nil {
+			return DeployResult{}, fmt.Errorf("ensure runtime asset secret: %w", err)
 		}
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: "flow-volume", MountPath: "/app/assets", ReadOnly: true})
 		volumes = append(volumes, corev1.Volume{
 			Name: "flow-volume",
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: cmName}},
+				Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{
+					{ConfigMap: &corev1.ConfigMapProjection{LocalObjectReference: corev1.LocalObjectReference{Name: cmName}}},
+					{Secret: &corev1.SecretProjection{LocalObjectReference: corev1.LocalObjectReference{Name: runtimeSecretName}}},
+				}},
 			},
 		})
 
@@ -282,6 +289,9 @@ func (o *KubernetesOrchestrator) Stop(ctx context.Context, serviceID string) err
 	}
 	if err := ignoreNotFound(o.cs.CoreV1().Secrets(ns).Delete(ctx, serviceID+"-env", metav1.DeleteOptions{})); err != nil {
 		return fmt.Errorf("delete secret %s-env: %w", serviceID, err)
+	}
+	if err := ignoreNotFound(o.cs.CoreV1().Secrets(ns).Delete(ctx, serviceID+"-runtime", metav1.DeleteOptions{})); err != nil {
+		return fmt.Errorf("delete secret %s-runtime: %w", serviceID, err)
 	}
 	if err := ignoreNotFound(o.cs.CoreV1().ConfigMaps(ns).Delete(ctx, serviceID+"-flow", metav1.DeleteOptions{})); err != nil {
 		return fmt.Errorf("delete configmap %s-flow: %w", serviceID, err)
@@ -521,17 +531,20 @@ func buildDeployment(in buildDeploymentInput) *appsv1.Deployment {
 					},
 				},
 				Spec: corev1.PodSpec{
-					Containers:       []corev1.Container{container},
-					RestartPolicy:    corev1.RestartPolicyAlways,
-					Volumes:          in.Volumes,
-					ImagePullSecrets: []corev1.LocalObjectReference{{Name: in.RegistrySecret}},
-					Hostname:         in.Name,
-					Subdomain:        "bot-provider",
+					Containers:                   []corev1.Container{container},
+					RestartPolicy:                corev1.RestartPolicyAlways,
+					AutomountServiceAccountToken: boolPtr(false),
+					Volumes:                      in.Volumes,
+					ImagePullSecrets:             []corev1.LocalObjectReference{{Name: in.RegistrySecret}},
+					Hostname:                     in.Name,
+					Subdomain:                    "bot-provider",
 				},
 			},
 		},
 	}
 }
+
+func boolPtr(value bool) *bool { return &value }
 
 // ── k8s API helpers ─────────────────────────────────────────────────────
 
@@ -576,15 +589,19 @@ func (o *KubernetesOrchestrator) ensureConfigMap(ctx context.Context, name strin
 }
 
 func (o *KubernetesOrchestrator) ensureEnvSecret(ctx context.Context, name string, data map[string]string) error {
-	client := o.cs.CoreV1().Secrets(o.cfg.Namespace)
 	encoded := make(map[string][]byte, len(data))
 	for k, v := range data {
 		encoded[k] = []byte(v)
 	}
+	return o.ensureDataSecret(ctx, name, encoded)
+}
+
+func (o *KubernetesOrchestrator) ensureDataSecret(ctx context.Context, name string, data map[string][]byte) error {
+	client := o.cs.CoreV1().Secrets(o.cfg.Namespace)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: o.cfg.Namespace},
 		Type:       corev1.SecretTypeOpaque,
-		Data:       encoded,
+		Data:       data,
 	}
 	_, err := client.Create(ctx, secret, metav1.CreateOptions{})
 	if err == nil {

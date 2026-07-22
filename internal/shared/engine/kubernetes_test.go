@@ -19,6 +19,7 @@ func testOrchestrator() (*KubernetesOrchestrator, *fake.Clientset) {
 		ImageTag:        "1.1.0",
 		InternalToken:   "internal-tok",
 		TestBotToken:    "test-bot-tok",
+		PluginAPIKey:    "plugin-tok",
 		RedisAddr:       "redis:6379",
 		RedisPassword:   "redis-pass",
 		MongoAddr:       "mongodb://mongo:27017",
@@ -41,6 +42,8 @@ func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T)
 		Version:     3,
 		Debug:       false,
 		Flow:        []byte(`{"nodes":[]}`),
+		Schemas:     []byte(`{"courses":{"price":"int"}}`),
+		Modules:     []byte(`{"modules":[{"slug":"files"}]}`),
 		Env:         map[string]string{"IS_RELEASE": "true"},
 		WebhookUUID: webhookUUID,
 	})
@@ -69,6 +72,9 @@ func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T)
 	if dep.Spec.Template.Spec.ImagePullSecrets[0].Name != "registry-secret" {
 		t.Errorf("imagePullSecrets = %+v", dep.Spec.Template.Spec.ImagePullSecrets)
 	}
+	if dep.Spec.Template.Spec.AutomountServiceAccountToken == nil || *dep.Spec.Template.Spec.AutomountServiceAccountToken {
+		t.Error("engine pod must not mount a Kubernetes service-account token")
+	}
 	if dep.Spec.Strategy.Type != appsv1.RollingUpdateDeploymentStrategyType {
 		t.Errorf("strategy type = %v", dep.Spec.Strategy.Type)
 	}
@@ -80,7 +86,7 @@ func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T)
 	if err != nil {
 		t.Fatalf("secret not created: %v", err)
 	}
-	for _, want := range []string{"IS_RELEASE", "FLOW_FILE_PATH", "WEBHOOK_ENABLED", "PROJECT_ID", "API_TOKEN", "INTERNAL_TOKEN", "REDIS_ADDR", "MONGO_ADDR", "API_URL"} {
+	for _, want := range []string{"IS_RELEASE", "FLOW_FILE_PATH", "WEBHOOK_ENABLED", "PROJECT_ID", "API_TOKEN", "INTERNAL_TOKEN", "PLUGIN_API_KEY", "REDIS_ADDR", "MONGO_ADDR", "API_URL"} {
 		if _, ok := secret.Data[want]; !ok {
 			t.Errorf("secret missing key %q (got %v)", want, keysOf(secret.Data))
 		}
@@ -95,6 +101,19 @@ func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T)
 	}
 	if cm.Data["flow.json"] != `{"nodes":[]}` {
 		t.Errorf("flow.json = %q", cm.Data["flow.json"])
+	}
+	if cm.Data["schemas.json"] != `{"courses":{"price":"int"}}` {
+		t.Errorf("schemas.json = %q", cm.Data["schemas.json"])
+	}
+	if _, exposed := cm.Data["modules.json"]; exposed {
+		t.Error("modules.json may contain auth tokens and must not be stored in a ConfigMap")
+	}
+	runtimeSecret, err := cs.CoreV1().Secrets("botmother").Get(ctx, wantName+"-runtime", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("runtime secret not created: %v", err)
+	}
+	if string(runtimeSecret.Data["modules.json"]) != `{"modules":[{"slug":"files"}]}` {
+		t.Errorf("modules.json = %q", runtimeSecret.Data["modules.json"])
 	}
 
 	svc, err := cs.CoreV1().Services("botmother").Get(ctx, "bot-"+webhookUUID.String(), metav1.GetOptions{})

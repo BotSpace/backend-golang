@@ -35,20 +35,20 @@ type GithubPushResult struct {
 // EngineTriggerInfo is one module-declared trigger node (Django's per-module
 // `triggers` list fed to the engine).
 type EngineTriggerInfo struct {
-	Type string
-	Mode string
+	Type string `json:"type"`
+	Mode string `json:"mode"`
 }
 
 // EngineModuleInfo is what the engine needs to route a project's enabled
 // modules: endpoint, node types, trigger nodes, and per-node credential field
 // keys (Django get_project_modules_for_engine).
 type EngineModuleInfo struct {
-	Slug             string
-	Endpoint         string
-	AuthToken        string
-	Nodes            []string
-	Triggers         []EngineTriggerInfo
-	CredentialFields map[string][]string
+	Slug             string              `json:"slug"`
+	Endpoint         string              `json:"endpoint"`
+	AuthToken        string              `json:"auth_token,omitempty"`
+	Nodes            []string            `json:"nodes"`
+	Triggers         []EngineTriggerInfo `json:"triggers"`
+	CredentialFields map[string][]string `json:"credential_fields"`
 }
 
 // Usecase exposes the module catalog + per-project module management.

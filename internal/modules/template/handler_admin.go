@@ -208,7 +208,22 @@ func (h *Handler) AdminUpdate(c *gin.Context) {
 // AdminUpdateFlow updates the linked source project's flow even when that
 // project is soft-deleted. Template sources are intentionally hidden from the
 // normal project list, while the internal feed still resolves their flow.
+// @Summary      Update a template source flow with an audit revision
+// @Tags         template-admin
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path  string                          true  "Template id"
+// @Param        body  body  UpdateAdminTemplateFlowRequest  true  "Flow and audit reason"
+// @Success      200   {object} map[string]bool
+// @Failure      400   {object} httpx.ErrorResponse
+// @Failure      404   {object} httpx.ErrorResponse
+// @Router       /admin/templates/{id}/flow [patch]
 func (h *Handler) AdminUpdateFlow(c *gin.Context) {
+	actorID, ok := authUserID(c)
+	if !ok {
+		return
+	}
 	id, ok := pathID(c)
 	if !ok {
 		return
@@ -231,7 +246,7 @@ func (h *Handler) AdminUpdateFlow(c *gin.Context) {
 		httpx.Error(c, httpx.BadRequest("template.invalid_flow", "flow.edges must be an array"))
 		return
 	}
-	if err := h.uc.AdminUpdateFlow(c.Request.Context(), id, req.Flow); err != nil {
+	if err := h.uc.AdminUpdateFlow(c.Request.Context(), id, req.Flow, actorID, req.Reason); err != nil {
 		httpx.Error(c, err)
 		return
 	}

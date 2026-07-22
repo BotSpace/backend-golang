@@ -263,6 +263,45 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		s.log.Warn("wsevents: engine.redis_host not configured — release/debug WS events disabled")
 	}
 
+	// Module usecase is also an input to the engine runtime-asset builder.
+	// Routes are registered later with the other catalog endpoints.
+	pluginUC := plugin.NewUsecase(plugin.NewPostgresRepository(s.pool), orch, plugin.NewHTTPManifestFetcher(), nil)
+	runtimeAssets := func(ctx context.Context, projectID, ownerID uuid.UUID) ([]byte, []byte, error) {
+		schemaMap := map[string]map[string]string{}
+		if cmsUC != nil {
+			collections, err := cmsUC.ListCollections(ctx, ownerID, projectID)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, collection := range collections {
+				fields := make(map[string]string, len(collection.Fields))
+				for _, field := range collection.Fields {
+					fields[field.Name] = field.Type
+				}
+				schemaMap[collection.Slug] = fields
+				// Older flows may reference the display name instead of the slug.
+				if collection.Name != collection.Slug {
+					schemaMap[collection.Name] = fields
+				}
+			}
+		}
+		schemasJSON, err := json.Marshal(schemaMap)
+		if err != nil {
+			return nil, nil, err
+		}
+		modules, err := pluginUC.ModulesForEngine(ctx, projectID, ownerID)
+		if err != nil {
+			return nil, nil, err
+		}
+		modulesJSON, err := json.Marshal(struct {
+			Modules []plugin.EngineModuleInfo `json:"modules"`
+		}{Modules: modules})
+		if err != nil {
+			return nil, nil, err
+		}
+		return schemasJSON, modulesJSON, nil
+	}
+
 	// release / environment / debug — deploys via the engine orchestrator.
 	// Built ahead of the project module below so
 	// project.Usecase.CreateFromTemplate can apply envs + deploy the first
@@ -271,7 +310,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// convention as cmsUC above). NewUsecaseWithEventPublisher (over plain
 	// NewUsecase) wires wsPub so every release/debug status transition
 	// broadcasts to the constructor — see release/ws_events.go.
-	releaseUC := release.NewUsecaseWithEventPublisher(release.NewPostgresRepository(s.pool), orch, wsPub)
+	releaseUC := release.NewUsecaseWithRuntimeAssets(release.NewPostgresRepository(s.pool), orch, wsPub, runtimeAssets)
 	release.RegisterRoutes(v1, release.NewHandler(releaseUC), tokens)
 
 	// template marketplace. Built ahead of the project module below so
@@ -351,7 +390,6 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	file.RegisterEngineRoutes(s.router, fileHandler)
 
 	// module/plugin catalog + per-project modules.
-	pluginUC := plugin.NewUsecase(plugin.NewPostgresRepository(s.pool), orch, plugin.NewHTTPManifestFetcher(), nil)
 	plugin.RegisterRoutes(v1, plugin.NewHandler(pluginUC), tokens)
 
 	// payment — orders, transactions, withdrawals, Click/Payme webhooks.
@@ -803,6 +841,7 @@ func (s *Server) buildOrchestrator() engine.Orchestrator {
 		APIURL:             s.cfg.Engine.APIURL,
 		InternalToken:      s.cfg.Engine.InternalToken,
 		TestBotToken:       s.cfg.Engine.TestBotToken,
+		PluginAPIKey:       s.cfg.Engine.PluginAPIKey,
 		RedisAddr:          s.cfg.Engine.RedisAddr(),
 		RedisPassword:      s.cfg.Engine.RedisPassword,
 		MongoAddr:          s.cfg.Engine.MongoAddr,

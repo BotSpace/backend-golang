@@ -114,6 +114,7 @@ type EngineConfig struct {
 	APIURL        string `mapstructure:"api_url"`        // API_URL env injected into every engine pod
 	InternalToken string `mapstructure:"internal_token"` // INTERNAL_API_TOKEN — PaymentNode + debug events
 	TestBotToken  string `mapstructure:"test_bot_token"` // TEST_BOT_TOKEN fallback (debug containers)
+	PluginAPIKey  string `mapstructure:"plugin_api_key"` // shared engine-plugin bearer token
 
 	RedisHost     string `mapstructure:"redis_host"`
 	RedisPort     string `mapstructure:"redis_port"`
