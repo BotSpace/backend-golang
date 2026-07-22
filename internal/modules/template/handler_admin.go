@@ -1,6 +1,7 @@
 package template
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/botspace/backend/internal/shared/httpx"
@@ -202,6 +203,39 @@ func (h *Handler) AdminUpdate(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toAdminTemplateActionResponse(t))
+}
+
+// AdminUpdateFlow updates the linked source project's flow even when that
+// project is soft-deleted. Template sources are intentionally hidden from the
+// normal project list, while the internal feed still resolves their flow.
+func (h *Handler) AdminUpdateFlow(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	var req UpdateAdminTemplateFlowRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Flow) == 0 {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "flow is required"))
+		return
+	}
+	var flow map[string]any
+	if err := json.Unmarshal(req.Flow, &flow); err != nil {
+		httpx.Error(c, httpx.BadRequest("template.invalid_flow", "flow must be a JSON object"))
+		return
+	}
+	if _, ok := flow["nodes"].([]any); !ok {
+		httpx.Error(c, httpx.BadRequest("template.invalid_flow", "flow.nodes must be an array"))
+		return
+	}
+	if _, ok := flow["edges"].([]any); !ok {
+		httpx.Error(c, httpx.BadRequest("template.invalid_flow", "flow.edges must be an array"))
+		return
+	}
+	if err := h.uc.AdminUpdateFlow(c.Request.Context(), id, req.Flow); err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, gin.H{"updated": true})
 }
 
 // AdminDelete godoc

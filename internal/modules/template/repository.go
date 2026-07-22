@@ -27,6 +27,22 @@ func NewPostgresRepository(pool *pgxpool.Pool) Repository {
 	return &pgRepo{pool: pool, queries: sqlcdb.New(pool)}
 }
 
+func (r *pgRepo) UpdateLinkedProjectFlow(ctx context.Context, templateID uuid.UUID, flow json.RawMessage) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE projects AS p
+		SET flow = $2, updated_at = NOW()
+		FROM template AS t
+		WHERE t.id = $1 AND p.id = t.project_id
+	`, templateID, flow)
+	if err != nil {
+		return fmt.Errorf("update linked template project flow: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return database.ErrNotFound
+	}
+	return nil
+}
+
 // ===================== categories & features =====================
 
 func (r *pgRepo) ListCategories(ctx context.Context) ([]Category, error) {

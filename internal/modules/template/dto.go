@@ -317,6 +317,10 @@ type UpdateAdminTemplateRequest struct {
 	RequiredEnvs     json.RawMessage `json:"required_envs" validate:"omitempty"`
 }
 
+type UpdateAdminTemplateFlowRequest struct {
+	Flow json.RawMessage `json:"flow" validate:"required"`
+}
+
 // ===================== submissions =====================
 
 type SubmissionResponse struct {
