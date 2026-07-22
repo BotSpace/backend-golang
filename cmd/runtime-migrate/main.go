@@ -25,7 +25,7 @@ import (
 func main() {
 	idsFlag := flag.String("ids", "", "comma-separated numeric legacy project ids")
 	sharedFlag := flag.Bool("shared", false, "migrate UUID and per-owner runtimes into the shared pool")
-	limitFlag := flag.Int("limit", 0, "maximum shared runtimes to migrate; zero means all")
+	limitFlag := flag.Int("limit", 0, "maximum shared runtimes to attempt; zero means all")
 	flag.Parse()
 	if *limitFlag < 0 {
 		panic("--limit cannot be negative")

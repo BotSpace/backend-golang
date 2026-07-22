@@ -177,10 +177,21 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 		return DeployResult{}, err
 	}
 	webhookID := spec.WebhookUUID.String()
+	previousDesired, previousDesiredErr := o.rdb.HGet(ctx, poolDesiredHash, webhookID).Result()
+	previousDesiredExists := previousDesiredErr == nil
+	if previousDesiredErr != nil && !errors.Is(previousDesiredErr, redis.Nil) {
+		return DeployResult{}, fmt.Errorf("load previous desired runtime: %w", previousDesiredErr)
+	}
 	if err := o.rdb.HSet(ctx, poolDesiredHash, webhookID, raw).Err(); err != nil {
 		return DeployResult{}, fmt.Errorf("store desired runtime: %w", err)
 	}
 	previous := o.poolPlacement(ctx, webhookID)
+	committed := false
+	defer func() {
+		if !committed {
+			o.rollbackPoolRuntime(context.Background(), webhookID, previousDesired, previousDesiredExists, previous, targets)
+		}
+	}()
 	for replicaIndex, workerID := range targets {
 		workerRuntime := runtime
 		workerRuntime.Env = make(map[string]string, len(runtime.Env)+2)
@@ -208,10 +219,28 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 	if err := o.rdb.HSet(ctx, poolPlacementHash, webhookID, placementRaw).Err(); err != nil {
 		return DeployResult{}, fmt.Errorf("publish placement: %w", err)
 	}
+	committed = true
 	for _, workerID := range difference(previous, targets) {
 		o.removePoolWorkerRuntime(ctx, workerID, webhookID)
 	}
 	return DeployResult{ServiceID: poolRuntimeServiceID(spec.WebhookUUID), Status: StatusInitializing}, nil
+}
+
+func (o *KubernetesOrchestrator) rollbackPoolRuntime(ctx context.Context, webhookID, previousDesired string, previousDesiredExists bool, previous, attempted []string) {
+	if previousDesiredExists {
+		_ = o.rdb.HSet(ctx, poolDesiredHash, webhookID, previousDesired).Err()
+	} else {
+		_ = o.rdb.HDel(ctx, poolDesiredHash, webhookID).Err()
+	}
+	if len(previous) == 0 {
+		_ = o.rdb.HDel(ctx, poolPlacementHash, webhookID).Err()
+	} else {
+		raw, _ := json.Marshal(previous)
+		_ = o.rdb.HSet(ctx, poolPlacementHash, webhookID, raw).Err()
+	}
+	for _, workerID := range difference(attempted, previous) {
+		o.removePoolWorkerRuntime(ctx, workerID, webhookID)
+	}
 }
 
 func (o *KubernetesOrchestrator) stopPoolRuntime(ctx context.Context, ref poolRuntimeRef) error {
