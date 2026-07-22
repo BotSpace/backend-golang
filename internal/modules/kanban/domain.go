@@ -119,6 +119,7 @@ type CardInput struct {
 }
 
 type Repository interface {
+	ResolveProjectRef(context.Context, string) (uuid.UUID, error)
 	CreateBoard(context.Context, CreateBoardInput) (*Board, error)
 	ListBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error)
 	GetBoard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) (*Board, error)
@@ -128,6 +129,7 @@ type Repository interface {
 	UnlinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	CreateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error)
 	UpdateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error)
+	ReorderColumns(context.Context, uuid.UUID, uuid.UUID, []uuid.UUID) ([]Column, error)
 	DeleteColumn(context.Context, uuid.UUID, uuid.UUID) error
 	CreateCard(context.Context, CardInput) (*Card, error)
 	GetCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
@@ -135,6 +137,9 @@ type Repository interface {
 	MoveCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, int64) (*Card, error)
 	ArchiveCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
 	UpsertInternalCard(context.Context, uuid.UUID, uuid.UUID, CardInput) (*Board, *Card, bool, error)
+	ResolveInternalCard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID, *string) (*Board, *Card, error)
+	UpdateInternalCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, CardInput) (*Board, *Card, error)
+	ArchiveInternalCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*Board, *Card, error)
 	ListActivities(context.Context, uuid.UUID, uuid.UUID) ([]Activity, error)
 	CreateComment(context.Context, uuid.UUID, uuid.UUID, string) (*Comment, error)
 	ListComments(context.Context, uuid.UUID, uuid.UUID) ([]Comment, error)

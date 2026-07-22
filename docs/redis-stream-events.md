@@ -70,6 +70,35 @@ an int or a string ref, and this is the raw engine reference either way).
 from `internal/modules/release`'s usecase (deploy/stop/reconcile), not this
 consumer — see `internal/modules/release/ws_events.go`.
 
+### `kanban.mutation` — IMPLEMENTED (engine Kanban write path)
+
+Kanban nodes and AI tools never call the backend synchronously. They enqueue a
+scoped mutation and continue after Redis accepts it. The backend resolves the
+raw engine project reference, verifies the project-board link, applies WIP and
+idempotency rules in Postgres, then publishes the resulting realtime event.
+
+```json
+{
+  "task": "kanban.mutation",
+  "args": {
+    "project_id": "1408",
+    "board_id": "00000000-0000-0000-0000-000000000001",
+    "operation": "upsert",
+    "column_id": "00000000-0000-0000-0000-000000000002",
+    "title": "New lead",
+    "description": "Asked for the business plan",
+    "priority": "high",
+    "external_key": "chat:12345",
+    "custom_fields": {}
+  }
+}
+```
+
+`operation` is `upsert`, `create`, `update`, `move`, or `archive`.
+`update`/`move`/`archive` require `card_id` or `external_key`. Engine-generated
+create events carry a unique `event:*` key, so Redis redelivery is idempotent
+without merging separate bot executions.
+
 ### `execution.lifecycle` — IMPLEMENTED (durable execution ledger)
 
 Emitted synchronously at the start boundary, before any node child event,

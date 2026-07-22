@@ -2485,6 +2485,30 @@ const docTemplate = `{
                 }
             }
         },
+        "/boards/events": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Stream owner Kanban changes as server-sent events",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/boards/{id}": {
             "get": {
                 "security": [
@@ -2656,6 +2680,48 @@ const docTemplate = `{
                         "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_kanban.Column"
+                        }
+                    }
+                }
+            }
+        },
+        "/boards/{id}/columns/reorder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Reorder every column in a board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Complete ordered column id list",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.ReorderColumnsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Column"
+                            }
                         }
                     }
                 }
@@ -4596,6 +4662,60 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_payment.OrderResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/projects/{project_id}/boards/{id}/cards/mutate": {
+            "post": {
+                "tags": [
+                    "kanban-internal"
+                ],
+                "summary": "Create, upsert, update, move, or archive a bot-sourced Kanban card",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Internal token",
+                        "name": "X-Internal-Token",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source project id",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Mutation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.InternalUpsertCardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
                         }
                     }
                 }
@@ -10326,6 +10446,9 @@ const docTemplate = `{
                 "title"
             ],
             "properties": {
+                "card_id": {
+                    "type": "string"
+                },
                 "column_id": {
                     "type": "string"
                 },
@@ -10342,6 +10465,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "kind": {
+                    "type": "string"
+                },
+                "operation": {
                     "type": "string"
                 },
                 "priority": {
@@ -10387,6 +10513,21 @@ const docTemplate = `{
             "properties": {
                 "project_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_kanban.ReorderColumnsRequest": {
+            "type": "object",
+            "required": [
+                "column_ids"
+            ],
+            "properties": {
+                "column_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

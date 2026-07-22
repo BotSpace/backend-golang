@@ -14,12 +14,14 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 	{
 		g.GET("", h.ListBoards)
 		g.POST("", h.CreateBoard)
+		g.GET("/events", h.Events)
 		g.GET("/:id", h.GetBoard)
 		g.PUT("/:id", h.UpdateBoard)
 		g.DELETE("/:id", h.ArchiveBoard)
 		g.POST("/:id/projects", h.LinkProject)
 		g.DELETE("/:id/projects/:project_id", h.UnlinkProject)
 		g.POST("/:id/columns", h.CreateColumn)
+		g.POST("/:id/columns/reorder", h.ReorderColumns)
 		g.PUT("/:id/columns/:column_id", h.UpdateColumn)
 		g.DELETE("/:id/columns/:column_id", h.DeleteColumn)
 		g.POST("/:id/cards", h.CreateCard)
@@ -35,6 +37,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		cards.POST("/:id/comments", h.CreateComment)
 	}
 	rg.POST("/internal/projects/:project_id/boards/:id/cards/upsert", internalTokenAuth(), h.InternalUpsertCard)
+	rg.POST("/internal/projects/:project_id/boards/:id/cards/mutate", internalTokenAuth(), h.InternalMutateCard)
 }
 
 func internalTokenAuth() gin.HandlerFunc {

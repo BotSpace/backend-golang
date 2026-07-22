@@ -86,6 +86,7 @@ type Querier interface {
 	CmsUpdateCollection(ctx context.Context, arg CmsUpdateCollectionParams) (Collection, error)
 	CmsUpdateExportTaskStatus(ctx context.Context, arg CmsUpdateExportTaskStatusParams) (CmsExportTask, error)
 	CmsUpdateField(ctx context.Context, arg CmsUpdateFieldParams) (Field, error)
+	CountActiveKanbanCardsInColumn(ctx context.Context, columnID uuid.UUID) (int32, error)
 	CountAllTickets(ctx context.Context, arg CountAllTicketsParams) (int64, error)
 	CountAuditLog(ctx context.Context, arg CountAuditLogParams) (int64, error)
 	CountAuthoredTemplatesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -96,6 +97,7 @@ type Querier interface {
 	// of the shared pod on disable (last user only).
 	CountEnabledProjectModulesExcluding(ctx context.Context, arg CountEnabledProjectModulesExcludingParams) (int64, error)
 	CountFiles(ctx context.Context, arg CountFilesParams) (int64, error)
+	CountKanbanColumnsForOwner(ctx context.Context, arg CountKanbanColumnsForOwnerParams) (int32, error)
 	CountMessagesForOwner(ctx context.Context, arg CountMessagesForOwnerParams) (int64, error)
 	CountModules(ctx context.Context, arg CountModulesParams) (int64, error)
 	CountPaidPaymentOrdersForOwner(ctx context.Context, arg CountPaidPaymentOrdersForOwnerParams) (int64, error)
@@ -267,6 +269,7 @@ type Querier interface {
 	GetFileByUUID(ctx context.Context, argUuid uuid.UUID) (File, error)
 	GetFileByUUIDForOwner(ctx context.Context, arg GetFileByUUIDForOwnerParams) (File, error)
 	GetFilePath(ctx context.Context, id uuid.UUID) (string, error)
+	GetInternalKanbanCardByID(ctx context.Context, arg GetInternalKanbanCardByIDParams) (KanbanCard, error)
 	GetKanbanBoardForOwner(ctx context.Context, arg GetKanbanBoardForOwnerParams) (KanbanBoard, error)
 	GetKanbanCardByExternalKey(ctx context.Context, arg GetKanbanCardByExternalKeyParams) (KanbanCard, error)
 	GetKanbanCardForOwner(ctx context.Context, arg GetKanbanCardForOwnerParams) (KanbanCard, error)
@@ -433,6 +436,11 @@ type Querier interface {
 	ListTicketsForOwner(ctx context.Context, arg ListTicketsForOwnerParams) ([]ListTicketsForOwnerRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
+	LockKanbanBoardForColumnCreate(ctx context.Context, arg LockKanbanBoardForColumnCreateParams) (uuid.UUID, error)
+	LockKanbanCardForMove(ctx context.Context, arg LockKanbanCardForMoveParams) (LockKanbanCardForMoveRow, error)
+	LockKanbanColumnForCreate(ctx context.Context, arg LockKanbanColumnForCreateParams) (*int32, error)
+	LockKanbanDestinationColumn(ctx context.Context, arg LockKanbanDestinationColumnParams) (*int32, error)
+	LockOrderedKanbanCardIDs(ctx context.Context, arg LockOrderedKanbanCardIDsParams) ([]uuid.UUID, error)
 	MarkDebugFailedByService(ctx context.Context, serviceID *string) (int64, error)
 	MarkDebugStopping(ctx context.Context, id uuid.UUID) error
 	MarkExecutionNode(ctx context.Context, arg MarkExecutionNodeParams) error
@@ -465,6 +473,8 @@ type Querier interface {
 	// Callers must have already verified ownership via whatever row
 	// (release/debug) carried this project_id.
 	ReleaseGetProjectOwnerID(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	ResolveKanbanProjectByLegacyRef(ctx context.Context, legacyID *int32) (uuid.UUID, error)
+	ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
 	// info plus the owning project's release/debug uuids.
 	ResolveWebhookToken(ctx context.Context, token uuid.UUID) (ResolveWebhookTokenRow, error)
@@ -475,6 +485,8 @@ type Querier interface {
 	// Records which Telegram message displays the code (Django: code.message_id),
 	// so the bot can later edit/delete it.
 	SetAuthbotCodeMessageID(ctx context.Context, arg SetAuthbotCodeMessageIDParams) (int64, error)
+	SetKanbanCardPosition(ctx context.Context, arg SetKanbanCardPositionParams) (int64, error)
+	SetKanbanColumnPosition(ctx context.Context, arg SetKanbanColumnPositionParams) (int64, error)
 	// Paycue path: stores the provider transaction id + rendered instruction text at create time.
 	SetPaymentOrderPayInstruction(ctx context.Context, arg SetPaymentOrderPayInstructionParams) (PaymentOrder, error)
 	// Repurposes the (otherwise-unused-at-creation) idempotency_key column to

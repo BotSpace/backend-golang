@@ -90,6 +90,18 @@ type Publisher interface {
 	Publish(ctx context.Context, room, event string, data any)
 }
 
+type Event struct {
+	Name string
+	Data json.RawMessage
+}
+
+// Subscriber exposes the same Redis fan-out as an authenticated SSE stream.
+// It is used by web clients that deliberately keep access tokens in httpOnly
+// cookies and therefore cannot pass an Authorization header to WebSocket.
+type Subscriber interface {
+	Subscribe(ctx context.Context, room string) (<-chan Event, error)
+}
+
 // RedisPublisher is the production Publisher, backed by a redis.Client
 // against the same engine Redis this backend's redisq consumer already uses
 // (APP_ENGINE_REDIS_* — see internal/shared/config EngineConfig.RedisAddr).
@@ -138,6 +150,46 @@ func (p *RedisPublisher) Publish(ctx context.Context, room, event string, data a
 			logger.String("event", event),
 			logger.Int64("receivers", res.Val()))
 	}
+}
+
+func (p *RedisPublisher) Subscribe(ctx context.Context, room string) (<-chan Event, error) {
+	if p == nil || p.rdb == nil {
+		return nil, fmt.Errorf("wsevents subscriber is unavailable")
+	}
+	pubsub := p.rdb.Subscribe(ctx, channelName)
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, err
+	}
+	out := make(chan Event, 32)
+	go func() {
+		defer close(out)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				return
+			}
+			var envelope struct {
+				Room string `json:"room"`
+				Data struct {
+					Event string          `json:"event"`
+					Data  json.RawMessage `json:"data"`
+				} `json:"data"`
+			}
+			if json.Unmarshal([]byte(msg.Payload), &envelope) != nil || envelope.Room != room || envelope.Data.Event == "" {
+				continue
+			}
+			select {
+			case out <- Event{Name: envelope.Data.Event, Data: envelope.Data.Data}:
+			case <-ctx.Done():
+				return
+			default:
+				// A slow browser must not block the shared event delivery loop.
+			}
+		}
+	}()
+	return out, nil
 }
 
 // buildEnvelope encodes the {"room","data":{"event","data"}} wire shape —

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
 	"github.com/google/uuid"
@@ -12,7 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var errNotFound = errors.New("kanban resource not found")
+var (
+	errNotFound           = errors.New("kanban resource not found")
+	errWIPLimit           = errors.New("kanban column WIP limit reached")
+	errInvalidColumnOrder = errors.New("kanban invalid column order")
+)
 
 type pgRepo struct {
 	pool *pgxpool.Pool
@@ -21,6 +26,26 @@ type pgRepo struct {
 
 func NewPostgresRepository(pool *pgxpool.Pool) Repository {
 	return &pgRepo{pool: pool, q: sqlcdb.New(pool)}
+}
+
+func (r *pgRepo) ResolveProjectRef(ctx context.Context, rawRef string) (uuid.UUID, error) {
+	if legacy, err := strconv.ParseInt(rawRef, 10, 32); err == nil {
+		value := int32(legacy)
+		id, queryErr := r.q.ResolveKanbanProjectByLegacyRef(ctx, &value)
+		if queryErr != nil {
+			return uuid.Nil, mapRepoErr(queryErr)
+		}
+		return id, nil
+	}
+	parsed, err := uuid.Parse(rawRef)
+	if err != nil {
+		return uuid.Nil, errNotFound
+	}
+	id, err := r.q.ResolveKanbanProjectByUUIDRef(ctx, parsed)
+	if err != nil {
+		return uuid.Nil, mapRepoErr(err)
+	}
+	return id, nil
 }
 
 func (r *pgRepo) CreateBoard(ctx context.Context, in CreateBoardInput) (*Board, error) {
@@ -140,15 +165,27 @@ func (r *pgRepo) UnlinkProject(ctx context.Context, boardID, projectID, ownerID 
 }
 
 func (r *pgRepo) CreateColumn(ctx context.Context, boardID, ownerID uuid.UUID, in ColumnInput) (*Column, error) {
-	cols, e := r.q.ListKanbanColumns(ctx, sqlcdb.ListKanbanColumnsParams{BoardID: boardID, OwnerID: ownerID})
+	tx, e := r.pool.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
-	x, e := r.q.CreateKanbanColumn(ctx, sqlcdb.CreateKanbanColumnParams{ID: uuid.New(), BoardID: boardID, OwnerID: ownerID, Name: in.Name, Color: in.Color, Position: int32(len(cols)), WipLimit: in.WIPLimit, IsTerminal: in.IsTerminal})
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	if _, e = q.LockKanbanBoardForColumnCreate(ctx, sqlcdb.LockKanbanBoardForColumnCreateParams{ID: boardID, OwnerID: ownerID}); e != nil {
+		return nil, mapRepoErr(e)
+	}
+	cols, e := q.ListKanbanColumns(ctx, sqlcdb.ListKanbanColumnsParams{BoardID: boardID, OwnerID: ownerID})
+	if e != nil {
+		return nil, e
+	}
+	txRow, e := q.CreateKanbanColumn(ctx, sqlcdb.CreateKanbanColumnParams{ID: uuid.New(), BoardID: boardID, OwnerID: ownerID, Name: in.Name, Color: in.Color, Position: int32(len(cols)), WipLimit: in.WIPLimit, IsTerminal: in.IsTerminal})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	c := columnFromRow(x)
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
+	c := columnFromRow(txRow)
 	return &c, nil
 }
 func (r *pgRepo) UpdateColumn(ctx context.Context, id, ownerID uuid.UUID, in ColumnInput) (*Column, error) {
@@ -158,6 +195,53 @@ func (r *pgRepo) UpdateColumn(ctx context.Context, id, ownerID uuid.UUID, in Col
 	}
 	c := columnFromRow(x)
 	return &c, nil
+}
+func (r *pgRepo) ReorderColumns(ctx context.Context, boardID, ownerID uuid.UUID, ids []uuid.UUID) ([]Column, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	count, err := q.CountKanbanColumnsForOwner(ctx, sqlcdb.CountKanbanColumnsForOwnerParams{BoardID: boardID, OwnerID: ownerID})
+	if err != nil {
+		return nil, err
+	}
+	if int(count) != len(ids) {
+		return nil, errInvalidColumnOrder
+	}
+	// The schema enforces UNIQUE(board_id, position). Move every column into a
+	// collision-free negative range before assigning the requested dense order.
+	for position, id := range ids {
+		affected, execErr := q.SetKanbanColumnPosition(ctx, sqlcdb.SetKanbanColumnPositionParams{Position: int32(-position - 1), ID: id, BoardID: boardID, OwnerID: ownerID})
+		if execErr != nil {
+			return nil, execErr
+		}
+		if affected != 1 {
+			return nil, errInvalidColumnOrder
+		}
+	}
+	for position, id := range ids {
+		affected, execErr := q.SetKanbanColumnPosition(ctx, sqlcdb.SetKanbanColumnPositionParams{Position: int32(position), ID: id, BoardID: boardID, OwnerID: ownerID})
+		if execErr != nil {
+			return nil, execErr
+		}
+		if affected != 1 {
+			return nil, errInvalidColumnOrder
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := r.q.ListKanbanColumns(ctx, sqlcdb.ListKanbanColumnsParams{BoardID: boardID, OwnerID: ownerID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Column, len(rows))
+	for i, row := range rows {
+		out[i] = columnFromRow(row)
+	}
+	return out, nil
 }
 func (r *pgRepo) DeleteColumn(ctx context.Context, id, ownerID uuid.UUID) error {
 	n, e := r.q.DeleteKanbanColumn(ctx, sqlcdb.DeleteKanbanColumnParams{ID: id, OwnerID: ownerID})
@@ -171,15 +255,39 @@ func (r *pgRepo) DeleteColumn(ctx context.Context, id, ownerID uuid.UUID) error 
 }
 
 func (r *pgRepo) CreateCard(ctx context.Context, in CardInput) (*Card, error) {
-	pos, e := r.q.NextKanbanCardPosition(ctx, sqlcdb.NextKanbanCardPositionParams{ColumnID: in.ColumnID, OwnerID: in.OwnerID})
+	tx, e := r.pool.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
-	x, e := r.q.CreateKanbanCard(ctx, sqlcdb.CreateKanbanCardParams{ID: uuid.New(), BoardID: in.BoardID, ColumnID: in.ColumnID, OwnerID: in.OwnerID, SourceProjectID: in.SourceProjectID, Kind: in.Kind, Title: in.Title, Description: in.Description, Priority: in.Priority, Position: int64(pos), DueAt: in.DueAt, ExternalKey: in.ExternalKey, CustomFields: in.CustomFields})
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	limit, e := q.LockKanbanColumnForCreate(ctx, sqlcdb.LockKanbanColumnForCreateParams{ColumnID: in.ColumnID, BoardID: in.BoardID, OwnerID: in.OwnerID})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	_, _ = r.q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: x.ID, ActorID: &in.OwnerID, Event: "created", Data: json.RawMessage(`{}`)})
+	if limit != nil {
+		count, countErr := q.CountActiveKanbanCardsInColumn(ctx, in.ColumnID)
+		if countErr != nil {
+			return nil, countErr
+		}
+		if count >= *limit {
+			return nil, errWIPLimit
+		}
+	}
+	pos, e := q.NextKanbanCardPosition(ctx, sqlcdb.NextKanbanCardPositionParams{ColumnID: in.ColumnID, OwnerID: in.OwnerID})
+	if e != nil {
+		return nil, e
+	}
+	x, e := q.CreateKanbanCard(ctx, sqlcdb.CreateKanbanCardParams{ID: uuid.New(), BoardID: in.BoardID, ColumnID: in.ColumnID, OwnerID: in.OwnerID, SourceProjectID: in.SourceProjectID, Kind: in.Kind, Title: in.Title, Description: in.Description, Priority: in.Priority, Position: int64(pos), DueAt: in.DueAt, ExternalKey: in.ExternalKey, CustomFields: in.CustomFields})
+	if e != nil {
+		return nil, mapRepoErr(e)
+	}
+	if _, e = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: x.ID, ActorID: &in.OwnerID, Event: "created", Data: json.RawMessage(`{}`)}); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
 	c := cardFromRow(x)
 	return &c, nil
 }
@@ -192,30 +300,109 @@ func (r *pgRepo) GetCard(ctx context.Context, id, ownerID uuid.UUID) (*Card, err
 	return &c, nil
 }
 func (r *pgRepo) UpdateCard(ctx context.Context, ownerID uuid.UUID, c Card) (*Card, error) {
-	x, e := r.q.UpdateKanbanCard(ctx, sqlcdb.UpdateKanbanCardParams{ID: c.ID, OwnerID: ownerID, Title: c.Title, Description: c.Description, Kind: c.Kind, Priority: c.Priority, DueAt: c.DueAt, CustomFields: c.CustomFields})
+	tx, e := r.pool.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	x, e := q.UpdateKanbanCard(ctx, sqlcdb.UpdateKanbanCardParams{ID: c.ID, OwnerID: ownerID, Title: c.Title, Description: c.Description, Kind: c.Kind, Priority: c.Priority, DueAt: c.DueAt, CustomFields: c.CustomFields})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	_, _ = r.q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: c.ID, ActorID: &ownerID, Event: "updated", Data: json.RawMessage(`{}`)})
+	if _, e = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: c.ID, ActorID: &ownerID, Event: "updated", Data: json.RawMessage(`{}`)}); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
 	out := cardFromRow(x)
 	return &out, nil
 }
 func (r *pgRepo) MoveCard(ctx context.Context, id, columnID, ownerID uuid.UUID, position int64) (*Card, error) {
-	x, e := r.q.MoveKanbanCard(ctx, sqlcdb.MoveKanbanCardParams{ID: id, ColumnID: columnID, OwnerID: ownerID, Position: position})
+	tx, e := r.pool.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	locked, e := q.LockKanbanCardForMove(ctx, sqlcdb.LockKanbanCardForMoveParams{ID: id, OwnerID: ownerID})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	data, _ := json.Marshal(map[string]any{"column_id": columnID, "position": position})
-	_, _ = r.q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: id, ActorID: &ownerID, Event: "moved", Data: data})
-	c := cardFromRow(x)
-	return &c, nil
+	boardID, sourceColumn := locked.BoardID, locked.ColumnID
+	limit, e := q.LockKanbanDestinationColumn(ctx, sqlcdb.LockKanbanDestinationColumnParams{ID: columnID, BoardID: boardID})
+	if e != nil {
+		return nil, mapRepoErr(e)
+	}
+	if sourceColumn != columnID && limit != nil {
+		count, countErr := q.CountActiveKanbanCardsInColumn(ctx, columnID)
+		if countErr != nil {
+			return nil, countErr
+		}
+		if count >= *limit {
+			return nil, errWIPLimit
+		}
+	}
+	loadIDs := func(column uuid.UUID) ([]uuid.UUID, error) {
+		return q.LockOrderedKanbanCardIDs(ctx, sqlcdb.LockOrderedKanbanCardIDsParams{ColumnID: column, ExcludeID: id})
+	}
+	destination, e := loadIDs(columnID)
+	if e != nil {
+		return nil, e
+	}
+	idx := int(position)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(destination) {
+		idx = len(destination)
+	}
+	destination = append(destination, uuid.Nil)
+	copy(destination[idx+1:], destination[idx:])
+	destination[idx] = id
+	for i, cardID := range destination {
+		if _, e = q.SetKanbanCardPosition(ctx, sqlcdb.SetKanbanCardPositionParams{ColumnID: columnID, Position: int64((i + 1) * 1024), ID: cardID}); e != nil {
+			return nil, e
+		}
+	}
+	if sourceColumn != columnID {
+		source, loadErr := loadIDs(sourceColumn)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		for i, cardID := range source {
+			if _, e = q.SetKanbanCardPosition(ctx, sqlcdb.SetKanbanCardPositionParams{ColumnID: sourceColumn, Position: int64((i + 1) * 1024), ID: cardID}); e != nil {
+				return nil, e
+			}
+		}
+	}
+	data, _ := json.Marshal(map[string]any{"column_id": columnID, "position": idx})
+	if _, e = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: id, ActorID: &ownerID, Event: "moved", Data: data}); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
+	return r.GetCard(ctx, id, ownerID)
 }
 func (r *pgRepo) ArchiveCard(ctx context.Context, id, ownerID uuid.UUID) (*Card, error) {
-	x, e := r.q.ArchiveKanbanCard(ctx, sqlcdb.ArchiveKanbanCardParams{ID: id, OwnerID: ownerID})
+	tx, e := r.pool.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	x, e := q.ArchiveKanbanCard(ctx, sqlcdb.ArchiveKanbanCardParams{ID: id, OwnerID: ownerID})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	_, _ = r.q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: id, ActorID: &ownerID, Event: "archived", Data: json.RawMessage(`{}`)})
+	if _, e = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: id, ActorID: &ownerID, Event: "archived", Data: json.RawMessage(`{}`)}); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
 	c := cardFromRow(x)
 	return &c, nil
 }
@@ -231,18 +418,70 @@ func (r *pgRepo) UpsertInternalCard(ctx context.Context, projectID, boardID uuid
 	in.SourceProjectID = &projectID
 	if in.ExternalKey != nil {
 		if old, e := r.q.GetKanbanCardByExternalKey(ctx, sqlcdb.GetKanbanCardByExternalKeyParams{BoardID: boardID, ProjectID: projectID, ExternalKey: in.ExternalKey}); e == nil {
-			x, e := r.q.UpdateInternalKanbanCard(ctx, sqlcdb.UpdateInternalKanbanCardParams{ID: old.ID, BoardID: boardID, SourceProjectID: &projectID, Title: in.Title, Description: in.Description, Kind: in.Kind, Priority: in.Priority, DueAt: in.DueAt, CustomFields: in.CustomFields})
+			x, e := r.UpdateCard(ctx, b.OwnerID, Card{ID: old.ID, Title: in.Title, Description: in.Description, Kind: in.Kind, Priority: in.Priority, DueAt: in.DueAt, CustomFields: in.CustomFields})
 			if e != nil {
 				return nil, nil, false, e
 			}
-			c := cardFromRow(x)
-			return &b, &c, false, nil
+			return &b, x, false, nil
 		} else if !errors.Is(e, pgx.ErrNoRows) {
 			return nil, nil, false, e
 		}
 	}
 	c, e := r.CreateCard(ctx, in)
 	return &b, c, true, e
+}
+
+func (r *pgRepo) ResolveInternalCard(ctx context.Context, projectID, boardID uuid.UUID, cardID *uuid.UUID, externalKey *string) (*Board, *Card, error) {
+	bx, err := r.q.GetLinkedKanbanBoardForProject(ctx, sqlcdb.GetLinkedKanbanBoardForProjectParams{ID: boardID, ProjectID: projectID})
+	if err != nil {
+		return nil, nil, mapRepoErr(err)
+	}
+	board := boardFromRow(bx)
+	var row sqlcdb.KanbanCard
+	if cardID != nil {
+		row, err = r.q.GetInternalKanbanCardByID(ctx, sqlcdb.GetInternalKanbanCardByIDParams{ProjectID: projectID, ID: *cardID, BoardID: boardID})
+	} else if externalKey != nil {
+		row, err = r.q.GetKanbanCardByExternalKey(ctx, sqlcdb.GetKanbanCardByExternalKeyParams{BoardID: boardID, ProjectID: projectID, ExternalKey: externalKey})
+	} else {
+		return nil, nil, errNotFound
+	}
+	if err != nil {
+		return nil, nil, mapRepoErr(err)
+	}
+	card := cardFromRow(row)
+	return &board, &card, nil
+}
+
+func (r *pgRepo) UpdateInternalCard(ctx context.Context, projectID, boardID, cardID uuid.UUID, in CardInput) (*Board, *Card, error) {
+	board, current, err := r.ResolveInternalCard(ctx, projectID, boardID, &cardID, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	updated, err := r.UpdateCard(ctx, board.OwnerID, Card{ID: current.ID, Title: in.Title, Description: in.Description, Kind: in.Kind, Priority: in.Priority, DueAt: in.DueAt, CustomFields: in.CustomFields})
+	if err != nil {
+		return nil, nil, mapRepoErr(err)
+	}
+	card := *updated
+	if in.ColumnID != uuid.Nil && in.ColumnID != card.ColumnID {
+		cardPtr, moveErr := r.MoveCard(ctx, card.ID, in.ColumnID, board.OwnerID, 0)
+		if moveErr != nil {
+			return nil, nil, moveErr
+		}
+		card = *cardPtr
+	}
+	return board, &card, nil
+}
+
+func (r *pgRepo) ArchiveInternalCard(ctx context.Context, projectID, boardID, cardID uuid.UUID) (*Board, *Card, error) {
+	board, card, err := r.ResolveInternalCard(ctx, projectID, boardID, &cardID, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	archived, err := r.ArchiveCard(ctx, card.ID, board.OwnerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return board, archived, nil
 }
 func (r *pgRepo) ListActivities(ctx context.Context, cardID, ownerID uuid.UUID) ([]Activity, error) {
 	xs, e := r.q.ListKanbanActivities(ctx, sqlcdb.ListKanbanActivitiesParams{CardID: cardID, OwnerID: ownerID})
@@ -256,11 +495,22 @@ func (r *pgRepo) ListActivities(ctx context.Context, cardID, ownerID uuid.UUID) 
 	return out, nil
 }
 func (r *pgRepo) CreateComment(ctx context.Context, cardID, ownerID uuid.UUID, body string) (*Comment, error) {
-	x, e := r.q.CreateKanbanComment(ctx, sqlcdb.CreateKanbanCommentParams{ID: uuid.New(), CardID: cardID, AuthorID: ownerID, Body: body})
+	tx, e := r.pool.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	x, e := q.CreateKanbanComment(ctx, sqlcdb.CreateKanbanCommentParams{ID: uuid.New(), CardID: cardID, AuthorID: ownerID, Body: body})
 	if e != nil {
 		return nil, mapRepoErr(e)
 	}
-	_, _ = r.q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: cardID, ActorID: &ownerID, Event: "commented", Data: json.RawMessage(`{}`)})
+	if _, e = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: cardID, ActorID: &ownerID, Event: "commented", Data: json.RawMessage(`{}`)}); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
 	c := commentFromRow(x)
 	return &c, nil
 }

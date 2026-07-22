@@ -369,7 +369,11 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// Bot runtimes write through its X-Internal-Token endpoint; all human CRUD
 	// remains strictly owner-scoped. Domain mutations are broadcast in real time.
 	kanbanUC := kanban.NewUsecase(kanban.NewPostgresRepository(s.pool), wsPub)
-	kanban.RegisterRoutes(v1, kanban.NewHandler(kanbanUC), tokens)
+	var kanbanSub wsevents.Subscriber
+	if sub, ok := wsPub.(wsevents.Subscriber); ok {
+		kanbanSub = sub
+	}
+	kanban.RegisterRoutes(v1, kanban.NewHandlerWithSubscriber(kanbanUC, kanbanSub), tokens)
 
 	// plan / subscription — plan enforcement reads/writes the user via userUC.
 	planUC := plan.NewUsecase(plan.NewPostgresRepository(s.pool), userUC)
@@ -499,7 +503,7 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// publisher wired into releaseUC above) lets this also forward
 	// node_execution/context/error events to the constructor's WS room —
 	// see the consumer.Register bodies below.
-	s.startEventConsumer(ctx, debugUC, executionUC, wsPub)
+	s.startEventConsumer(ctx, debugUC, executionUC, kanbanUC, wsPub)
 }
 
 const (
@@ -519,13 +523,56 @@ const (
 // comment). Each event's own "project" field keeps the engine's raw
 // payload.ProjectID as-is (that's what the constructor's client-side filter
 // compares against project.id).
-func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, executionUC executionmod.Usecase, wsPub wsevents.Publisher) {
+func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecase, executionUC executionmod.Usecase, kanbanUC kanban.Usecase, wsPub wsevents.Publisher) {
 	addr := s.cfg.Engine.RedisAddr()
 	if addr == "" {
 		s.log.Warn("redisq: engine.redis_host not configured — engine event consumer disabled")
 		return
 	}
 	consumer := redisq.NewConsumer(addr, s.cfg.Engine.RedisPassword, eventsStreamName, eventsGroupName, "backend-1", s.log)
+
+	consumer.Register("kanban.mutation", func(ctx context.Context, args json.RawMessage) error {
+		var payload struct {
+			ProjectID    string          `json:"project_id"`
+			BoardID      string          `json:"board_id"`
+			Operation    string          `json:"operation"`
+			CardID       *uuid.UUID      `json:"card_id"`
+			ColumnID     uuid.UUID       `json:"column_id"`
+			Title        string          `json:"title"`
+			Description  string          `json:"description"`
+			Kind         string          `json:"kind"`
+			Priority     string          `json:"priority"`
+			DueAt        *time.Time      `json:"due_at"`
+			ExternalKey  *string         `json:"external_key"`
+			CustomFields json.RawMessage `json:"custom_fields"`
+		}
+		if err := json.Unmarshal(args, &payload); err != nil {
+			return fmt.Errorf("decode kanban.mutation: %w", err)
+		}
+		projectID, err := kanbanUC.ResolveProjectRef(ctx, payload.ProjectID)
+		if err != nil {
+			s.log.Error("redisq: dropping kanban mutation with unknown project", logger.String("project_id", payload.ProjectID), logger.Err(err))
+			return nil
+		}
+		boardID, err := uuid.Parse(payload.BoardID)
+		if err != nil {
+			s.log.Error("redisq: dropping kanban mutation with invalid board", logger.String("board_id", payload.BoardID), logger.Err(err))
+			return nil
+		}
+		_, _, err = kanbanUC.MutateInternalCard(ctx, projectID, boardID, kanban.InternalUpsertCardRequest{
+			Operation: payload.Operation, CardID: payload.CardID, ColumnID: payload.ColumnID,
+			Title: payload.Title, Description: payload.Description, Kind: payload.Kind,
+			Priority: payload.Priority, DueAt: payload.DueAt, ExternalKey: payload.ExternalKey,
+			CustomFields: payload.CustomFields,
+		})
+		if appErr, ok := httpx.AsAppError(err); ok && appErr.Status < http.StatusInternalServerError {
+			if ownerID, ownerErr := debugUC.GetProjectOwner(ctx, projectID); ownerErr == nil && wsPub != nil {
+				wsPub.Publish(ctx, wsevents.UserRoom(ownerID), "kanban_mutation_failed", map[string]any{"board_id": boardID, "code": appErr.Code, "message": appErr.Message})
+			}
+			return nil // permanent validation/business rejection: acknowledge it
+		}
+		return err
+	})
 
 	consumer.Register("execution.lifecycle", func(ctx context.Context, args json.RawMessage) error {
 		var payload executionLifecyclePayload

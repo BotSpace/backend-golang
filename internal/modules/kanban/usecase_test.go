@@ -15,6 +15,10 @@ type stubRepo struct {
 	createdCard bool
 }
 
+func (s *stubRepo) ResolveProjectRef(_ context.Context, raw string) (uuid.UUID, error) {
+	return uuid.Parse(raw)
+}
+
 func (s *stubRepo) CreateBoard(_ context.Context, in CreateBoardInput) (*Board, error) {
 	s.created = in
 	if s.board != nil {
@@ -38,6 +42,9 @@ func (s *stubRepo) CreateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInp
 func (s *stubRepo) UpdateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error) {
 	return &Column{}, nil
 }
+func (s *stubRepo) ReorderColumns(context.Context, uuid.UUID, uuid.UUID, []uuid.UUID) ([]Column, error) {
+	return []Column{}, nil
+}
 func (s *stubRepo) DeleteColumn(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (s *stubRepo) CreateCard(_ context.Context, in CardInput) (*Card, error) {
 	return &Card{ID: uuid.New(), BoardID: in.BoardID, ColumnID: in.ColumnID, Title: in.Title}, nil
@@ -52,6 +59,15 @@ func (s *stubRepo) ArchiveCard(context.Context, uuid.UUID, uuid.UUID) (*Card, er
 }
 func (s *stubRepo) UpsertInternalCard(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ CardInput) (*Board, *Card, bool, error) {
 	return s.board, s.card, s.createdCard, nil
+}
+func (s *stubRepo) ResolveInternalCard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID, *string) (*Board, *Card, error) {
+	return s.board, s.card, nil
+}
+func (s *stubRepo) UpdateInternalCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, CardInput) (*Board, *Card, error) {
+	return s.board, s.card, nil
+}
+func (s *stubRepo) ArchiveInternalCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*Board, *Card, error) {
+	return s.board, s.card, nil
 }
 func (s *stubRepo) ListActivities(context.Context, uuid.UUID, uuid.UUID) ([]Activity, error) {
 	return []Activity{}, nil
