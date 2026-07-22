@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
@@ -136,6 +137,7 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		OwnerID:          ownerID,
 		ProjectID:        projectID,
 		RuntimeProjectID: runtimeProjectID,
+		RuntimeReplicas:  runtimeReplicas(env),
 		ReleaseUUID:      rel.ID,
 		Version:          int(rel.Version),
 		Debug:            false,
@@ -274,6 +276,7 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 		OwnerID:          ownerID,
 		ProjectID:        projectID,
 		RuntimeProjectID: runtimeProjectID,
+		RuntimeReplicas:  runtimeReplicas(env),
 		ReleaseUUID:      dbg.ID,
 		Debug:            true,
 		Flow:             flow,
@@ -424,6 +427,17 @@ func (u *usecase) runtimeProjectID(ctx context.Context, projectID, ownerID uuid.
 		return "", fmt.Errorf("resolve runtime project id: %w", err)
 	}
 	return id, nil
+}
+
+func runtimeReplicas(env map[string]string) int {
+	value, err := strconv.Atoi(env["RUNTIME_REPLICAS"])
+	if err != nil || value < 1 {
+		return 0 // orchestrator default
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 // deployOutcome turns an engine.Deploy call into a (status, serviceID) pair,

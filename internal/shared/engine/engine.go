@@ -38,13 +38,16 @@ type DeploySpec struct {
 	// ProjectID remains the canonical Go UUID used for ownership. Empty uses
 	// ProjectID.String().
 	RuntimeProjectID string
-	ReleaseUUID      uuid.UUID
-	Version          int
-	Debug            bool
-	Flow             []byte // constructor graph JSON
-	Schemas          []byte // collection -> field -> CMS kind JSON
-	Modules          []byte // {"modules": [...]} runtime module routing JSON
-	Env              map[string]string
+	// RuntimeReplicas overrides the pool default for this bot. Zero uses the
+	// configured default; it is clamped to the number of live pool workers.
+	RuntimeReplicas int
+	ReleaseUUID     uuid.UUID
+	Version         int
+	Debug           bool
+	Flow            []byte // constructor graph JSON
+	Schemas         []byte // collection -> field -> CMS kind JSON
+	Modules         []byte // {"modules": [...]} runtime module routing JSON
+	Env             map[string]string
 
 	// Name overrides how KubernetesOrchestrator derives the Deployment/Service
 	// name. Empty means "derive from ProjectID/Version/Debug" (bot-engine

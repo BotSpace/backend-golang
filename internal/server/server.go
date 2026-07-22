@@ -909,6 +909,8 @@ func (s *Server) buildOrchestrator() engine.Orchestrator {
 		RedisPassword:      s.cfg.Engine.RedisPassword,
 		MongoAddr:          s.cfg.Engine.MongoAddr,
 		MongoDBName:        s.cfg.Engine.MongoDBName,
+		PoolSize:           s.cfg.Engine.PoolSize,
+		RuntimeReplicas:    s.cfg.Engine.RuntimeReplicas,
 	})
 	if err != nil {
 		s.log.Warn("engine orchestrator: kubernetes unavailable — falling back to stub", logger.Err(err))
