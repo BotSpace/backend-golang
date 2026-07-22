@@ -290,6 +290,18 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 	ownerForService func(context.Context, uuid.UUID, string, bool) (uuid.UUID, bool, error),
 	replaceServiceID func(context.Context, uuid.UUID, string, string, bool) (bool, error),
 ) (int, error) {
+	return o.MigrateLegacyRuntimesLimited(ctx, 0, ownerForService, replaceServiceID)
+}
+
+// MigrateLegacyRuntimesLimited performs the same stop-safe migration but can
+// cap the number of successful cutovers for production canaries. A zero limit
+// means all remaining runtimes.
+func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
+	ctx context.Context,
+	limit int,
+	ownerForService func(context.Context, uuid.UUID, string, bool) (uuid.UUID, bool, error),
+	replaceServiceID func(context.Context, uuid.UUID, string, string, bool) (bool, error),
+) (int, error) {
 	if o.rdb == nil {
 		return 0, errors.New("redis is required for migration")
 	}
@@ -309,6 +321,9 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 	migrated := 0
 	var migrationErrors []error
 	for i := range deps.Items {
+		if limit > 0 && migrated >= limit {
+			return migrated, errors.Join(migrationErrors...)
+		}
 		dep := &deps.Items[i]
 		debug := strings.HasPrefix(dep.Name, "debug-")
 		if !debug && !strings.HasPrefix(dep.Name, "release-") {
@@ -366,6 +381,9 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 			break
 		}
 		for _, key := range keys {
+			if limit > 0 && migrated >= limit {
+				return migrated, errors.Join(migrationErrors...)
+			}
 			parts := strings.Split(key, ":")
 			if len(parts) != 4 {
 				continue
@@ -381,6 +399,10 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 			}
 			ownerComplete := true
 			for webhookRaw, raw := range items {
+				if limit > 0 && migrated >= limit {
+					ownerComplete = false
+					break
+				}
 				webhookID, hookErr := uuid.Parse(webhookRaw)
 				var stored storedRuntimeSpec
 				if hookErr != nil || json.Unmarshal([]byte(raw), &stored) != nil {
