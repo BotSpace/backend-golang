@@ -902,6 +902,7 @@ func (s *Server) buildOrchestrator() engine.Orchestrator {
 		MongoDBName:        s.cfg.Engine.MongoDBName,
 		PoolSize:           s.cfg.Engine.PoolSize,
 		RuntimeReplicas:    s.cfg.Engine.RuntimeReplicas,
+		RuntimeIdleTimeout: s.cfg.Engine.RuntimeIdleTimeout,
 	})
 	if err != nil {
 		s.log.Warn("engine orchestrator: kubernetes unavailable — falling back to stub", logger.Err(err))

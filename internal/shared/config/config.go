@@ -122,8 +122,9 @@ type EngineConfig struct {
 	MongoAddr   string `mapstructure:"mongo_addr"`    // MONGO_SHARED_URL fallback MONGO_URL
 	MongoDBName string `mapstructure:"mongo_db_name"` // CMS_SHARED_DB
 
-	PoolSize        int `mapstructure:"pool_size"`        // shared engine Deployment replicas
-	RuntimeReplicas int `mapstructure:"runtime_replicas"` // default bot placement replication
+	PoolSize           int    `mapstructure:"pool_size"`            // shared engine Deployment replicas
+	RuntimeReplicas    int    `mapstructure:"runtime_replicas"`     // default bot placement replication
+	RuntimeIdleTimeout string `mapstructure:"runtime_idle_timeout"` // child suspension duration, Go duration syntax
 }
 
 // Image is the full "repo:tag" reference deployed for release/debug engines.
@@ -388,6 +389,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("engine.mongo_db_name", "botspace_cms")
 	v.SetDefault("engine.pool_size", 3)
 	v.SetDefault("engine.runtime_replicas", 1)
+	v.SetDefault("engine.runtime_idle_timeout", "30m")
 
 	v.SetDefault("monitoring.prometheus_url", "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090")
 }

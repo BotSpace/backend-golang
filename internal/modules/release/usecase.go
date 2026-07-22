@@ -2,9 +2,15 @@ package release
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
@@ -12,6 +18,8 @@ import (
 	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/google/uuid"
 )
+
+var telegramAPIBaseURL = "https://api.telegram.org"
 
 // Usecase exposes owner-scoped release/debug/environment operations. Deploys
 // go through engine.Orchestrator — the server wires engine.Stub until a real
@@ -147,6 +155,14 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		Env:              env,
 		WebhookUUID:      releaseWebhookUUID,
 	})
+	if deployErr == nil {
+		if token := strings.TrimSpace(env["RELEASE_BOT_TOKEN"]); token != "" {
+			if hookErr := registerReleaseWebhook(ctx, token, releaseWebhookUUID); hookErr != nil {
+				_ = u.orch.Stop(ctx, result.ServiceID)
+				deployErr = fmt.Errorf("register Telegram release webhook: %w", hookErr)
+			}
+		}
+	}
 
 	status, serviceID := deployOutcome(result, deployErr)
 	updated, err := u.repo.UpdateReleaseDeployResult(ctx, rel.ID, serviceID, status)
@@ -158,6 +174,37 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		return updated, deploymentUnavailable(deployErr)
 	}
 	return updated, nil
+}
+
+func registerReleaseWebhook(ctx context.Context, token string, releaseWebhookUUID uuid.UUID) error {
+	domain := strings.TrimSpace(os.Getenv("DOMAIN"))
+	if domain == "" {
+		domain = "api.botspace.uz"
+	}
+	hookURL := fmt.Sprintf("https://%s/api/bot-webhook/release/%s/", domain, releaseWebhookUUID.String())
+	form := url.Values{"url": {hookURL}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(telegramAPIBaseURL, "/")+"/bot"+token+"/setWebhook", strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("build setWebhook request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("call setWebhook: %w", err)
+	}
+	defer resp.Body.Close()
+	var result struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode setWebhook response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK || !result.OK {
+		return fmt.Errorf("setWebhook rejected: status=%d description=%s", resp.StatusCode, result.Description)
+	}
+	return nil
 }
 
 func (u *usecase) ListReleases(ctx context.Context, projectID, ownerID uuid.UUID) ([]Release, error) {

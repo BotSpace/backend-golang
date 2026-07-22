@@ -54,8 +54,9 @@ type KubernetesConfig struct {
 	MongoAddr   string
 	MongoDBName string
 
-	PoolSize        int
-	RuntimeReplicas int
+	PoolSize           int
+	RuntimeReplicas    int
+	RuntimeIdleTimeout string
 }
 
 func (c KubernetesConfig) image() string { return c.ImageRepository + ":" + c.ImageTag }
@@ -106,6 +107,9 @@ func newKubernetesOrchestrator(cs kubernetes.Interface, cfg KubernetesConfig) *K
 	}
 	if cfg.RuntimeReplicas < 1 {
 		cfg.RuntimeReplicas = 1
+	}
+	if cfg.RuntimeIdleTimeout == "" {
+		cfg.RuntimeIdleTimeout = "30m"
 	}
 	var rdb *redis.Client
 	if cfg.RedisAddr != "" {
