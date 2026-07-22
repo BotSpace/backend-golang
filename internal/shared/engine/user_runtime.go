@@ -319,9 +319,10 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
 		return 0, fmt.Errorf("list legacy runtimes: %w", err)
 	}
 	migrated := 0
+	attempted := 0
 	var migrationErrors []error
 	for i := range deps.Items {
-		if limit > 0 && migrated >= limit {
+		if limit > 0 && attempted >= limit {
 			return migrated, errors.Join(migrationErrors...)
 		}
 		dep := &deps.Items[i]
@@ -347,6 +348,7 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
 			migrationErrors = append(migrationErrors, assetErr)
 			continue
 		}
+		attempted++
 
 		result, deployErr := o.deployUserRuntime(ctx, DeploySpec{OwnerID: ownerID, ProjectID: projectID, Debug: debug, Name: dep.Name, Flow: flow, Schemas: schemas, Modules: modules, Env: env, WebhookUUID: webhookID})
 		if deployErr != nil {
@@ -381,7 +383,7 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
 			break
 		}
 		for _, key := range keys {
-			if limit > 0 && migrated >= limit {
+			if limit > 0 && attempted >= limit {
 				return migrated, errors.Join(migrationErrors...)
 			}
 			parts := strings.Split(key, ":")
@@ -399,7 +401,7 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
 			}
 			ownerComplete := true
 			for webhookRaw, raw := range items {
-				if limit > 0 && migrated >= limit {
+				if limit > 0 && attempted >= limit {
 					ownerComplete = false
 					break
 				}
@@ -415,6 +417,7 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimesLimited(
 					migrationErrors = append(migrationErrors, fmt.Errorf("owner runtime %s has non-uuid canonical project %q", webhookID, stored.ProjectID))
 					continue
 				}
+				attempted++
 				result, deployErr := o.deployPoolRuntime(ctx, DeploySpec{OwnerID: ownerID, ProjectID: projectID, RuntimeProjectID: stored.ProjectID, Debug: stored.Debug, Name: stored.Name, Flow: stored.Flow, Schemas: stored.Schemas, Modules: stored.Modules, Env: stored.Env, WebhookUUID: webhookID})
 				if deployErr != nil {
 					ownerComplete = false
