@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -752,8 +753,8 @@ func (f *fakeTemplateResolver) ResolveForProjectCreate(_ context.Context, idOrSl
 // what CreateFromTemplate asked it to do.
 type fakeReleaseOrchestrator struct {
 	envs          map[string]string
-	releaseCalled bool
-	debugCalled   bool
+	releaseCalled atomic.Bool
+	debugCalled   atomic.Bool
 	deployErr     error
 }
 
@@ -766,7 +767,7 @@ func (f *fakeReleaseOrchestrator) UpsertEnvironment(_ context.Context, in releas
 }
 
 func (f *fakeReleaseOrchestrator) CreateRelease(_ context.Context, projectID, _ uuid.UUID) (*release.Release, error) {
-	f.releaseCalled = true
+	f.releaseCalled.Store(true)
 	if f.deployErr != nil {
 		return nil, f.deployErr
 	}
@@ -774,7 +775,7 @@ func (f *fakeReleaseOrchestrator) CreateRelease(_ context.Context, projectID, _ 
 }
 
 func (f *fakeReleaseOrchestrator) StartDebug(_ context.Context, projectID, _ uuid.UUID) (*release.Debug, error) {
-	f.debugCalled = true
+	f.debugCalled.Store(true)
 	if f.deployErr != nil {
 		return nil, f.deployErr
 	}
@@ -835,12 +836,17 @@ func TestCreateFromTemplate_CopiesFlowAndProvisionsCollections(t *testing.T) {
 		t.Fatalf("ADMIN_CHAT_ID env = %q, want 42", got)
 	}
 
-	// mode defaults to "release" -> first release deployed, no debug started.
-	if !rel.releaseCalled {
+	// mode defaults to "release": deploy the release and keep an editable
+	// debug runtime alive automatically.
+	if !rel.releaseCalled.Load() {
 		t.Fatal("expected CreateRelease to be called for the default (release) mode")
 	}
-	if rel.debugCalled {
-		t.Fatal("did not expect StartDebug to be called for the default (release) mode")
+	deadline := time.Now().Add(time.Second)
+	for !rel.debugCalled.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !rel.debugCalled.Load() {
+		t.Fatal("expected automatic StartDebug for the editable draft")
 	}
 }
 
@@ -929,10 +935,10 @@ func TestCreateFromTemplate_DebugMode(t *testing.T) {
 	if _, ok := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; ok {
 		t.Fatal("did not expect RELEASE_BOT_TOKEN to be set in debug mode")
 	}
-	if !rel.debugCalled {
+	if !rel.debugCalled.Load() {
 		t.Fatal("expected StartDebug to be called for mode=debug")
 	}
-	if rel.releaseCalled {
+	if rel.releaseCalled.Load() {
 		t.Fatal("did not expect CreateRelease to be called for mode=debug")
 	}
 }
@@ -959,7 +965,7 @@ func TestCreateFromTemplate_NotPurchased(t *testing.T) {
 	if len(repo.projects) != 0 {
 		t.Fatalf("expected no project to be created, got %d", len(repo.projects))
 	}
-	if rel.releaseCalled || rel.debugCalled {
+	if rel.releaseCalled.Load() || rel.debugCalled.Load() {
 		t.Fatal("did not expect any deploy call when template resolution failed")
 	}
 }
@@ -1077,7 +1083,7 @@ func TestCreateFromTemplate_WithManagedBotID(t *testing.T) {
 	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != "777:managed-template-token" {
 		t.Fatalf("RELEASE_BOT_TOKEN = %q, want the resolved managed-bot token", got)
 	}
-	if !rel.releaseCalled {
+	if !rel.releaseCalled.Load() {
 		t.Fatal("expected CreateRelease to be called (release mode with a resolved managed bot token)")
 	}
 }
@@ -1112,7 +1118,7 @@ func TestCreateFromTemplate_DebugMode_IgnoresManagedBotID(t *testing.T) {
 	if _, ok := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; ok {
 		t.Fatal("did not expect RELEASE_BOT_TOKEN to be set in debug mode")
 	}
-	if !rel.debugCalled {
+	if !rel.debugCalled.Load() {
 		t.Fatal("expected StartDebug to be called for mode=debug")
 	}
 }

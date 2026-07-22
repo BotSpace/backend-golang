@@ -18,6 +18,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X github.com/botspace/backend/internal/shared/buildinfo.Version=${VERSION}" \
     -o /out/worker ./cmd/worker
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/botspace/backend/internal/shared/buildinfo.Version=${VERSION}" \
+    -o /out/runtime-migrate ./cmd/runtime-migrate
 
 FROM alpine:3.20
 
@@ -28,6 +31,7 @@ WORKDIR /app
 
 COPY --from=builder /out/api /app/api
 COPY --from=builder /out/worker /app/worker
+COPY --from=builder /out/runtime-migrate /app/runtime-migrate
 COPY --chown=app:app configs ./configs
 COPY --chown=app:app migrations ./migrations
 

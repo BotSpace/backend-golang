@@ -138,11 +138,15 @@ func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec Dep
 		return DeployResult{}, err
 	}
 
+	runtimeProjectID := spec.ProjectID.String()
+	if strings.TrimSpace(spec.RuntimeProjectID) != "" {
+		runtimeProjectID = strings.TrimSpace(spec.RuntimeProjectID)
+	}
 	env := make(map[string]string, len(spec.Env)+16)
 	for key, value := range spec.Env {
 		env[key] = value
 	}
-	env["PROJECT_ID"] = spec.ProjectID.String()
+	env["PROJECT_ID"] = runtimeProjectID
 	env["REDIS_ENABLED"] = "true"
 	env["REDIS_ADDR"] = o.cfg.RedisAddr
 	env["REDIS_PASSWORD"] = o.cfg.RedisPassword
@@ -172,7 +176,7 @@ func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec Dep
 		env["IS_RELEASE"] = "true"
 	}
 
-	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: spec.ProjectID.String(), Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Flow: normalizeJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`), Schemas: normalizeJSONObject(spec.Schemas, `{}`), Modules: normalizeJSONObject(spec.Modules, `{"modules":[]}`), Env: env}
+	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Flow: normalizeJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`), Schemas: normalizeJSONObject(spec.Schemas, `{}`), Modules: normalizeJSONObject(spec.Modules, `{"modules":[]}`), Env: env}
 	raw, err := json.Marshal(runtime)
 	if err != nil {
 		return DeployResult{}, err

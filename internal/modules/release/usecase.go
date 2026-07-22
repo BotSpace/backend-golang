@@ -127,18 +127,23 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
+	runtimeProjectID, err := u.runtimeProjectID(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
-		OwnerID:     ownerID,
-		ProjectID:   projectID,
-		ReleaseUUID: rel.ID,
-		Version:     int(rel.Version),
-		Debug:       false,
-		Flow:        rel.Flow,
-		Schemas:     schemas,
-		Modules:     modules,
-		Env:         env,
-		WebhookUUID: releaseWebhookUUID,
+		OwnerID:          ownerID,
+		ProjectID:        projectID,
+		RuntimeProjectID: runtimeProjectID,
+		ReleaseUUID:      rel.ID,
+		Version:          int(rel.Version),
+		Debug:            false,
+		Flow:             rel.Flow,
+		Schemas:          schemas,
+		Modules:          modules,
+		Env:              env,
+		WebhookUUID:      releaseWebhookUUID,
 	})
 
 	status, serviceID := deployOutcome(result, deployErr)
@@ -260,17 +265,22 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
+	runtimeProjectID, err := u.runtimeProjectID(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
-		OwnerID:     ownerID,
-		ProjectID:   projectID,
-		ReleaseUUID: dbg.ID,
-		Debug:       true,
-		Flow:        flow,
-		Schemas:     schemas,
-		Modules:     modules,
-		Env:         env,
-		WebhookUUID: debugWebhookUUID,
+		OwnerID:          ownerID,
+		ProjectID:        projectID,
+		RuntimeProjectID: runtimeProjectID,
+		ReleaseUUID:      dbg.ID,
+		Debug:            true,
+		Flow:             flow,
+		Schemas:          schemas,
+		Modules:          modules,
+		Env:              env,
+		WebhookUUID:      debugWebhookUUID,
 	})
 
 	status, serviceID := deployOutcome(result, deployErr)
@@ -396,6 +406,24 @@ func (u *usecase) envMap(ctx context.Context, projectID uuid.UUID) (map[string]s
 		out[e.Key] = e.Value
 	}
 	return out, nil
+}
+
+type runtimeProjectIDResolver interface {
+	ProjectRuntimeID(ctx context.Context, projectID, ownerID uuid.UUID) (string, error)
+}
+
+func (u *usecase) runtimeProjectID(ctx context.Context, projectID, ownerID uuid.UUID) (string, error) {
+	resolver, ok := u.repo.(runtimeProjectIDResolver)
+	if !ok {
+		// In-memory/test repositories predate imported Django tenants. Native
+		// projects always use their UUID, which is also the safe default.
+		return projectID.String(), nil
+	}
+	id, err := resolver.ProjectRuntimeID(ctx, projectID, ownerID)
+	if err != nil {
+		return "", fmt.Errorf("resolve runtime project id: %w", err)
+	}
+	return id, nil
 }
 
 // deployOutcome turns an engine.Deploy call into a (status, serviceID) pair,

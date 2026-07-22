@@ -206,6 +206,13 @@ func NewUsecaseWithMetrics(uc Usecase, metrics MetricsProvider) Usecase {
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
+	return u.create(ctx, in, true)
+}
+
+// create contains the shared persistence/provisioning path. autoStartDebug is
+// disabled only by CreateFromTemplate so it can first apply the template envs
+// and release mode, then launch the draft runtime with the complete config.
+func (u *usecase) create(ctx context.Context, in CreateInput, autoStartDebug bool) (*Project, error) {
 	// Runtime capacity is created lazily with the first bot/project, never at
 	// account registration. Ensure it before inserting the project so a failed
 	// cluster operation cannot leave a bot row whose promised runtime is absent.
@@ -228,7 +235,27 @@ func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) 
 		return nil, err
 	}
 	u.provisionDefaultCollections(ctx, p)
+	if autoStartDebug {
+		u.scheduleDebugRuntime(ctx, p.ID, p.OwnerID)
+	}
 	return p, nil
+}
+
+// scheduleDebugRuntime deliberately does not extend request latency: the owner
+// supervisor keeps the runtime alive and StartDebug waits for the child to be
+// ready before cutting traffic over. Redis remains the durable desired state,
+// so an ordinary project save can safely retry the same operation.
+func (u *usecase) scheduleDebugRuntime(ctx context.Context, projectID, ownerID uuid.UUID) {
+	if u.rel == nil {
+		return
+	}
+	go func() {
+		startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+		defer cancel()
+		if _, err := u.rel.StartDebug(startCtx, projectID, ownerID); err != nil {
+			zap.L().Error("automatic debug runtime start failed", logger.String("project_id", projectID.String()), logger.Err(err))
+		}
+	}()
 }
 
 // resolveManagedBotToken parses managedBotIDStr as a UUID and resolves it to
@@ -311,13 +338,13 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 		managedBotID = ""
 	}
 
-	p, err := u.Create(ctx, CreateInput{
+	p, err := u.create(ctx, CreateInput{
 		OwnerID:      in.OwnerID,
 		Name:         in.Name,
 		Flow:         flow,
 		Token:        token,
 		ManagedBotID: managedBotID,
-	})
+	}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +387,9 @@ func (u *usecase) CreateFromTemplate(ctx context.Context, in CreateFromTemplateI
 		if _, rerr := u.rel.CreateRelease(ctx, p.ID, in.OwnerID); rerr != nil {
 			return nil, rerr
 		}
+		// Release and draft are independent runtimes. Keep the editable draft
+		// available immediately even when the template was released at create.
+		u.scheduleDebugRuntime(ctx, p.ID, in.OwnerID)
 	}
 
 	// Re-fetch so the response reflects the just-deployed release/debug
@@ -716,22 +746,11 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 	if err := u.applyToken(ctx, p, ownerID, token); err != nil {
 		return nil, err
 	}
-	// A running debug runtime follows the draft flow. In the user-supervisor
+	// The debug runtime follows every saved draft. In the user-supervisor
 	// model StartDebug is a Redis-backed hot swap (not a pod redeploy), so the
-	// constructor's ordinary save becomes visible without pressing reload.
+	// constructor's ordinary save becomes visible without a Run/Reload action.
 	if len(in.Flow) > 0 && u.rel != nil {
-		if dbg, dbgErr := u.repo.GetDebugForOwner(ctx, id, ownerID); dbgErr == nil && dbg != nil && (dbg.Status == "running" || dbg.Status == "initializing" || dbg.Status == "pending" || dbg.Status == "failed") {
-			// Saving the constructor must stay fast. Redis is the durable source
-			// of the latest graph and the supervisor coalesces repeated upserts,
-			// so finish the readiness/cutover outside the HTTP request lifetime.
-			go func() {
-				reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
-				defer cancel()
-				if _, reloadErr := u.rel.StartDebug(reloadCtx, id, ownerID); reloadErr != nil {
-					zap.L().Error("debug runtime hot reload failed", logger.String("project_id", id.String()), logger.Err(reloadErr))
-				}
-			}()
-		}
+		u.scheduleDebugRuntime(ctx, id, ownerID)
 	}
 	return p, nil
 }

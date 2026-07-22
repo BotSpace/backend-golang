@@ -144,6 +144,13 @@ SELECT * FROM enviroment WHERE project_id = sqlc.arg('project_id') ORDER BY key;
 -- name: GetProjectFlowForOwner :one
 SELECT flow FROM projects WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
 
+-- name: GetProjectLegacyIDForOwner :one
+-- Imported Django projects must keep their numeric Mongo tenant key; native
+-- Go projects use the canonical UUID. This value is injected as PROJECT_ID.
+SELECT legacy_id
+FROM projects
+WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND deleted_at IS NULL;
+
 -- Owner-scoped read of the project's stable webhook UUIDs — the engine
 -- orchestrator names the "bot-<uuid>" Service after these so Telegram
 -- webhook routing survives redeploys (see internal/shared/engine/kubernetes.go).

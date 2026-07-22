@@ -16,6 +16,12 @@ WHERE p.id = sqlc.arg('project_id') AND p.deleted_at IS NULL
   AND d.status NOT IN ('stopped', 'deleted')
 LIMIT 1;
 
+-- name: ResolveLegacyRuntimeProject :one
+SELECT id, owner_id
+FROM projects
+WHERE legacy_id = sqlc.arg('legacy_id') AND deleted_at IS NULL
+LIMIT 1;
+
 -- name: ReplaceLegacyReleaseRuntimeServiceID :execrows
 UPDATE relase
 SET service_id = sqlc.arg('new_service_id'), updated_at = NOW()

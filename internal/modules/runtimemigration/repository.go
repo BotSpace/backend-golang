@@ -37,3 +37,8 @@ func (r *pgRepo) ReplaceServiceID(ctx context.Context, projectID uuid.UUID, oldS
 	rows, err := r.queries.ReplaceLegacyReleaseRuntimeServiceID(ctx, sqlcdb.ReplaceLegacyReleaseRuntimeServiceIDParams{ProjectID: projectID, NewServiceID: &newServiceID, OldServiceID: &oldServiceID})
 	return rows > 0, err
 }
+
+func (r *pgRepo) ResolveLegacyProject(ctx context.Context, legacyID int32) (uuid.UUID, uuid.UUID, error) {
+	row, err := r.queries.ResolveLegacyRuntimeProject(ctx, &legacyID)
+	return row.ID, row.OwnerID, err
+}
