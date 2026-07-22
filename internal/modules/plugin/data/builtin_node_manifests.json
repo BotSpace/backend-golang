@@ -7902,5 +7902,62 @@
     "aiDoc": "Foydalanuvchi tilini o'rnatadi va languages/language_options/current_lang contextlarini ochadi. language bo'sh bo'lsa faqat til ro'yxati yuklanadi.",
     "summary": "Foydalanuvchi tilini o'rnatadi (i18n)",
     "agentCategory": "data"
+  },
+  {
+    "type": "KanbanCardNode",
+    "status": "runtime",
+    "category": "customLogic",
+    "titleKey": "constructor.customLogic.kanbanCard.name",
+    "descriptionKey": "constructor.customLogic.kanbanCard.description",
+    "titleFallback": "Ish boardiga yozish",
+    "descriptionFallback": "Lead, vazifa yoki buyurtmani umumiy Kanban boardiga yozadi.",
+    "iconName": "kanban",
+    "colorToken": "integration-indigo",
+    "size": { "width": 210 },
+    "sidebar": { "enabled": true, "groupId": "customLogic", "sortOrder": 75, "elementType": "kanban-card" },
+    "handles": [{ "preset": "target-default" }, { "preset": "source-default" }],
+    "content": [
+      { "type": "board-select", "key": "boardId", "columnKey": "columnId", "label": "Board va ustun" },
+      { "type": "text", "key": "title", "label": "Sarlavha", "placeholder": "{{message_text}}" },
+      { "type": "textarea", "key": "description", "label": "Tavsif", "rows": 3, "optional": true, "defaultVisible": false },
+      { "type": "select", "key": "priority", "label": "Muhimlik", "options": [
+        { "value": "low", "label": "Past" }, { "value": "normal", "label": "Oddiy" },
+        { "value": "high", "label": "Yuqori" }, { "value": "urgent", "label": "Shoshilinch" }
+      ]},
+      { "type": "text", "key": "externalKey", "label": "Takrorlanmas kalit", "placeholder": "{{chat_id}}", "optional": true, "defaultVisible": false, "helpText": "Bir xil kalit qayta kelsa yangi karta ochilmaydi, mavjud karta yangilanadi." },
+      { "type": "text", "key": "outputKey", "label": "Natija o'zgaruvchisi", "placeholder": "kanban_card", "optional": true, "defaultVisible": false, "is_state": true, "stateDefault": "kanban_card" }
+    ],
+    "defaults": { "boardId": "", "columnId": "", "title": "{{message_text}}", "description": "", "priority": "normal", "externalKey": "", "outputKey": "kanban_card" },
+    "producesState": ["kanban_card", "kanban_card_id"],
+    "aiDoc": "Bot oqimidan owner-global Kanban boardiga karta upsert qiladi. boardId va columnId UI select orqali aniq UUID sifatida tanlanadi. title majburiy. externalKey (masalan {{chat_id}} yoki {{order_id}}) berilsa bir bot+board doirasida idempotent: keyingi run mavjud kartani yangilaydi; bo'sh bo'lsa har run yangi karta yaratadi. Natija outputKey va kanban_card_id contextiga yoziladi.",
+    "summary": "Botdan umumiy ish boardiga lead/vazifa/buyurtma yozadi",
+    "agentCategory": "data"
+  },
+  {
+    "type": "AIKanbanToolNode",
+    "status": "runtime",
+    "category": "ai",
+    "accessory": true,
+    "accessoryAttachesTo": ["ai_tool"],
+    "titleKey": "constructor.ai.kanbanTool.name",
+    "descriptionKey": "constructor.ai.kanbanTool.description",
+    "titleFallback": "Kanban",
+    "descriptionFallback": "AI agentga umumiy ish boardiga karta yozish imkonini beradi.",
+    "iconName": "kanban",
+    "colorToken": "ai-emerald",
+    "size": { "width": 180 },
+    "sidebar": { "enabled": true, "groupId": "ai_tools", "sortOrder": 39, "elementType": "ai_tool_kanban" },
+    "handles": [{ "preset": "source-top" }],
+    "content": [
+      { "type": "textarea", "key": "description", "label": "Tavsif (LLM uchun)", "rows": 3, "placeholder": "Qachon karta yaratish kerakligini yozing" },
+      { "type": "board-select", "key": "boardId", "columnKey": "columnId", "label": "Board va boshlang'ich ustun" },
+      { "type": "text", "key": "externalKeyTemplate", "label": "Takrorlanmas kalit", "placeholder": "{{chat_id}}", "helpText": "AI bu xavfsiz qiymatni o'zgartira olmaydi. Bir suhbat uchun bitta karta kerak bo'lsa {{chat_id}} qoldiring." }
+    ],
+    "defaults": { "tool": "kanban_card", "toolName": "save_to_kanban", "description": "Suhbatdan muhim lead, vazifa yoki buyurtmani ish boardiga saqla.", "boardId": "", "columnId": "", "externalKeyTemplate": "{{chat_id}}" },
+    "aiDoc": "AIAgentNode acc:ai_tool portiga ulanadi. AI title, description va priority argumentlarini beradi; boardId, columnId, projectId va externalKeyTemplate builder tomonidan qat'iy belgilanadi va AI ularni almashtira olmaydi. Bir chatga bitta lead kerak bo'lsa externalKeyTemplate={{chat_id}}. Har murojaat alohida karta bo'lsa bo'sh qoldir. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
+    "summary": "AI agent uchun Kanban kartani yaratish/yangilash tool'i",
+    "agentCategory": "ai",
+    "sourceHandles": ["source-default"],
+    "targetHandles": []
   }
 ]

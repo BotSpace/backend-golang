@@ -31,6 +31,8 @@ type Querier interface {
 	AppendAuditLog(ctx context.Context, arg AppendAuditLogParams) (AuditLog, error)
 	ApprovePaymentWithdrawal(ctx context.Context, arg ApprovePaymentWithdrawalParams) (PaymentWithdrawalRequest, error)
 	ApproveVerification(ctx context.Context, arg ApproveVerificationParams) (UserVerification, error)
+	ArchiveKanbanBoard(ctx context.Context, arg ArchiveKanbanBoardParams) (int64, error)
+	ArchiveKanbanCard(ctx context.Context, arg ArchiveKanbanCardParams) (KanbanCard, error)
 	AttachPaymentTransactionToOrder(ctx context.Context, arg AttachPaymentTransactionToOrderParams) (PaymentOrder, error)
 	// Redeploy: refresh service_id/endpoint/status for every project currently
 	// using this shared module.
@@ -133,6 +135,11 @@ type Querier interface {
 	// Ownership is enforced inline: the SELECT only produces a row (so INSERT
 	// only happens) when the target project belongs to sqlc.arg('owner_id').
 	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
+	CreateKanbanActivity(ctx context.Context, arg CreateKanbanActivityParams) (KanbanActivity, error)
+	CreateKanbanBoard(ctx context.Context, arg CreateKanbanBoardParams) (KanbanBoard, error)
+	CreateKanbanCard(ctx context.Context, arg CreateKanbanCardParams) (KanbanCard, error)
+	CreateKanbanColumn(ctx context.Context, arg CreateKanbanColumnParams) (KanbanColumn, error)
+	CreateKanbanComment(ctx context.Context, arg CreateKanbanCommentParams) (KanbanComment, error)
 	// Ownership is enforced inline: the SELECT only produces a row (so INSERT
 	// only happens) when the target project belongs to sqlc.arg('owner_id').
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
@@ -208,6 +215,7 @@ type Querier interface {
 	// Returns the deleted row (not :execrows) so the caller can unlink the blob
 	// on disk using its file_path.
 	DeleteFileByUUIDForOwner(ctx context.Context, arg DeleteFileByUUIDForOwnerParams) (File, error)
+	DeleteKanbanColumn(ctx context.Context, arg DeleteKanbanColumnParams) (int64, error)
 	DeleteMessageForOwner(ctx context.Context, arg DeleteMessageForOwnerParams) (int64, error)
 	DeleteModule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePendingPaymentWithdrawal(ctx context.Context, arg DeletePendingPaymentWithdrawalParams) (int64, error)
@@ -259,7 +267,12 @@ type Querier interface {
 	GetFileByUUID(ctx context.Context, argUuid uuid.UUID) (File, error)
 	GetFileByUUIDForOwner(ctx context.Context, arg GetFileByUUIDForOwnerParams) (File, error)
 	GetFilePath(ctx context.Context, id uuid.UUID) (string, error)
+	GetKanbanBoardForOwner(ctx context.Context, arg GetKanbanBoardForOwnerParams) (KanbanBoard, error)
+	GetKanbanCardByExternalKey(ctx context.Context, arg GetKanbanCardByExternalKeyParams) (KanbanCard, error)
+	GetKanbanCardForOwner(ctx context.Context, arg GetKanbanCardForOwnerParams) (KanbanCard, error)
+	GetKanbanColumnForBoard(ctx context.Context, arg GetKanbanColumnForBoardParams) (KanbanColumn, error)
 	GetLatestVerificationForUser(ctx context.Context, userID uuid.UUID) (UserVerification, error)
+	GetLinkedKanbanBoardForProject(ctx context.Context, arg GetLinkedKanbanBoardForProjectParams) (KanbanBoard, error)
 	// Owner-scoped lookup for resolving a manager-bot-wizard-created bot's
 	// token during project create (see webhook.Usecase.ResolveManagedBotToken).
 	// Zero rows means "not found or not owned by ownerID" — the caller cannot
@@ -329,6 +342,7 @@ type Querier interface {
 	// so summing RAM/CPU/network across the result never double-counts a host
 	// that reported multiple times.
 	LatestResourceByHostnameForOwner(ctx context.Context, arg LatestResourceByHostnameForOwnerParams) ([]Resource, error)
+	LinkKanbanBoardProject(ctx context.Context, arg LinkKanbanBoardProjectParams) (int64, error)
 	ListActivePlans(ctx context.Context) ([]Plan, error)
 	// ===================== admin CRUD =====================
 	// Admin listing: every plan regardless of is_active (the public ListActivePlans
@@ -356,6 +370,12 @@ type Querier interface {
 	// project_id/filetype nargs let the caller optionally narrow the listing;
 	// NULL means "no filter" on that dimension.
 	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)
+	ListKanbanActivities(ctx context.Context, arg ListKanbanActivitiesParams) ([]KanbanActivity, error)
+	ListKanbanBoardProjects(ctx context.Context, arg ListKanbanBoardProjectsParams) ([]ListKanbanBoardProjectsRow, error)
+	ListKanbanBoards(ctx context.Context, arg ListKanbanBoardsParams) ([]ListKanbanBoardsRow, error)
+	ListKanbanCards(ctx context.Context, arg ListKanbanCardsParams) ([]KanbanCard, error)
+	ListKanbanColumns(ctx context.Context, arg ListKanbanColumnsParams) ([]KanbanColumn, error)
+	ListKanbanComments(ctx context.Context, arg ListKanbanCommentsParams) ([]KanbanComment, error)
 	// Orphan-sweep support: every release/debug service_id whose DB row is NOT in a
 	// definitively-terminal state, i.e. the deployment SHOULD still exist. The
 	// orphan sweep deletes any engine-managed Deployment in the namespace whose
@@ -430,6 +450,8 @@ type Querier interface {
 	// project (EXISTS gate below); a (project_id, node_id, chat_id) conflict just
 	// returns the existing row. Zero rows back means "not found or not owned".
 	MintWebhookEndpoint(ctx context.Context, arg MintWebhookEndpointParams) (WebhookEndpoint, error)
+	MoveKanbanCard(ctx context.Context, arg MoveKanbanCardParams) (KanbanCard, error)
+	NextKanbanCardPosition(ctx context.Context, arg NextKanbanCardPositionParams) (int32, error)
 	// Bot-by-bot income breakdown for the earnings dashboard (by_bot payload).
 	PaymentEarningsByProject(ctx context.Context, ownerID uuid.UUID) ([]PaymentEarningsByProjectRow, error)
 	// Disk-usage time series from the hourly disksnap snapshots, for the monitoring
@@ -610,6 +632,7 @@ type Querier interface {
 	// Only mutable while status = 'pending' (checked by the caller/usecase too).
 	TemplateUpdateSubmission(ctx context.Context, arg TemplateUpdateSubmissionParams) (TemplateSubmissionRequest, error)
 	TouchPersonalAccessToken(ctx context.Context, id uuid.UUID) error
+	UnlinkKanbanBoardProject(ctx context.Context, arg UnlinkKanbanBoardProjectParams) (int64, error)
 	// published_at is stamped the first time is_published flips to true; it is
 	// never cleared afterwards, matching the Django model.
 	UpdateBlogPost(ctx context.Context, arg UpdateBlogPostParams) (BlogPost, error)
@@ -617,6 +640,10 @@ type Querier interface {
 	UpdateDebugDeployResult(ctx context.Context, arg UpdateDebugDeployResultParams) (Debug, error)
 	UpdateDebugStatusForOwner(ctx context.Context, arg UpdateDebugStatusForOwnerParams) (Debug, error)
 	UpdateFileByUUIDForOwner(ctx context.Context, arg UpdateFileByUUIDForOwnerParams) (File, error)
+	UpdateInternalKanbanCard(ctx context.Context, arg UpdateInternalKanbanCardParams) (KanbanCard, error)
+	UpdateKanbanBoard(ctx context.Context, arg UpdateKanbanBoardParams) (KanbanBoard, error)
+	UpdateKanbanCard(ctx context.Context, arg UpdateKanbanCardParams) (KanbanCard, error)
+	UpdateKanbanColumn(ctx context.Context, arg UpdateKanbanColumnParams) (KanbanColumn, error)
 	UpdateMessageFileID(ctx context.Context, arg UpdateMessageFileIDParams) error
 	UpdateMessageForOwner(ctx context.Context, arg UpdateMessageForOwnerParams) (Message, error)
 	UpdateMessageResult(ctx context.Context, arg UpdateMessageResultParams) error
