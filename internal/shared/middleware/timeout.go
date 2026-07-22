@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,10 @@ import (
 // timeout <= 0 disables it.
 func Timeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if timeout <= 0 {
+		// Streaming responses own their connection lifetime. Applying the normal
+		// request timeout creates a delivery gap every time EventSource reconnects
+		// because Redis Pub/Sub does not retain messages for offline subscribers.
+		if timeout <= 0 || strings.Contains(c.GetHeader("Accept"), "text/event-stream") {
 			c.Next()
 			return
 		}

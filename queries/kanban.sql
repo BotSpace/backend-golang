@@ -31,6 +31,21 @@ ORDER BY b.updated_at DESC, b.id;
 -- name: GetKanbanBoardForOwner :one
 SELECT * FROM kanban_boards WHERE id = $1 AND owner_id = $2 AND archived_at IS NULL;
 
+-- name: ListArchivedKanbanBoards :many
+SELECT b.*,
+       COUNT(DISTINCT c.id)::bigint AS card_count,
+       COALESCE(array_agg(DISTINCT bp.project_id) FILTER (WHERE bp.project_id IS NOT NULL), ARRAY[]::uuid[])::uuid[] AS project_ids
+FROM kanban_boards b
+LEFT JOIN kanban_board_projects bp ON bp.board_id = b.id
+LEFT JOIN kanban_cards c ON c.board_id = b.id
+WHERE b.owner_id = sqlc.arg('owner_id')
+  AND b.archived_at IS NOT NULL
+  AND (sqlc.narg('project_id')::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM kanban_board_projects x WHERE x.board_id = b.id AND x.project_id = sqlc.narg('project_id')
+  ))
+GROUP BY b.id
+ORDER BY b.archived_at DESC, b.id;
+
 -- name: UpdateKanbanBoard :one
 UPDATE kanban_boards SET
     name = $3, description = $4, icon = $5, color = $6,
@@ -41,6 +56,11 @@ RETURNING *;
 -- name: ArchiveKanbanBoard :execrows
 UPDATE kanban_boards SET archived_at = NOW(), updated_at = NOW()
 WHERE id = $1 AND owner_id = $2 AND archived_at IS NULL;
+
+-- name: RestoreKanbanBoard :one
+UPDATE kanban_boards SET archived_at = NULL, updated_at = NOW()
+WHERE id = $1 AND owner_id = $2 AND archived_at IS NOT NULL
+RETURNING *;
 
 -- name: LinkKanbanBoardProject :execrows
 INSERT INTO kanban_board_projects (board_id, project_id)
@@ -99,7 +119,7 @@ WHERE c.id = sqlc.arg('id') AND c.board_id = sqlc.arg('board_id') AND c.board_id
 -- name: DeleteKanbanColumn :execrows
 DELETE FROM kanban_columns c USING kanban_boards b
 WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2
-  AND NOT EXISTS (SELECT 1 FROM kanban_cards k WHERE k.column_id = c.id AND k.archived_at IS NULL);
+  AND NOT EXISTS (SELECT 1 FROM kanban_cards k WHERE k.column_id = c.id);
 
 -- name: NextKanbanCardPosition :one
 SELECT COALESCE(MAX(c.position), 0)::bigint + 1024
@@ -184,6 +204,33 @@ UPDATE kanban_cards c SET archived_at = NOW(), updated_at = NOW()
 FROM kanban_boards b
 WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2 AND c.archived_at IS NULL
 RETURNING c.*;
+
+-- name: ListArchivedKanbanCards :many
+SELECT c.* FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.board_id = sqlc.arg('board_id') AND b.owner_id = sqlc.arg('owner_id')
+  AND b.archived_at IS NULL AND c.archived_at IS NOT NULL
+  AND (sqlc.narg('project_id')::uuid IS NULL OR c.source_project_id = sqlc.narg('project_id'))
+ORDER BY c.archived_at DESC, c.id;
+
+-- name: LockArchivedKanbanCardForRestore :one
+SELECT c.* FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = sqlc.arg('id') AND b.owner_id = sqlc.arg('owner_id')
+  AND b.archived_at IS NULL AND c.archived_at IS NOT NULL
+FOR UPDATE OF c;
+
+-- name: HasActiveKanbanCardExternalKey :one
+SELECT EXISTS (
+  SELECT 1 FROM kanban_cards
+  WHERE board_id = sqlc.arg('board_id')
+    AND source_project_id IS NOT DISTINCT FROM sqlc.narg('source_project_id')::uuid
+    AND external_key = sqlc.narg('external_key')::text
+    AND archived_at IS NULL
+);
+
+-- name: RestoreKanbanCard :one
+UPDATE kanban_cards SET archived_at = NULL, position = sqlc.arg('position'), updated_at = NOW()
+WHERE id = sqlc.arg('id') AND archived_at IS NOT NULL
+RETURNING *;
 
 -- name: GetKanbanCardByExternalKey :one
 SELECT c.* FROM kanban_cards c

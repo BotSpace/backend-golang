@@ -17,6 +17,7 @@ var (
 	errNotFound           = errors.New("kanban resource not found")
 	errWIPLimit           = errors.New("kanban column WIP limit reached")
 	errInvalidColumnOrder = errors.New("kanban invalid column order")
+	errRestoreConflict    = errors.New("kanban restore external key conflict")
 )
 
 type pgRepo struct {
@@ -93,6 +94,18 @@ func (r *pgRepo) ListBoards(ctx context.Context, ownerID uuid.UUID, projectID *u
 	return out, nil
 }
 
+func (r *pgRepo) ListArchivedBoards(ctx context.Context, ownerID uuid.UUID, projectID *uuid.UUID) ([]Board, error) {
+	rows, err := r.q.ListArchivedKanbanBoards(ctx, sqlcdb.ListArchivedKanbanBoardsParams{OwnerID: ownerID, ProjectID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Board, len(rows))
+	for i, x := range rows {
+		out[i] = Board{ID: x.ID, OwnerID: x.OwnerID, Name: x.Name, Description: x.Description, Icon: x.Icon, Color: x.Color, CardTypeLabel: x.CardTypeLabel, FieldSchema: raw(x.FieldSchema, "[]"), CardCount: x.CardCount, ProjectIDs: x.ProjectIds, ArchivedAt: x.ArchivedAt, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
+	}
+	return out, nil
+}
+
 func (r *pgRepo) GetBoard(ctx context.Context, id, ownerID uuid.UUID, projectID *uuid.UUID) (*Board, error) {
 	x, err := r.q.GetKanbanBoardForOwner(ctx, sqlcdb.GetKanbanBoardForOwnerParams{ID: id, OwnerID: ownerID})
 	if err != nil {
@@ -142,6 +155,14 @@ func (r *pgRepo) ArchiveBoard(ctx context.Context, id, ownerID uuid.UUID) error 
 		return errNotFound
 	}
 	return nil
+}
+func (r *pgRepo) RestoreBoard(ctx context.Context, id, ownerID uuid.UUID) (*Board, error) {
+	x, e := r.q.RestoreKanbanBoard(ctx, sqlcdb.RestoreKanbanBoardParams{ID: id, OwnerID: ownerID})
+	if e != nil {
+		return nil, mapRepoErr(e)
+	}
+	b := boardFromRow(x)
+	return &b, nil
 }
 func (r *pgRepo) LinkProject(ctx context.Context, boardID, projectID, ownerID uuid.UUID) error {
 	n, err := r.q.LinkKanbanBoardProject(ctx, sqlcdb.LinkKanbanBoardProjectParams{BoardID: boardID, ProjectID: projectID, OwnerID: ownerID})
@@ -407,6 +428,69 @@ func (r *pgRepo) ArchiveCard(ctx context.Context, id, ownerID uuid.UUID) (*Card,
 	return &c, nil
 }
 
+func (r *pgRepo) ListArchivedCards(ctx context.Context, boardID, ownerID uuid.UUID, projectID *uuid.UUID) ([]Card, error) {
+	rows, err := r.q.ListArchivedKanbanCards(ctx, sqlcdb.ListArchivedKanbanCardsParams{BoardID: boardID, OwnerID: ownerID, ProjectID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Card, len(rows))
+	for i, row := range rows {
+		out[i] = cardFromRow(row)
+	}
+	return out, nil
+}
+
+func (r *pgRepo) RestoreCard(ctx context.Context, id, ownerID uuid.UUID) (*Card, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	archived, err := q.LockArchivedKanbanCardForRestore(ctx, sqlcdb.LockArchivedKanbanCardForRestoreParams{ID: id, OwnerID: ownerID})
+	if err != nil {
+		return nil, mapRepoErr(err)
+	}
+	limit, err := q.LockKanbanDestinationColumn(ctx, sqlcdb.LockKanbanDestinationColumnParams{ID: archived.ColumnID, BoardID: archived.BoardID})
+	if err != nil {
+		return nil, mapRepoErr(err)
+	}
+	if limit != nil {
+		count, countErr := q.CountActiveKanbanCardsInColumn(ctx, archived.ColumnID)
+		if countErr != nil {
+			return nil, countErr
+		}
+		if count >= *limit {
+			return nil, errWIPLimit
+		}
+	}
+	if archived.ExternalKey != nil {
+		exists, existsErr := q.HasActiveKanbanCardExternalKey(ctx, sqlcdb.HasActiveKanbanCardExternalKeyParams{BoardID: archived.BoardID, SourceProjectID: archived.SourceProjectID, ExternalKey: archived.ExternalKey})
+		if existsErr != nil {
+			return nil, existsErr
+		}
+		if exists {
+			return nil, errRestoreConflict
+		}
+	}
+	position, err := q.NextKanbanCardPosition(ctx, sqlcdb.NextKanbanCardPositionParams{ColumnID: archived.ColumnID, OwnerID: ownerID})
+	if err != nil {
+		return nil, err
+	}
+	x, err := q.RestoreKanbanCard(ctx, sqlcdb.RestoreKanbanCardParams{ID: id, Position: int64(position)})
+	if err != nil {
+		return nil, mapRepoErr(err)
+	}
+	if _, err = q.CreateKanbanActivity(ctx, sqlcdb.CreateKanbanActivityParams{ID: uuid.New(), CardID: id, ActorID: &ownerID, Event: "restored", Data: json.RawMessage(`{}`)}); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	card := cardFromRow(x)
+	return &card, nil
+}
+
 func (r *pgRepo) UpsertInternalCard(ctx context.Context, projectID, boardID uuid.UUID, in CardInput) (*Board, *Card, bool, error) {
 	bx, e := r.q.GetLinkedKanbanBoardForProject(ctx, sqlcdb.GetLinkedKanbanBoardForProjectParams{ID: boardID, ProjectID: projectID})
 	if e != nil {
@@ -527,13 +611,13 @@ func (r *pgRepo) ListComments(ctx context.Context, cardID, ownerID uuid.UUID) ([
 }
 
 func boardFromRow(x sqlcdb.KanbanBoard) Board {
-	return Board{ID: x.ID, OwnerID: x.OwnerID, Name: x.Name, Description: x.Description, Icon: x.Icon, Color: x.Color, CardTypeLabel: x.CardTypeLabel, FieldSchema: raw(x.FieldSchema, "[]"), CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
+	return Board{ID: x.ID, OwnerID: x.OwnerID, Name: x.Name, Description: x.Description, Icon: x.Icon, Color: x.Color, CardTypeLabel: x.CardTypeLabel, FieldSchema: raw(x.FieldSchema, "[]"), ArchivedAt: x.ArchivedAt, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
 }
 func columnFromRow(x sqlcdb.KanbanColumn) Column {
 	return Column{ID: x.ID, BoardID: x.BoardID, Name: x.Name, Color: x.Color, Position: x.Position, WIPLimit: x.WipLimit, IsTerminal: x.IsTerminal, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
 }
 func cardFromRow(x sqlcdb.KanbanCard) Card {
-	return Card{ID: x.ID, BoardID: x.BoardID, ColumnID: x.ColumnID, SourceProjectID: x.SourceProjectID, Kind: x.Kind, Title: x.Title, Description: x.Description, Priority: x.Priority, Position: x.Position, DueAt: x.DueAt, ExternalKey: x.ExternalKey, CustomFields: raw(x.CustomFields, "{}"), CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
+	return Card{ID: x.ID, BoardID: x.BoardID, ColumnID: x.ColumnID, SourceProjectID: x.SourceProjectID, Kind: x.Kind, Title: x.Title, Description: x.Description, Priority: x.Priority, Position: x.Position, DueAt: x.DueAt, ExternalKey: x.ExternalKey, CustomFields: raw(x.CustomFields, "{}"), ArchivedAt: x.ArchivedAt, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
 }
 func commentFromRow(x sqlcdb.KanbanComment) Comment {
 	return Comment{ID: x.ID, CardID: x.CardID, AuthorID: x.AuthorID, Body: x.Body, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}

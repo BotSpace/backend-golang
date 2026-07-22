@@ -29,11 +29,17 @@ func (s *stubRepo) CreateBoard(_ context.Context, in CreateBoardInput) (*Board, 
 func (s *stubRepo) ListBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error) {
 	return []Board{}, nil
 }
+func (s *stubRepo) ListArchivedBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error) {
+	return []Board{}, nil
+}
 func (s *stubRepo) GetBoard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) (*Board, error) {
 	return s.board, nil
 }
-func (s *stubRepo) UpdateBoard(_ context.Context, b Board) (*Board, error)               { return &b, nil }
-func (s *stubRepo) ArchiveBoard(context.Context, uuid.UUID, uuid.UUID) error             { return nil }
+func (s *stubRepo) UpdateBoard(_ context.Context, b Board) (*Board, error)   { return &b, nil }
+func (s *stubRepo) ArchiveBoard(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (s *stubRepo) RestoreBoard(context.Context, uuid.UUID, uuid.UUID) (*Board, error) {
+	return s.board, nil
+}
 func (s *stubRepo) LinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error   { return nil }
 func (s *stubRepo) UnlinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error { return nil }
 func (s *stubRepo) CreateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error) {
@@ -55,6 +61,12 @@ func (s *stubRepo) MoveCard(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, in
 	return s.card, nil
 }
 func (s *stubRepo) ArchiveCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error) {
+	return s.card, nil
+}
+func (s *stubRepo) ListArchivedCards(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) ([]Card, error) {
+	return []Card{}, nil
+}
+func (s *stubRepo) RestoreCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error) {
 	return s.card, nil
 }
 func (s *stubRepo) UpsertInternalCard(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ CardInput) (*Board, *Card, bool, error) {
@@ -124,5 +136,30 @@ func TestInternalUpsertPublishesToBoardOwner(t *testing.T) {
 	}
 	if pub.event != "kanban_card_created" {
 		t.Fatalf("event=%q", pub.event)
+	}
+}
+
+func TestRestoreBoardAndCardPublishRealtimeEvents(t *testing.T) {
+	owner := uuid.New()
+	board := &Board{ID: uuid.New(), OwnerID: owner, Name: "Sales"}
+	card := &Card{ID: uuid.New(), BoardID: board.ID, Title: "Lead"}
+	repo := &stubRepo{board: board, card: card}
+	pub := &capturedPublisher{}
+	uc := NewUsecase(repo, pub)
+
+	gotBoard, err := uc.RestoreBoard(t.Context(), board.ID, owner)
+	if err != nil || gotBoard.ID != board.ID {
+		t.Fatalf("RestoreBoard() board=%#v err=%v", gotBoard, err)
+	}
+	if pub.event != "kanban_board_restored" {
+		t.Fatalf("board event=%q", pub.event)
+	}
+
+	gotCard, err := uc.RestoreCard(t.Context(), card.ID, owner)
+	if err != nil || gotCard.ID != card.ID {
+		t.Fatalf("RestoreCard() card=%#v err=%v", gotCard, err)
+	}
+	if pub.event != "kanban_card_restored" {
+		t.Fatalf("card event=%q", pub.event)
 	}
 }

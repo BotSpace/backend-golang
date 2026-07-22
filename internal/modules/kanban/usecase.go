@@ -16,9 +16,11 @@ type Usecase interface {
 	CreateBoard(context.Context, CreateBoardInput) (*Board, error)
 	ResolveProjectRef(context.Context, string) (uuid.UUID, error)
 	ListBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error)
+	ListArchivedBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error)
 	GetBoard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) (*Board, error)
 	UpdateBoard(context.Context, uuid.UUID, uuid.UUID, UpdateBoardRequest) (*Board, error)
 	ArchiveBoard(context.Context, uuid.UUID, uuid.UUID) error
+	RestoreBoard(context.Context, uuid.UUID, uuid.UUID) (*Board, error)
 	LinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	UnlinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	CreateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error)
@@ -30,6 +32,8 @@ type Usecase interface {
 	UpdateCard(context.Context, uuid.UUID, uuid.UUID, UpdateCardRequest) (*Card, error)
 	MoveCard(context.Context, uuid.UUID, uuid.UUID, MoveCardRequest) (*Card, error)
 	ArchiveCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
+	ListArchivedCards(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) ([]Card, error)
+	RestoreCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
 	UpsertInternalCard(context.Context, uuid.UUID, uuid.UUID, InternalUpsertCardRequest) (*Card, bool, error)
 	MutateInternalCard(context.Context, uuid.UUID, uuid.UUID, InternalUpsertCardRequest) (*Card, bool, error)
 	ListActivities(context.Context, uuid.UUID, uuid.UUID) ([]Activity, error)
@@ -96,6 +100,13 @@ func (u *usecase) ListBoards(ctx context.Context, owner uuid.UUID, project *uuid
 	}
 	return x, nil
 }
+func (u *usecase) ListArchivedBoards(ctx context.Context, owner uuid.UUID, project *uuid.UUID) ([]Board, error) {
+	x, e := u.repo.ListArchivedBoards(ctx, owner, project)
+	if e != nil {
+		return nil, httpx.Internal(e)
+	}
+	return x, nil
+}
 func (u *usecase) GetBoard(ctx context.Context, id, owner uuid.UUID, project *uuid.UUID) (*Board, error) {
 	b, e := u.repo.GetBoard(ctx, id, owner, project)
 	return mapErr(b, e)
@@ -122,6 +133,14 @@ func (u *usecase) ArchiveBoard(ctx context.Context, id, owner uuid.UUID) error {
 	}
 	u.event(ctx, owner, "kanban_board_archived", map[string]any{"id": id})
 	return nil
+}
+func (u *usecase) RestoreBoard(ctx context.Context, id, owner uuid.UUID) (*Board, error) {
+	b, e := u.repo.RestoreBoard(ctx, id, owner)
+	if e != nil {
+		return nil, mapOnlyErr(e)
+	}
+	u.event(ctx, owner, "kanban_board_restored", b)
+	return b, nil
 }
 func (u *usecase) LinkProject(ctx context.Context, b, p, o uuid.UUID) error {
 	if e := u.repo.LinkProject(ctx, b, p, o); e != nil {
@@ -231,6 +250,21 @@ func (u *usecase) ArchiveCard(ctx context.Context, id, o uuid.UUID) (*Card, erro
 		return nil, mapOnlyErr(e)
 	}
 	u.event(ctx, o, "kanban_card_archived", c)
+	return c, nil
+}
+func (u *usecase) ListArchivedCards(ctx context.Context, boardID, ownerID uuid.UUID, projectID *uuid.UUID) ([]Card, error) {
+	cards, e := u.repo.ListArchivedCards(ctx, boardID, ownerID, projectID)
+	if e != nil {
+		return nil, httpx.Internal(e)
+	}
+	return cards, nil
+}
+func (u *usecase) RestoreCard(ctx context.Context, id, owner uuid.UUID) (*Card, error) {
+	c, e := u.repo.RestoreCard(ctx, id, owner)
+	if e != nil {
+		return nil, mapOnlyErr(e)
+	}
+	u.event(ctx, owner, "kanban_card_restored", c)
 	return c, nil
 }
 func (u *usecase) UpsertInternalCard(ctx context.Context, p, b uuid.UUID, r InternalUpsertCardRequest) (*Card, bool, error) {
@@ -377,6 +411,9 @@ func mapOnlyErr(e error) error {
 	}
 	if errors.Is(e, errInvalidColumnOrder) {
 		return httpx.Conflict("kanban.invalid_column_order", "column order must contain every board column exactly once")
+	}
+	if errors.Is(e, errRestoreConflict) {
+		return httpx.Conflict("kanban.restore_conflict", "another active card already uses this external key")
 	}
 	if errors.Is(e, errNotFound) {
 		return httpx.NotFound("kanban.not_found", "kanban resource not found")

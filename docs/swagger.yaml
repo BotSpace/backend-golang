@@ -942,6 +942,8 @@ definitions:
     type: object
   internal_modules_kanban.Board:
     properties:
+      archived_at:
+        type: string
       card_count:
         type: integer
       card_type_label:
@@ -985,6 +987,8 @@ definitions:
     type: object
   internal_modules_kanban.Card:
     properties:
+      archived_at:
+        type: string
       board_id:
         type: string
       column_id:
@@ -5060,6 +5064,30 @@ paths:
       summary: Create a Kanban card
       tags:
       - kanban
+  /boards/{id}/cards/archived:
+    get:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Filter by source bot/project
+        in: query
+        name: project_id
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Card'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List archived cards for an active Kanban board
+      tags:
+      - kanban
   /boards/{id}/columns:
     post:
       parameters:
@@ -5200,6 +5228,43 @@ paths:
       security:
       - BearerAuth: []
       summary: Unlink a bot/project from a Kanban board
+      tags:
+      - kanban
+  /boards/{id}/restore:
+    post:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Board'
+      security:
+      - BearerAuth: []
+      summary: Restore an archived Kanban board
+      tags:
+      - kanban
+  /boards/archived:
+    get:
+      parameters:
+      - description: Filter by linked bot/project
+        in: query
+        name: project_id
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Board'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List archived Kanban boards
       tags:
       - kanban
   /boards/events:
@@ -5359,6 +5424,24 @@ paths:
       security:
       - BearerAuth: []
       summary: Move a Kanban card
+      tags:
+      - kanban
+  /cards/{id}/restore:
+    post:
+      parameters:
+      - description: Card id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      security:
+      - BearerAuth: []
+      summary: Restore an archived Kanban card to its original column
       tags:
       - kanban
   /chat/messages/{project_id}/{chat_id}:
