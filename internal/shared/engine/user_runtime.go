@@ -181,16 +181,44 @@ func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec Dep
 		return DeployResult{}, fmt.Errorf("store runtime: %w", err)
 	}
 	_ = o.rdb.HSet(ctx, runtimeStatusKey(spec.OwnerID), spec.WebhookUUID.String(), "loading").Err()
+	if err := o.publishRuntimeCommand(ctx, spec.OwnerID, "upsert", spec.WebhookUUID); err != nil {
+		return DeployResult{}, err
+	}
+	// Do not switch the stable bot Service while the new child is still
+	// booting. This preserves the legacy/runtime currently serving traffic and
+	// makes both migrations and ordinary hot reloads an atomic cutover.
+	if err := o.waitRuntimeReady(ctx, spec.OwnerID, spec.WebhookUUID, 60*time.Second); err != nil {
+		return DeployResult{}, err
+	}
 
 	labels := map[string]string{"app": "botmother-user-engine", "engine-name": name, "owner_id": spec.OwnerID.String()}
 	if err := o.applyService(ctx, "bot-"+spec.WebhookUUID.String(), name, labels, 8000, int32(port)); err != nil {
 		_ = o.rdb.HDel(ctx, runtimeHashKey(spec.OwnerID), spec.WebhookUUID.String()).Err()
 		return DeployResult{}, fmt.Errorf("route runtime: %w", err)
 	}
-	if err := o.publishRuntimeCommand(ctx, spec.OwnerID, "upsert", spec.WebhookUUID); err != nil {
-		return DeployResult{}, err
-	}
 	return DeployResult{ServiceID: userRuntimeServiceID(spec.OwnerID, spec.WebhookUUID), Status: StatusInitializing}, nil
+}
+
+func (o *KubernetesOrchestrator) waitRuntimeReady(ctx context.Context, ownerID, webhookID uuid.UUID, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		status, err := o.rdb.HGet(ctx, runtimeStatusKey(ownerID), webhookID.String()).Result()
+		if err == nil && status == "ready" {
+			return nil
+		}
+		if err == nil && status == "failed" {
+			return errors.New("runtime failed readiness")
+		}
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return fmt.Errorf("read runtime readiness: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	return errors.New("runtime readiness timeout")
 }
 
 func (o *KubernetesOrchestrator) stopUserRuntime(ctx context.Context, ref userRuntimeRef) error {
@@ -243,4 +271,137 @@ func normalizeJSONObject(raw []byte, fallback string) json.RawMessage {
 		return json.RawMessage(fallback)
 	}
 	return append(json.RawMessage(nil), raw...)
+}
+
+// MigrateLegacyRuntimes converts active UUID-based release/debug Deployments
+// in place. The old pod keeps serving until the owner supervisor reports its
+// child ready; then the stable bot Service is switched, the DB service id is
+// replaced, and only finally are the legacy pod assets removed.
+func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
+	ctx context.Context,
+	ownerForProject func(context.Context, uuid.UUID) (uuid.UUID, error),
+	replaceServiceID func(context.Context, uuid.UUID, string, string, bool) (bool, error),
+) (int, error) {
+	if o.rdb == nil {
+		return 0, errors.New("redis is required for migration")
+	}
+	locked, err := o.rdb.SetNX(ctx, "engine:migration:user-runtime:v1", time.Now().UnixMilli(), 10*time.Minute).Result()
+	if err != nil {
+		return 0, err
+	}
+	if !locked {
+		return 0, nil
+	}
+	defer o.rdb.Del(context.Background(), "engine:migration:user-runtime:v1")
+
+	deps, err := o.cs.AppsV1().Deployments(o.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=botmother-engine"})
+	if err != nil {
+		return 0, fmt.Errorf("list legacy runtimes: %w", err)
+	}
+	migrated := 0
+	var migrationErrors []error
+	for i := range deps.Items {
+		dep := &deps.Items[i]
+		debug := strings.HasPrefix(dep.Name, "debug-")
+		if !debug && !strings.HasPrefix(dep.Name, "release-") {
+			continue
+		}
+		projectID, parseErr := uuid.Parse(dep.Labels["project_id"])
+		if parseErr != nil {
+			continue
+		} // Django-era numeric project; owned by the legacy backend.
+		ownerID, ownerErr := ownerForProject(ctx, projectID)
+		if ownerErr != nil {
+			continue
+		}
+		webhookID, hookErr := o.legacyWebhookID(ctx, dep.Name)
+		if hookErr != nil {
+			migrationErrors = append(migrationErrors, hookErr)
+			continue
+		}
+		flow, schemas, modules, env, assetErr := o.legacyRuntimeAssets(ctx, dep.Name)
+		if assetErr != nil {
+			migrationErrors = append(migrationErrors, assetErr)
+			continue
+		}
+
+		result, deployErr := o.deployUserRuntime(ctx, DeploySpec{OwnerID: ownerID, ProjectID: projectID, Debug: debug, Name: dep.Name, Flow: flow, Schemas: schemas, Modules: modules, Env: env, WebhookUUID: webhookID})
+		if deployErr != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("migrate %s: %w", dep.Name, deployErr))
+			continue
+		}
+		updated, updateErr := replaceServiceID(ctx, projectID, dep.Name, result.ServiceID, debug)
+		if updateErr != nil || !updated {
+			// DB no longer considers this runtime active. Restore its old route;
+			// the ordinary orphan sweep may remove it later.
+			_ = o.rdb.HDel(ctx, runtimeHashKey(ownerID), webhookID.String()).Err()
+			_ = o.publishRuntimeCommand(ctx, ownerID, "remove", webhookID)
+			legacyLabels := map[string]string{"app": "botmother-engine", "engine-name": dep.Name}
+			if project := dep.Labels["project_id"]; project != "" {
+				legacyLabels["project_id"] = project
+			}
+			_ = o.applyService(ctx, "bot-"+webhookID.String(), dep.Name, legacyLabels, 8000, 8000)
+			if updateErr != nil {
+				migrationErrors = append(migrationErrors, fmt.Errorf("update %s service id: %w", dep.Name, updateErr))
+			}
+			continue
+		}
+		if deleteErr := o.deleteLegacyRuntimeAssets(ctx, dep.Name); deleteErr != nil {
+			migrationErrors = append(migrationErrors, deleteErr)
+			continue
+		}
+		migrated++
+	}
+	return migrated, errors.Join(migrationErrors...)
+}
+
+func (o *KubernetesOrchestrator) legacyWebhookID(ctx context.Context, deploymentName string) (uuid.UUID, error) {
+	services, err := o.cs.CoreV1().Services(o.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "deployment=" + deploymentName})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	for _, service := range services.Items {
+		if strings.HasPrefix(service.Name, "bot-") {
+			if id, parseErr := uuid.Parse(strings.TrimPrefix(service.Name, "bot-")); parseErr == nil {
+				return id, nil
+			}
+		}
+	}
+	return uuid.Nil, fmt.Errorf("legacy runtime %s has no bot service", deploymentName)
+}
+
+func (o *KubernetesOrchestrator) legacyRuntimeAssets(ctx context.Context, name string) ([]byte, []byte, []byte, map[string]string, error) {
+	cm, err := o.cs.CoreV1().ConfigMaps(o.cfg.Namespace).Get(ctx, name+"-flow", metav1.GetOptions{})
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("get %s flow: %w", name, err)
+	}
+	envSecret, err := o.cs.CoreV1().Secrets(o.cfg.Namespace).Get(ctx, name+"-env", metav1.GetOptions{})
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("get %s env: %w", name, err)
+	}
+	env := make(map[string]string, len(envSecret.Data))
+	for key, value := range envSecret.Data {
+		env[key] = string(value)
+	}
+	modules := []byte(`{"modules":[]}`)
+	if runtimeSecret, runtimeErr := o.cs.CoreV1().Secrets(o.cfg.Namespace).Get(ctx, name+"-runtime", metav1.GetOptions{}); runtimeErr == nil {
+		if value := runtimeSecret.Data["modules.json"]; len(value) > 0 {
+			modules = value
+		}
+	}
+	return []byte(cm.Data["flow.json"]), []byte(cm.Data["schemas.json"]), modules, env, nil
+}
+
+func (o *KubernetesOrchestrator) deleteLegacyRuntimeAssets(ctx context.Context, name string) error {
+	ns := o.cfg.Namespace
+	if err := ignoreNotFound(o.cs.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{})); err != nil {
+		return err
+	}
+	if err := ignoreNotFound(o.cs.CoreV1().Secrets(ns).Delete(ctx, name+"-env", metav1.DeleteOptions{})); err != nil {
+		return err
+	}
+	if err := ignoreNotFound(o.cs.CoreV1().Secrets(ns).Delete(ctx, name+"-runtime", metav1.DeleteOptions{})); err != nil {
+		return err
+	}
+	return ignoreNotFound(o.cs.CoreV1().ConfigMaps(ns).Delete(ctx, name+"-flow", metav1.DeleteOptions{}))
 }
