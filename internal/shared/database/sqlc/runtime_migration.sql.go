@@ -11,14 +11,45 @@ import (
 	"github.com/google/uuid"
 )
 
-const getRuntimeMigrationOwner = `-- name: GetRuntimeMigrationOwner :one
-SELECT owner_id
-FROM projects
-WHERE id = $1 AND deleted_at IS NULL
+const getActiveDebugRuntimeMigrationOwner = `-- name: GetActiveDebugRuntimeMigrationOwner :one
+SELECT p.owner_id
+FROM projects p
+JOIN debug d ON d.project_id = p.id
+WHERE p.id = $1 AND p.deleted_at IS NULL
+  AND d.service_id = $2
+  AND d.status NOT IN ('stopped', 'deleted')
+LIMIT 1
 `
 
-func (q *Queries) GetRuntimeMigrationOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getRuntimeMigrationOwner, projectID)
+type GetActiveDebugRuntimeMigrationOwnerParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ServiceID *string   `json:"service_id"`
+}
+
+func (q *Queries) GetActiveDebugRuntimeMigrationOwner(ctx context.Context, arg GetActiveDebugRuntimeMigrationOwnerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveDebugRuntimeMigrationOwner, arg.ProjectID, arg.ServiceID)
+	var owner_id uuid.UUID
+	err := row.Scan(&owner_id)
+	return owner_id, err
+}
+
+const getActiveReleaseRuntimeMigrationOwner = `-- name: GetActiveReleaseRuntimeMigrationOwner :one
+SELECT p.owner_id
+FROM projects p
+JOIN relase r ON r.project_id = p.id
+WHERE p.id = $1 AND p.deleted_at IS NULL
+  AND r.service_id = $2
+  AND r.status NOT IN ('stopped', 'deleted')
+LIMIT 1
+`
+
+type GetActiveReleaseRuntimeMigrationOwnerParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ServiceID *string   `json:"service_id"`
+}
+
+func (q *Queries) GetActiveReleaseRuntimeMigrationOwner(ctx context.Context, arg GetActiveReleaseRuntimeMigrationOwnerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveReleaseRuntimeMigrationOwner, arg.ProjectID, arg.ServiceID)
 	var owner_id uuid.UUID
 	err := row.Scan(&owner_id)
 	return owner_id, err

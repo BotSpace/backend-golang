@@ -188,6 +188,9 @@ func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec Dep
 	// booting. This preserves the legacy/runtime currently serving traffic and
 	// makes both migrations and ordinary hot reloads an atomic cutover.
 	if err := o.waitRuntimeReady(ctx, spec.OwnerID, spec.WebhookUUID, 60*time.Second); err != nil {
+		_ = o.rdb.HDel(ctx, runtimeHashKey(spec.OwnerID), spec.WebhookUUID.String()).Err()
+		_ = o.rdb.HDel(ctx, runtimeStatusKey(spec.OwnerID), spec.WebhookUUID.String()).Err()
+		_ = o.publishRuntimeCommand(ctx, spec.OwnerID, "remove", spec.WebhookUUID)
 		return DeployResult{}, err
 	}
 
@@ -279,7 +282,7 @@ func normalizeJSONObject(raw []byte, fallback string) json.RawMessage {
 // replaced, and only finally are the legacy pod assets removed.
 func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 	ctx context.Context,
-	ownerForProject func(context.Context, uuid.UUID) (uuid.UUID, error),
+	ownerForService func(context.Context, uuid.UUID, string, bool) (uuid.UUID, bool, error),
 	replaceServiceID func(context.Context, uuid.UUID, string, string, bool) (bool, error),
 ) (int, error) {
 	if o.rdb == nil {
@@ -310,8 +313,8 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 		if parseErr != nil {
 			continue
 		} // Django-era numeric project; owned by the legacy backend.
-		ownerID, ownerErr := ownerForProject(ctx, projectID)
-		if ownerErr != nil {
+		ownerID, active, ownerErr := ownerForService(ctx, projectID, dep.Name, debug)
+		if ownerErr != nil || !active {
 			continue
 		}
 		webhookID, hookErr := o.legacyWebhookID(ctx, dep.Name)

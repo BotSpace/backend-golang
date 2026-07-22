@@ -5,6 +5,7 @@ import (
 
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -14,8 +15,18 @@ func NewPostgresRepository(pool *pgxpool.Pool) Repository {
 	return &pgRepo{queries: sqlcdb.New(pool)}
 }
 
-func (r *pgRepo) OwnerForProject(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
-	return r.queries.GetRuntimeMigrationOwner(ctx, projectID)
+func (r *pgRepo) OwnerForService(ctx context.Context, projectID uuid.UUID, serviceID string, debug bool) (uuid.UUID, bool, error) {
+	var ownerID uuid.UUID
+	var err error
+	if debug {
+		ownerID, err = r.queries.GetActiveDebugRuntimeMigrationOwner(ctx, sqlcdb.GetActiveDebugRuntimeMigrationOwnerParams{ProjectID: projectID, ServiceID: &serviceID})
+	} else {
+		ownerID, err = r.queries.GetActiveReleaseRuntimeMigrationOwner(ctx, sqlcdb.GetActiveReleaseRuntimeMigrationOwnerParams{ProjectID: projectID, ServiceID: &serviceID})
+	}
+	if err == pgx.ErrNoRows {
+		return uuid.Nil, false, nil
+	}
+	return ownerID, err == nil, err
 }
 
 func (r *pgRepo) ReplaceServiceID(ctx context.Context, projectID uuid.UUID, oldServiceID, newServiceID string, debug bool) (bool, error) {
