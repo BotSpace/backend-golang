@@ -334,6 +334,7 @@ type Querier interface {
 	// ===================== admin detail enrichment (cross-module reads) =====================
 	GetUserSubscriptionDetail(ctx context.Context, userID uuid.UUID) (GetUserSubscriptionDetailRow, error)
 	GetVerificationWithReviewer(ctx context.Context, id uuid.UUID) (GetVerificationWithReviewerRow, error)
+	HasActiveKanbanCardExternalKey(ctx context.Context, arg HasActiveKanbanCardExternalKeyParams) (bool, error)
 	HasPendingVerificationForUser(ctx context.Context, userID uuid.UUID) (bool, error)
 	HasUsersCollection(ctx context.Context, projectID uuid.UUID) (bool, error)
 	IncrSmsConfirmTry(ctx context.Context, arg IncrSmsConfirmTryParams) (SmsConfirm, error)
@@ -353,6 +354,8 @@ type Querier interface {
 	ListAllPlans(ctx context.Context) ([]Plan, error)
 	// Admin-wide listing, optionally filtered by status/user/subject search.
 	ListAllTickets(ctx context.Context, arg ListAllTicketsParams) ([]ListAllTicketsRow, error)
+	ListArchivedKanbanBoards(ctx context.Context, arg ListArchivedKanbanBoardsParams) ([]ListArchivedKanbanBoardsRow, error)
+	ListArchivedKanbanCards(ctx context.Context, arg ListArchivedKanbanCardsParams) ([]KanbanCard, error)
 	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]AuditLog, error)
 	// Admin list — joins users for author display name (mirrors Django's
 	// select_related("author") on the admin queryset).
@@ -436,6 +439,7 @@ type Querier interface {
 	ListTicketsForOwner(ctx context.Context, arg ListTicketsForOwnerParams) ([]ListTicketsForOwnerRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListVerificationsForAdmin(ctx context.Context, arg ListVerificationsForAdminParams) ([]ListVerificationsForAdminRow, error)
+	LockArchivedKanbanCardForRestore(ctx context.Context, arg LockArchivedKanbanCardForRestoreParams) (KanbanCard, error)
 	LockKanbanBoardForColumnCreate(ctx context.Context, arg LockKanbanBoardForColumnCreateParams) (uuid.UUID, error)
 	LockKanbanCardForMove(ctx context.Context, arg LockKanbanCardForMoveParams) (LockKanbanCardForMoveRow, error)
 	LockKanbanColumnForCreate(ctx context.Context, arg LockKanbanColumnForCreateParams) (*int32, error)
@@ -480,6 +484,8 @@ type Querier interface {
 	ResolveWebhookToken(ctx context.Context, token uuid.UUID) (ResolveWebhookTokenRow, error)
 	// Hourly RAM/CPU average and network peak, for the usage chart.
 	ResourceHourlyForOwner(ctx context.Context, arg ResourceHourlyForOwnerParams) ([]ResourceHourlyForOwnerRow, error)
+	RestoreKanbanBoard(ctx context.Context, arg RestoreKanbanBoardParams) (KanbanBoard, error)
+	RestoreKanbanCard(ctx context.Context, arg RestoreKanbanCardParams) (KanbanCard, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) (int64, error)
 	// Records which Telegram message displays the code (Django: code.message_id),

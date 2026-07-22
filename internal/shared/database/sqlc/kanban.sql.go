@@ -321,7 +321,7 @@ func (q *Queries) CreateKanbanComment(ctx context.Context, arg CreateKanbanComme
 const deleteKanbanColumn = `-- name: DeleteKanbanColumn :execrows
 DELETE FROM kanban_columns c USING kanban_boards b
 WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2
-  AND NOT EXISTS (SELECT 1 FROM kanban_cards k WHERE k.column_id = c.id AND k.archived_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM kanban_cards k WHERE k.column_id = c.id)
 `
 
 type DeleteKanbanColumnParams struct {
@@ -525,6 +525,29 @@ func (q *Queries) GetLinkedKanbanBoardForProject(ctx context.Context, arg GetLin
 	return i, err
 }
 
+const hasActiveKanbanCardExternalKey = `-- name: HasActiveKanbanCardExternalKey :one
+SELECT EXISTS (
+  SELECT 1 FROM kanban_cards
+  WHERE board_id = $1
+    AND source_project_id IS NOT DISTINCT FROM $2::uuid
+    AND external_key = $3::text
+    AND archived_at IS NULL
+)
+`
+
+type HasActiveKanbanCardExternalKeyParams struct {
+	BoardID         uuid.UUID  `json:"board_id"`
+	SourceProjectID *uuid.UUID `json:"source_project_id"`
+	ExternalKey     *string    `json:"external_key"`
+}
+
+func (q *Queries) HasActiveKanbanCardExternalKey(ctx context.Context, arg HasActiveKanbanCardExternalKeyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveKanbanCardExternalKey, arg.BoardID, arg.SourceProjectID, arg.ExternalKey)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkKanbanBoardProject = `-- name: LinkKanbanBoardProject :execrows
 INSERT INTO kanban_board_projects (board_id, project_id)
 SELECT $1, p.id
@@ -547,6 +570,127 @@ func (q *Queries) LinkKanbanBoardProject(ctx context.Context, arg LinkKanbanBoar
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listArchivedKanbanBoards = `-- name: ListArchivedKanbanBoards :many
+SELECT b.id, b.owner_id, b.name, b.description, b.icon, b.color, b.card_type_label, b.field_schema, b.archived_at, b.created_at, b.updated_at,
+       COUNT(DISTINCT c.id)::bigint AS card_count,
+       COALESCE(array_agg(DISTINCT bp.project_id) FILTER (WHERE bp.project_id IS NOT NULL), ARRAY[]::uuid[])::uuid[] AS project_ids
+FROM kanban_boards b
+LEFT JOIN kanban_board_projects bp ON bp.board_id = b.id
+LEFT JOIN kanban_cards c ON c.board_id = b.id
+WHERE b.owner_id = $1
+  AND b.archived_at IS NOT NULL
+  AND ($2::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM kanban_board_projects x WHERE x.board_id = b.id AND x.project_id = $2
+  ))
+GROUP BY b.id
+ORDER BY b.archived_at DESC, b.id
+`
+
+type ListArchivedKanbanBoardsParams struct {
+	OwnerID   uuid.UUID  `json:"owner_id"`
+	ProjectID *uuid.UUID `json:"project_id"`
+}
+
+type ListArchivedKanbanBoardsRow struct {
+	ID            uuid.UUID   `json:"id"`
+	OwnerID       uuid.UUID   `json:"owner_id"`
+	Name          string      `json:"name"`
+	Description   string      `json:"description"`
+	Icon          string      `json:"icon"`
+	Color         string      `json:"color"`
+	CardTypeLabel string      `json:"card_type_label"`
+	FieldSchema   []byte      `json:"field_schema"`
+	ArchivedAt    *time.Time  `json:"archived_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	CardCount     int64       `json:"card_count"`
+	ProjectIds    []uuid.UUID `json:"project_ids"`
+}
+
+func (q *Queries) ListArchivedKanbanBoards(ctx context.Context, arg ListArchivedKanbanBoardsParams) ([]ListArchivedKanbanBoardsRow, error) {
+	rows, err := q.db.Query(ctx, listArchivedKanbanBoards, arg.OwnerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListArchivedKanbanBoardsRow{}
+	for rows.Next() {
+		var i ListArchivedKanbanBoardsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Description,
+			&i.Icon,
+			&i.Color,
+			&i.CardTypeLabel,
+			&i.FieldSchema,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CardCount,
+			&i.ProjectIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArchivedKanbanCards = `-- name: ListArchivedKanbanCards :many
+SELECT c.id, c.board_id, c.column_id, c.source_project_id, c.kind, c.title, c.description, c.priority, c.position, c.due_at, c.external_key, c.custom_fields, c.archived_at, c.created_at, c.updated_at FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.board_id = $1 AND b.owner_id = $2
+  AND b.archived_at IS NULL AND c.archived_at IS NOT NULL
+  AND ($3::uuid IS NULL OR c.source_project_id = $3)
+ORDER BY c.archived_at DESC, c.id
+`
+
+type ListArchivedKanbanCardsParams struct {
+	BoardID   uuid.UUID  `json:"board_id"`
+	OwnerID   uuid.UUID  `json:"owner_id"`
+	ProjectID *uuid.UUID `json:"project_id"`
+}
+
+func (q *Queries) ListArchivedKanbanCards(ctx context.Context, arg ListArchivedKanbanCardsParams) ([]KanbanCard, error) {
+	rows, err := q.db.Query(ctx, listArchivedKanbanCards, arg.BoardID, arg.OwnerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []KanbanCard{}
+	for rows.Next() {
+		var i KanbanCard
+		if err := rows.Scan(
+			&i.ID,
+			&i.BoardID,
+			&i.ColumnID,
+			&i.SourceProjectID,
+			&i.Kind,
+			&i.Title,
+			&i.Description,
+			&i.Priority,
+			&i.Position,
+			&i.DueAt,
+			&i.ExternalKey,
+			&i.CustomFields,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listKanbanActivities = `-- name: ListKanbanActivities :many
@@ -830,6 +974,41 @@ func (q *Queries) ListKanbanComments(ctx context.Context, arg ListKanbanComments
 	return items, nil
 }
 
+const lockArchivedKanbanCardForRestore = `-- name: LockArchivedKanbanCardForRestore :one
+SELECT c.id, c.board_id, c.column_id, c.source_project_id, c.kind, c.title, c.description, c.priority, c.position, c.due_at, c.external_key, c.custom_fields, c.archived_at, c.created_at, c.updated_at FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = $1 AND b.owner_id = $2
+  AND b.archived_at IS NULL AND c.archived_at IS NOT NULL
+FOR UPDATE OF c
+`
+
+type LockArchivedKanbanCardForRestoreParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) LockArchivedKanbanCardForRestore(ctx context.Context, arg LockArchivedKanbanCardForRestoreParams) (KanbanCard, error) {
+	row := q.db.QueryRow(ctx, lockArchivedKanbanCardForRestore, arg.ID, arg.OwnerID)
+	var i KanbanCard
+	err := row.Scan(
+		&i.ID,
+		&i.BoardID,
+		&i.ColumnID,
+		&i.SourceProjectID,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.Priority,
+		&i.Position,
+		&i.DueAt,
+		&i.ExternalKey,
+		&i.CustomFields,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockKanbanBoardForColumnCreate = `-- name: LockKanbanBoardForColumnCreate :one
 SELECT id FROM kanban_boards
 WHERE id = $1 AND owner_id = $2 AND archived_at IS NULL
@@ -1030,6 +1209,70 @@ func (q *Queries) ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUI
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const restoreKanbanBoard = `-- name: RestoreKanbanBoard :one
+UPDATE kanban_boards SET archived_at = NULL, updated_at = NOW()
+WHERE id = $1 AND owner_id = $2 AND archived_at IS NOT NULL
+RETURNING id, owner_id, name, description, icon, color, card_type_label, field_schema, archived_at, created_at, updated_at
+`
+
+type RestoreKanbanBoardParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) RestoreKanbanBoard(ctx context.Context, arg RestoreKanbanBoardParams) (KanbanBoard, error) {
+	row := q.db.QueryRow(ctx, restoreKanbanBoard, arg.ID, arg.OwnerID)
+	var i KanbanBoard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Description,
+		&i.Icon,
+		&i.Color,
+		&i.CardTypeLabel,
+		&i.FieldSchema,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const restoreKanbanCard = `-- name: RestoreKanbanCard :one
+UPDATE kanban_cards SET archived_at = NULL, position = $1, updated_at = NOW()
+WHERE id = $2 AND archived_at IS NOT NULL
+RETURNING id, board_id, column_id, source_project_id, kind, title, description, priority, position, due_at, external_key, custom_fields, archived_at, created_at, updated_at
+`
+
+type RestoreKanbanCardParams struct {
+	Position int64     `json:"position"`
+	ID       uuid.UUID `json:"id"`
+}
+
+func (q *Queries) RestoreKanbanCard(ctx context.Context, arg RestoreKanbanCardParams) (KanbanCard, error) {
+	row := q.db.QueryRow(ctx, restoreKanbanCard, arg.Position, arg.ID)
+	var i KanbanCard
+	err := row.Scan(
+		&i.ID,
+		&i.BoardID,
+		&i.ColumnID,
+		&i.SourceProjectID,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.Priority,
+		&i.Position,
+		&i.DueAt,
+		&i.ExternalKey,
+		&i.CustomFields,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const setKanbanCardPosition = `-- name: SetKanbanCardPosition :execrows

@@ -2485,6 +2485,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/boards/archived": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "List archived Kanban boards",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by linked bot/project",
+                        "name": "project_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Board"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/boards/events": {
             "get": {
                 "security": [
@@ -2641,6 +2673,45 @@ const docTemplate = `{
                         "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            }
+        },
+        "/boards/{id}/cards/archived": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "List archived cards for an active Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by source bot/project",
+                        "name": "project_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_modules_kanban.Card"
+                            }
                         }
                     }
                 }
@@ -2875,6 +2946,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/boards/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Restore an archived Kanban board",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Board id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Board"
+                        }
+                    }
+                }
+            }
+        },
         "/cards/{id}": {
             "get": {
                 "security": [
@@ -3100,6 +3201,36 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/internal_modules_kanban.MoveCardRequest"
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_kanban.Card"
+                        }
+                    }
+                }
+            }
+        },
+        "/cards/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "kanban"
+                ],
+                "summary": "Restore an archived Kanban card to its original column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Card id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -10168,6 +10299,9 @@ const docTemplate = `{
         "internal_modules_kanban.Board": {
             "type": "object",
             "properties": {
+                "archived_at": {
+                    "type": "string"
+                },
                 "card_count": {
                     "type": "integer"
                 },
@@ -10233,6 +10367,9 @@ const docTemplate = `{
         "internal_modules_kanban.Card": {
             "type": "object",
             "properties": {
+                "archived_at": {
+                    "type": "string"
+                },
                 "board_id": {
                     "type": "string"
                 },

@@ -84,6 +84,30 @@ func (h *Handler) ListBoards(c *gin.Context) {
 	httpx.OK(c, http.StatusOK, x)
 }
 
+// ListArchivedBoards godoc
+// @Summary List archived Kanban boards
+// @Tags kanban
+// @Security BearerAuth
+// @Param project_id query string false "Filter by linked bot/project"
+// @Success 200 {array} Board
+// @Router /boards/archived [get]
+func (h *Handler) ListArchivedBoards(c *gin.Context) {
+	o, ok := ownerID(c)
+	if !ok {
+		return
+	}
+	p, ok := queryUUID(c, "project_id")
+	if !ok {
+		return
+	}
+	x, e := h.uc.ListArchivedBoards(c, o, p)
+	if e != nil {
+		httpx.Error(c, e)
+		return
+	}
+	httpx.OK(c, http.StatusOK, x)
+}
+
 // Events godoc
 // @Summary Stream owner Kanban changes as server-sent events
 // @Tags kanban
@@ -110,6 +134,10 @@ func (h *Handler) Events(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
+	// Flush the response headers immediately. Without this the first bytes only
+	// arrive with an event (or the 20s keepalive), so browsers can remain in the
+	// EventSource CONNECTING state and miss Pub/Sub events published meanwhile.
+	c.Writer.Flush()
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case event, open := <-events:
@@ -230,6 +258,30 @@ func (h *Handler) ArchiveBoard(c *gin.Context) {
 		return
 	}
 	httpx.NoContent(c)
+}
+
+// RestoreBoard godoc
+// @Summary Restore an archived Kanban board
+// @Tags kanban
+// @Security BearerAuth
+// @Param id path string true "Board id"
+// @Success 200 {object} Board
+// @Router /boards/{id}/restore [post]
+func (h *Handler) RestoreBoard(c *gin.Context) {
+	o, ok := ownerID(c)
+	if !ok {
+		return
+	}
+	id, ok := routeID(c, "id")
+	if !ok {
+		return
+	}
+	x, e := h.uc.RestoreBoard(c, id, o)
+	if e != nil {
+		httpx.Error(c, e)
+		return
+	}
+	httpx.OK(c, http.StatusOK, x)
 }
 
 // LinkProject godoc
@@ -533,6 +585,59 @@ func (h *Handler) ArchiveCard(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, x)
+}
+
+// ListArchivedCards godoc
+// @Summary List archived cards for an active Kanban board
+// @Tags kanban
+// @Security BearerAuth
+// @Param id path string true "Board id"
+// @Param project_id query string false "Filter by source bot/project"
+// @Success 200 {array} Card
+// @Router /boards/{id}/cards/archived [get]
+func (h *Handler) ListArchivedCards(c *gin.Context) {
+	o, ok := ownerID(c)
+	if !ok {
+		return
+	}
+	id, ok := routeID(c, "id")
+	if !ok {
+		return
+	}
+	p, ok := queryUUID(c, "project_id")
+	if !ok {
+		return
+	}
+	x, e := h.uc.ListArchivedCards(c, id, o, p)
+	if e != nil {
+		httpx.Error(c, e)
+		return
+	}
+	httpx.OK(c, http.StatusOK, x)
+}
+
+// RestoreCard godoc
+// @Summary Restore an archived Kanban card to its original column
+// @Tags kanban
+// @Security BearerAuth
+// @Param id path string true "Card id"
+// @Success 200 {object} Card
+// @Router /cards/{id}/restore [post]
+func (h *Handler) RestoreCard(c *gin.Context) {
+	o, ok := ownerID(c)
+	if !ok {
+		return
+	}
+	id, ok := routeID(c, "id")
+	if !ok {
+		return
+	}
+	x, e := h.uc.RestoreCard(c, id, o)
+	if e != nil {
+		httpx.Error(c, e)
+		return
+	}
+	httpx.OK(c, http.StatusOK, x)
 }
 
 // ListActivities godoc

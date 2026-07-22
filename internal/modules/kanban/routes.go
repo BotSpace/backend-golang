@@ -13,11 +13,13 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 	g := rg.Group("/boards", middleware.Auth(verifier))
 	{
 		g.GET("", h.ListBoards)
+		g.GET("/archived", h.ListArchivedBoards)
 		g.POST("", h.CreateBoard)
 		g.GET("/events", h.Events)
 		g.GET("/:id", h.GetBoard)
 		g.PUT("/:id", h.UpdateBoard)
 		g.DELETE("/:id", h.ArchiveBoard)
+		g.POST("/:id/restore", h.RestoreBoard)
 		g.POST("/:id/projects", h.LinkProject)
 		g.DELETE("/:id/projects/:project_id", h.UnlinkProject)
 		g.POST("/:id/columns", h.CreateColumn)
@@ -25,6 +27,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.PUT("/:id/columns/:column_id", h.UpdateColumn)
 		g.DELETE("/:id/columns/:column_id", h.DeleteColumn)
 		g.POST("/:id/cards", h.CreateCard)
+		g.GET("/:id/cards/archived", h.ListArchivedCards)
 	}
 	cards := rg.Group("/cards", middleware.Auth(verifier))
 	{
@@ -32,6 +35,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		cards.PUT("/:id", h.UpdateCard)
 		cards.POST("/:id/move", h.MoveCard)
 		cards.DELETE("/:id", h.ArchiveCard)
+		cards.POST("/:id/restore", h.RestoreCard)
 		cards.GET("/:id/activities", h.ListActivities)
 		cards.GET("/:id/comments", h.ListComments)
 		cards.POST("/:id/comments", h.CreateComment)
