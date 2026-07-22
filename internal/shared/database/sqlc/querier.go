@@ -321,6 +321,7 @@ type Querier interface {
 	GetRefreshToken(ctx context.Context, id uuid.UUID) (RefreshToken, error)
 	GetReleaseForOwner(ctx context.Context, arg GetReleaseForOwnerParams) (Relase, error)
 	GetResourceForOwner(ctx context.Context, arg GetResourceForOwnerParams) (Resource, error)
+	GetRuntimeMigrationOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	GetSmsConfirm(ctx context.Context, phone string) (SmsConfirm, error)
 	GetSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (UserSubscription, error)
 	GetTicketByID(ctx context.Context, id uuid.UUID) (GetTicketByIDRow, error)
@@ -477,6 +478,8 @@ type Querier interface {
 	// Callers must have already verified ownership via whatever row
 	// (release/debug) carried this project_id.
 	ReleaseGetProjectOwnerID(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	ReplaceLegacyDebugRuntimeServiceID(ctx context.Context, arg ReplaceLegacyDebugRuntimeServiceIDParams) (int64, error)
+	ReplaceLegacyReleaseRuntimeServiceID(ctx context.Context, arg ReplaceLegacyReleaseRuntimeServiceIDParams) (int64, error)
 	ResolveKanbanProjectByLegacyRef(ctx context.Context, legacyID *int32) (uuid.UUID, error)
 	ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
