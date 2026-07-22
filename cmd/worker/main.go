@@ -92,7 +92,6 @@ func main() {
 	}
 
 	// --- Usecase'lar ---
-	debugSync := &debugsync.Usecase{Repo: debugsync.NewPostgresRepository(pool), K8s: k8s, Log: log}
 	fileCleanup := &files.Usecase{Repo: files.NewPostgresRepository(pool), Storage: storage, Log: log}
 	releaseCleanup := &releases.Usecase{Repo: releases.NewPostgresRepository(pool), K8s: k8s, Log: log}
 	// Orphan sweep: net-new periodik job (Django'da yo'q). ORPHAN_SWEEP_DRY_RUN=true
@@ -107,6 +106,7 @@ func main() {
 	if err != nil {
 		log.Fatal("redis client", zap.Error(err))
 	}
+	debugSync := &debugsync.Usecase{Repo: debugsync.NewPostgresRepository(pool), K8s: k8s, Log: log, Redis: rdbClient}
 	botSync := &botsync.Usecase{Repo: botsync.NewPostgresRepository(pool), Redis: rdbClient, Log: log}
 	diskSnap := &disksnap.Usecase{Repo: disksnap.NewPostgresRepository(pool), Mongo: mongo, Log: log}
 	bcast := &broadcast.Usecase{Repo: broadcast.NewPostgresRepository(pool), Mongo: mongo, Storage: storage, Log: log}

@@ -5,20 +5,23 @@ package debugsync
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/k8sx"
+	"github.com/redis/go-redis/v9"
 )
 
 const debugLifetime = 30 * time.Minute
 
 type Usecase struct {
-	Repo Repository
-	K8s  *k8sx.Client
-	Log  *zap.Logger
+	Repo  Repository
+	K8s   *k8sx.Client
+	Log   *zap.Logger
+	Redis *redis.Client
 }
 
 func (u *Usecase) Run(ctx context.Context) {
@@ -32,7 +35,7 @@ func (u *Usecase) Run(ctx context.Context) {
 		if row.ServiceID == nil || *row.ServiceID == "" {
 			continue
 		}
-		if err := u.K8s.RemoveDeployment(ctx, *row.ServiceID); err != nil {
+		if err := u.stopRuntime(ctx, *row.ServiceID); err != nil {
 			u.Log.Error("sync_debug: remove", zap.String("service", *row.ServiceID), zap.Error(err))
 			continue
 		}
@@ -43,4 +46,24 @@ func (u *Usecase) Run(ctx context.Context) {
 	if len(rows) > 0 {
 		u.Log.Info("sync_debug done", zap.Int("stopped", len(rows)))
 	}
+}
+
+func (u *Usecase) stopRuntime(ctx context.Context, serviceID string) error {
+	const prefix = "user-runtime/"
+	if !strings.HasPrefix(serviceID, prefix) {
+		return u.K8s.RemoveDeployment(ctx, serviceID)
+	}
+	parts := strings.Split(strings.TrimPrefix(serviceID, prefix), "/")
+	if len(parts) != 2 {
+		return u.K8s.RemoveDeployment(ctx, serviceID)
+	}
+	ownerID, webhookID := parts[0], parts[1]
+	if u.Redis != nil {
+		if err := u.Redis.HDel(ctx, "engine:user:"+ownerID+":runtimes", webhookID).Err(); err != nil {
+			return err
+		}
+		_ = u.Redis.HDel(ctx, "engine:user:"+ownerID+":status", webhookID).Err()
+		_ = u.Redis.XAdd(ctx, &redis.XAddArgs{Stream: "engine:user:" + ownerID + ":commands", MaxLen: 1000, Approx: true, Values: map[string]any{"action": "remove", "webhook_id": webhookID, "ts": time.Now().UnixMilli()}}).Err()
+	}
+	return u.K8s.RemoveBotRoute(ctx, webhookID)
 }

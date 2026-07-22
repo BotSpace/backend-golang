@@ -206,6 +206,14 @@ func NewUsecaseWithMetrics(uc Usecase, metrics MetricsProvider) Usecase {
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
+	// Runtime capacity is created lazily with the first bot/project, never at
+	// account registration. Ensure it before inserting the project so a failed
+	// cluster operation cannot leave a bot row whose promised runtime is absent.
+	if ensurer, ok := u.orch.(engine.OwnerRuntimeEnsurer); ok {
+		if _, err := ensurer.EnsureOwnerRuntime(ctx, in.OwnerID); err != nil {
+			return nil, httpx.Internal(fmt.Errorf("ensure owner runtime: %w", err))
+		}
+	}
 	p, err := u.repo.Create(ctx, in)
 	if err != nil {
 		return nil, httpx.Internal(err)
@@ -707,6 +715,16 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 	}
 	if err := u.applyToken(ctx, p, ownerID, token); err != nil {
 		return nil, err
+	}
+	// A running debug runtime follows the draft flow. In the user-supervisor
+	// model StartDebug is a Redis-backed hot swap (not a pod redeploy), so the
+	// constructor's ordinary save becomes visible without pressing reload.
+	if len(in.Flow) > 0 && u.rel != nil {
+		if dbg, dbgErr := u.repo.GetDebugForOwner(ctx, id, ownerID); dbgErr == nil && dbg != nil && (dbg.Status == "running" || dbg.Status == "initializing" || dbg.Status == "pending") {
+			if _, reloadErr := u.rel.StartDebug(ctx, id, ownerID); reloadErr != nil {
+				return nil, reloadErr
+			}
+		}
 	}
 	return p, nil
 }
