@@ -243,8 +243,10 @@ type Querier interface {
 	// of silently returning zeroed totals.
 	FileProjectOwnedByOwner(ctx context.Context, arg FileProjectOwnedByOwnerParams) (bool, error)
 	FinishExecution(ctx context.Context, arg FinishExecutionParams) (Execution, error)
+	GetActiveDebugRuntimeMigrationOwner(ctx context.Context, arg GetActiveDebugRuntimeMigrationOwnerParams) (uuid.UUID, error)
 	// Used by subscription upgrade: a target plan must be active to buy into it.
 	GetActivePlanByID(ctx context.Context, id uuid.UUID) (Plan, error)
+	GetActiveReleaseRuntimeMigrationOwner(ctx context.Context, arg GetActiveReleaseRuntimeMigrationOwnerParams) (uuid.UUID, error)
 	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	// Resolves a submitted code together with its BotUser in one round-trip
 	// (Django: LoginSerializer.validate_code + code.user).
@@ -321,7 +323,6 @@ type Querier interface {
 	GetRefreshToken(ctx context.Context, id uuid.UUID) (RefreshToken, error)
 	GetReleaseForOwner(ctx context.Context, arg GetReleaseForOwnerParams) (Relase, error)
 	GetResourceForOwner(ctx context.Context, arg GetResourceForOwnerParams) (Resource, error)
-	GetRuntimeMigrationOwner(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
 	GetSmsConfirm(ctx context.Context, phone string) (SmsConfirm, error)
 	GetSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (UserSubscription, error)
 	GetTicketByID(ctx context.Context, id uuid.UUID) (GetTicketByIDRow, error)

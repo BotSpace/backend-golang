@@ -7,7 +7,7 @@ import (
 )
 
 func Run(ctx context.Context, migrator Migrator, repo Repository, log *zap.Logger) {
-	count, err := migrator.MigrateLegacyRuntimes(ctx, repo.OwnerForProject, repo.ReplaceServiceID)
+	count, err := migrator.MigrateLegacyRuntimes(ctx, repo.OwnerForService, repo.ReplaceServiceID)
 	if err != nil {
 		log.Error("user runtime migration failed", zap.Error(err))
 		return

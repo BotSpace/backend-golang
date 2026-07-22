@@ -1,7 +1,20 @@
--- name: GetRuntimeMigrationOwner :one
-SELECT owner_id
-FROM projects
-WHERE id = sqlc.arg('project_id') AND deleted_at IS NULL;
+-- name: GetActiveReleaseRuntimeMigrationOwner :one
+SELECT p.owner_id
+FROM projects p
+JOIN relase r ON r.project_id = p.id
+WHERE p.id = sqlc.arg('project_id') AND p.deleted_at IS NULL
+  AND r.service_id = sqlc.arg('service_id')
+  AND r.status NOT IN ('stopped', 'deleted')
+LIMIT 1;
+
+-- name: GetActiveDebugRuntimeMigrationOwner :one
+SELECT p.owner_id
+FROM projects p
+JOIN debug d ON d.project_id = p.id
+WHERE p.id = sqlc.arg('project_id') AND p.deleted_at IS NULL
+  AND d.service_id = sqlc.arg('service_id')
+  AND d.status NOT IN ('stopped', 'deleted')
+LIMIT 1;
 
 -- name: ReplaceLegacyReleaseRuntimeServiceID :execrows
 UPDATE relase

@@ -7,14 +7,14 @@ import (
 )
 
 type Repository interface {
-	OwnerForProject(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error)
+	OwnerForService(ctx context.Context, projectID uuid.UUID, serviceID string, debug bool) (uuid.UUID, bool, error)
 	ReplaceServiceID(ctx context.Context, projectID uuid.UUID, oldServiceID, newServiceID string, debug bool) (bool, error)
 }
 
 type Migrator interface {
 	MigrateLegacyRuntimes(
 		ctx context.Context,
-		ownerForProject func(context.Context, uuid.UUID) (uuid.UUID, error),
+		ownerForService func(context.Context, uuid.UUID, string, bool) (uuid.UUID, bool, error),
 		replaceServiceID func(context.Context, uuid.UUID, string, string, bool) (bool, error),
 	) (int, error)
 }
