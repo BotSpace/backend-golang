@@ -65,6 +65,35 @@ func (q *Queries) ArchiveKanbanCard(ctx context.Context, arg ArchiveKanbanCardPa
 	return i, err
 }
 
+const countActiveKanbanCardsInColumn = `-- name: CountActiveKanbanCardsInColumn :one
+SELECT COUNT(*)::int FROM kanban_cards WHERE column_id = $1 AND archived_at IS NULL
+`
+
+func (q *Queries) CountActiveKanbanCardsInColumn(ctx context.Context, columnID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveKanbanCardsInColumn, columnID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countKanbanColumnsForOwner = `-- name: CountKanbanColumnsForOwner :one
+SELECT COUNT(*)::int
+FROM kanban_columns c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.board_id = $1 AND b.owner_id = $2 AND b.archived_at IS NULL
+`
+
+type CountKanbanColumnsForOwnerParams struct {
+	BoardID uuid.UUID `json:"board_id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) CountKanbanColumnsForOwner(ctx context.Context, arg CountKanbanColumnsForOwnerParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countKanbanColumnsForOwner, arg.BoardID, arg.OwnerID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createKanbanActivity = `-- name: CreateKanbanActivity :one
 INSERT INTO kanban_activities (id, card_id, actor_id, event, data)
 VALUES ($1, $2, $5, $3, $4) RETURNING id, card_id, actor_id, event, data, created_at
@@ -306,6 +335,42 @@ func (q *Queries) DeleteKanbanColumn(ctx context.Context, arg DeleteKanbanColumn
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getInternalKanbanCardByID = `-- name: GetInternalKanbanCardByID :one
+SELECT c.id, c.board_id, c.column_id, c.source_project_id, c.kind, c.title, c.description, c.priority, c.position, c.due_at, c.external_key, c.custom_fields, c.archived_at, c.created_at, c.updated_at FROM kanban_cards c
+JOIN kanban_board_projects bp ON bp.board_id = c.board_id AND bp.project_id = $1
+WHERE c.id = $2 AND c.board_id = $3
+  AND c.source_project_id = $1 AND c.archived_at IS NULL
+`
+
+type GetInternalKanbanCardByIDParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ID        uuid.UUID `json:"id"`
+	BoardID   uuid.UUID `json:"board_id"`
+}
+
+func (q *Queries) GetInternalKanbanCardByID(ctx context.Context, arg GetInternalKanbanCardByIDParams) (KanbanCard, error) {
+	row := q.db.QueryRow(ctx, getInternalKanbanCardByID, arg.ProjectID, arg.ID, arg.BoardID)
+	var i KanbanCard
+	err := row.Scan(
+		&i.ID,
+		&i.BoardID,
+		&i.ColumnID,
+		&i.SourceProjectID,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.Priority,
+		&i.Position,
+		&i.DueAt,
+		&i.ExternalKey,
+		&i.CustomFields,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getKanbanBoardForOwner = `-- name: GetKanbanBoardForOwner :one
@@ -765,6 +830,120 @@ func (q *Queries) ListKanbanComments(ctx context.Context, arg ListKanbanComments
 	return items, nil
 }
 
+const lockKanbanBoardForColumnCreate = `-- name: LockKanbanBoardForColumnCreate :one
+SELECT id FROM kanban_boards
+WHERE id = $1 AND owner_id = $2 AND archived_at IS NULL
+FOR UPDATE
+`
+
+type LockKanbanBoardForColumnCreateParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) LockKanbanBoardForColumnCreate(ctx context.Context, arg LockKanbanBoardForColumnCreateParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockKanbanBoardForColumnCreate, arg.ID, arg.OwnerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockKanbanCardForMove = `-- name: LockKanbanCardForMove :one
+SELECT c.board_id, c.column_id
+FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = $1 AND b.owner_id = $2
+  AND c.archived_at IS NULL AND b.archived_at IS NULL
+FOR UPDATE OF c
+`
+
+type LockKanbanCardForMoveParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+type LockKanbanCardForMoveRow struct {
+	BoardID  uuid.UUID `json:"board_id"`
+	ColumnID uuid.UUID `json:"column_id"`
+}
+
+func (q *Queries) LockKanbanCardForMove(ctx context.Context, arg LockKanbanCardForMoveParams) (LockKanbanCardForMoveRow, error) {
+	row := q.db.QueryRow(ctx, lockKanbanCardForMove, arg.ID, arg.OwnerID)
+	var i LockKanbanCardForMoveRow
+	err := row.Scan(&i.BoardID, &i.ColumnID)
+	return i, err
+}
+
+const lockKanbanColumnForCreate = `-- name: LockKanbanColumnForCreate :one
+SELECT c.wip_limit
+FROM kanban_columns c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = $1 AND c.board_id = $2
+  AND b.owner_id = $3 AND b.archived_at IS NULL
+FOR UPDATE OF c
+`
+
+type LockKanbanColumnForCreateParams struct {
+	ColumnID uuid.UUID `json:"column_id"`
+	BoardID  uuid.UUID `json:"board_id"`
+	OwnerID  uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) LockKanbanColumnForCreate(ctx context.Context, arg LockKanbanColumnForCreateParams) (*int32, error) {
+	row := q.db.QueryRow(ctx, lockKanbanColumnForCreate, arg.ColumnID, arg.BoardID, arg.OwnerID)
+	var wip_limit *int32
+	err := row.Scan(&wip_limit)
+	return wip_limit, err
+}
+
+const lockKanbanDestinationColumn = `-- name: LockKanbanDestinationColumn :one
+SELECT wip_limit FROM kanban_columns
+WHERE id = $1 AND board_id = $2
+FOR UPDATE
+`
+
+type LockKanbanDestinationColumnParams struct {
+	ID      uuid.UUID `json:"id"`
+	BoardID uuid.UUID `json:"board_id"`
+}
+
+func (q *Queries) LockKanbanDestinationColumn(ctx context.Context, arg LockKanbanDestinationColumnParams) (*int32, error) {
+	row := q.db.QueryRow(ctx, lockKanbanDestinationColumn, arg.ID, arg.BoardID)
+	var wip_limit *int32
+	err := row.Scan(&wip_limit)
+	return wip_limit, err
+}
+
+const lockOrderedKanbanCardIDs = `-- name: LockOrderedKanbanCardIDs :many
+SELECT id FROM kanban_cards
+WHERE column_id = $1 AND archived_at IS NULL AND id <> $2
+ORDER BY position, id
+FOR UPDATE
+`
+
+type LockOrderedKanbanCardIDsParams struct {
+	ColumnID  uuid.UUID `json:"column_id"`
+	ExcludeID uuid.UUID `json:"exclude_id"`
+}
+
+func (q *Queries) LockOrderedKanbanCardIDs(ctx context.Context, arg LockOrderedKanbanCardIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockOrderedKanbanCardIDs, arg.ColumnID, arg.ExcludeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const moveKanbanCard = `-- name: MoveKanbanCard :one
 UPDATE kanban_cards c SET column_id = $1, position = $2, updated_at = NOW()
 FROM kanban_boards b, kanban_columns col
@@ -825,6 +1004,78 @@ func (q *Queries) NextKanbanCardPosition(ctx context.Context, arg NextKanbanCard
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const resolveKanbanProjectByLegacyRef = `-- name: ResolveKanbanProjectByLegacyRef :one
+SELECT id FROM projects
+WHERE legacy_id = $1 AND deleted_at IS NULL
+LIMIT 1
+`
+
+func (q *Queries) ResolveKanbanProjectByLegacyRef(ctx context.Context, legacyID *int32) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveKanbanProjectByLegacyRef, legacyID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const resolveKanbanProjectByUUIDRef = `-- name: ResolveKanbanProjectByUUIDRef :one
+SELECT id FROM projects
+WHERE (id = $1 OR uuid = $1) AND deleted_at IS NULL
+LIMIT 1
+`
+
+func (q *Queries) ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveKanbanProjectByUUIDRef, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const setKanbanCardPosition = `-- name: SetKanbanCardPosition :execrows
+UPDATE kanban_cards SET column_id = $1, position = $2, updated_at = NOW()
+WHERE id = $3 AND archived_at IS NULL
+`
+
+type SetKanbanCardPositionParams struct {
+	ColumnID uuid.UUID `json:"column_id"`
+	Position int64     `json:"position"`
+	ID       uuid.UUID `json:"id"`
+}
+
+func (q *Queries) SetKanbanCardPosition(ctx context.Context, arg SetKanbanCardPositionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setKanbanCardPosition, arg.ColumnID, arg.Position, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setKanbanColumnPosition = `-- name: SetKanbanColumnPosition :execrows
+UPDATE kanban_columns c SET position = $1, updated_at = NOW()
+FROM kanban_boards b
+WHERE c.id = $2 AND c.board_id = $3 AND c.board_id = b.id
+  AND b.owner_id = $4 AND b.archived_at IS NULL
+`
+
+type SetKanbanColumnPositionParams struct {
+	Position int32     `json:"position"`
+	ID       uuid.UUID `json:"id"`
+	BoardID  uuid.UUID `json:"board_id"`
+	OwnerID  uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) SetKanbanColumnPosition(ctx context.Context, arg SetKanbanColumnPositionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setKanbanColumnPosition,
+		arg.Position,
+		arg.ID,
+		arg.BoardID,
+		arg.OwnerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unlinkKanbanBoardProject = `-- name: UnlinkKanbanBoardProject :execrows

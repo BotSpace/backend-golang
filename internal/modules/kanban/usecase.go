@@ -14,6 +14,7 @@ import (
 
 type Usecase interface {
 	CreateBoard(context.Context, CreateBoardInput) (*Board, error)
+	ResolveProjectRef(context.Context, string) (uuid.UUID, error)
 	ListBoards(context.Context, uuid.UUID, *uuid.UUID) ([]Board, error)
 	GetBoard(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID) (*Board, error)
 	UpdateBoard(context.Context, uuid.UUID, uuid.UUID, UpdateBoardRequest) (*Board, error)
@@ -22,6 +23,7 @@ type Usecase interface {
 	UnlinkProject(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	CreateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error)
 	UpdateColumn(context.Context, uuid.UUID, uuid.UUID, ColumnInput) (*Column, error)
+	ReorderColumns(context.Context, uuid.UUID, uuid.UUID, []uuid.UUID) ([]Column, error)
 	DeleteColumn(context.Context, uuid.UUID, uuid.UUID) error
 	CreateCard(context.Context, CardInput) (*Card, error)
 	GetCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
@@ -29,6 +31,7 @@ type Usecase interface {
 	MoveCard(context.Context, uuid.UUID, uuid.UUID, MoveCardRequest) (*Card, error)
 	ArchiveCard(context.Context, uuid.UUID, uuid.UUID) (*Card, error)
 	UpsertInternalCard(context.Context, uuid.UUID, uuid.UUID, InternalUpsertCardRequest) (*Card, bool, error)
+	MutateInternalCard(context.Context, uuid.UUID, uuid.UUID, InternalUpsertCardRequest) (*Card, bool, error)
 	ListActivities(context.Context, uuid.UUID, uuid.UUID) ([]Activity, error)
 	CreateComment(context.Context, uuid.UUID, uuid.UUID, string) (*Comment, error)
 	ListComments(context.Context, uuid.UUID, uuid.UUID) ([]Comment, error)
@@ -41,6 +44,14 @@ type usecase struct {
 
 func NewUsecase(repo Repository, pub wsevents.Publisher) Usecase {
 	return &usecase{repo: repo, pub: pub}
+}
+
+func (u *usecase) ResolveProjectRef(ctx context.Context, raw string) (uuid.UUID, error) {
+	id, err := u.repo.ResolveProjectRef(ctx, strings.TrimSpace(raw))
+	if err != nil {
+		return uuid.Nil, mapOnlyErr(err)
+	}
+	return id, nil
 }
 
 func (u *usecase) CreateBoard(ctx context.Context, in CreateBoardInput) (*Board, error) {
@@ -148,6 +159,27 @@ func (u *usecase) UpdateColumn(ctx context.Context, id, o uuid.UUID, in ColumnIn
 	u.event(ctx, o, "kanban_column_updated", c)
 	return c, nil
 }
+func (u *usecase) ReorderColumns(ctx context.Context, boardID, ownerID uuid.UUID, ids []uuid.UUID) ([]Column, error) {
+	if len(ids) == 0 {
+		return nil, httpx.BadRequest("kanban.columns_required", "column_ids is required")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		if id == uuid.Nil {
+			return nil, httpx.BadRequest("kanban.invalid_id", "column id is invalid")
+		}
+		if _, exists := seen[id]; exists {
+			return nil, httpx.BadRequest("kanban.duplicate_column", "column_ids contains duplicates")
+		}
+		seen[id] = struct{}{}
+	}
+	cols, err := u.repo.ReorderColumns(ctx, boardID, ownerID, ids)
+	if err != nil {
+		return nil, mapOnlyErr(err)
+	}
+	u.event(ctx, ownerID, "kanban_columns_reordered", map[string]any{"board_id": boardID, "column_ids": ids})
+	return cols, nil
+}
 func (u *usecase) DeleteColumn(ctx context.Context, id, o uuid.UUID) error {
 	if e := u.repo.DeleteColumn(ctx, id, o); e != nil {
 		return mapOnlyErr(e)
@@ -202,11 +234,64 @@ func (u *usecase) ArchiveCard(ctx context.Context, id, o uuid.UUID) (*Card, erro
 	return c, nil
 }
 func (u *usecase) UpsertInternalCard(ctx context.Context, p, b uuid.UUID, r InternalUpsertCardRequest) (*Card, bool, error) {
+	r.Operation = "upsert"
+	return u.MutateInternalCard(ctx, p, b, r)
+}
+
+func (u *usecase) MutateInternalCard(ctx context.Context, p, b uuid.UUID, r InternalUpsertCardRequest) (*Card, bool, error) {
+	op := strings.ToLower(strings.TrimSpace(r.Operation))
+	if op == "" {
+		op = "upsert"
+	}
 	in := CardInput{BoardID: b, ColumnID: r.ColumnID, SourceProjectID: &p, Title: r.Title, Description: r.Description, Kind: r.Kind, Priority: r.Priority, DueAt: r.DueAt, ExternalKey: r.ExternalKey, CustomFields: r.CustomFields}
+	if op == "move" || op == "archive" {
+		if r.CardID == nil && (r.ExternalKey == nil || strings.TrimSpace(*r.ExternalKey) == "") {
+			return nil, false, httpx.BadRequest("kanban.card_reference_required", "card_id or external_key is required")
+		}
+		board, current, e := u.repo.ResolveInternalCard(ctx, p, b, r.CardID, r.ExternalKey)
+		if e != nil {
+			return nil, false, mapOnlyErr(e)
+		}
+		if op == "archive" {
+			board, current, e = u.repo.ArchiveInternalCard(ctx, p, b, current.ID)
+			if e != nil {
+				return nil, false, mapOnlyErr(e)
+			}
+			u.event(ctx, board.OwnerID, "kanban_card_archived", current)
+			return current, false, nil
+		}
+		if r.ColumnID == uuid.Nil {
+			return nil, false, httpx.BadRequest("kanban.column_required", "column_id is required")
+		}
+		current, e = u.repo.MoveCard(ctx, current.ID, r.ColumnID, board.OwnerID, 0)
+		if e != nil {
+			return nil, false, mapOnlyErr(e)
+		}
+		u.event(ctx, board.OwnerID, "kanban_card_moved", current)
+		return current, false, nil
+	}
 	if e := validateCard(&in); e != nil {
 		return nil, false, e
 	}
-	board, c, created, e := u.repo.UpsertInternalCard(ctx, p, b, in)
+	var board *Board
+	var c *Card
+	var created bool
+	var e error
+	switch op {
+	case "upsert", "create":
+		board, c, created, e = u.repo.UpsertInternalCard(ctx, p, b, in)
+	case "update":
+		if r.CardID == nil && (r.ExternalKey == nil || strings.TrimSpace(*r.ExternalKey) == "") {
+			return nil, false, httpx.BadRequest("kanban.card_reference_required", "card_id or external_key is required")
+		}
+		_, current, resolveErr := u.repo.ResolveInternalCard(ctx, p, b, r.CardID, r.ExternalKey)
+		if resolveErr != nil {
+			return nil, false, mapOnlyErr(resolveErr)
+		}
+		board, c, e = u.repo.UpdateInternalCard(ctx, p, b, current.ID, in)
+	default:
+		return nil, false, httpx.BadRequest("kanban.invalid_operation", "operation must be upsert, create, update, move, or archive")
+	}
 	if e != nil {
 		return nil, false, mapOnlyErr(e)
 	}
@@ -287,6 +372,12 @@ func defaultColumns() []ColumnInput {
 	return []ColumnInput{{Name: "Yangi", Color: "#64748b"}, {Name: "Jarayonda", Color: "#3b82f6"}, {Name: "Bajarildi", Color: "#22c55e", IsTerminal: true}}
 }
 func mapOnlyErr(e error) error {
+	if errors.Is(e, errWIPLimit) {
+		return httpx.Conflict("kanban.wip_limit_reached", "column WIP limit has been reached")
+	}
+	if errors.Is(e, errInvalidColumnOrder) {
+		return httpx.Conflict("kanban.invalid_column_order", "column order must contain every board column exactly once")
+	}
 	if errors.Is(e, errNotFound) {
 		return httpx.NotFound("kanban.not_found", "kanban resource not found")
 	}

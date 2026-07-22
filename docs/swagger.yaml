@@ -1123,6 +1123,8 @@ definitions:
     type: object
   internal_modules_kanban.InternalUpsertCardRequest:
     properties:
+      card_id:
+        type: string
       column_id:
         type: string
       custom_fields:
@@ -1134,6 +1136,8 @@ definitions:
       external_key:
         type: string
       kind:
+        type: string
+      operation:
         type: string
       priority:
         type: string
@@ -1167,6 +1171,16 @@ definitions:
         type: string
     required:
     - project_id
+    type: object
+  internal_modules_kanban.ReorderColumnsRequest:
+    properties:
+      column_ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - column_ids
     type: object
   internal_modules_kanban.UpdateBoardRequest:
     properties:
@@ -5119,6 +5133,32 @@ paths:
       summary: Update a board column
       tags:
       - kanban
+  /boards/{id}/columns/reorder:
+    post:
+      parameters:
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Complete ordered column id list
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.ReorderColumnsRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_modules_kanban.Column'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Reorder every column in a board
+      tags:
+      - kanban
   /boards/{id}/projects:
     post:
       parameters:
@@ -5160,6 +5200,20 @@ paths:
       security:
       - BearerAuth: []
       summary: Unlink a bot/project from a Kanban board
+      tags:
+      - kanban
+  /boards/events:
+    get:
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Stream owner Kanban changes as server-sent events
       tags:
       - kanban
   /cards/{id}:
@@ -6279,6 +6333,42 @@ paths:
       summary: '[internal] Engine reads a bot payment order''s status'
       tags:
       - payment-internal
+  /internal/projects/{project_id}/boards/{id}/cards/mutate:
+    post:
+      parameters:
+      - description: Internal token
+        in: header
+        name: X-Internal-Token
+        required: true
+        type: string
+      - description: Source project id
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Board id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Mutation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_kanban.InternalUpsertCardRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_kanban.Card'
+      summary: Create, upsert, update, move, or archive a bot-sourced Kanban card
+      tags:
+      - kanban-internal
   /internal/projects/{project_id}/boards/{id}/cards/upsert:
     post:
       parameters:

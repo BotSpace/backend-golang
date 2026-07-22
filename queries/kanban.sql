@@ -3,6 +3,16 @@ INSERT INTO kanban_boards (id, owner_id, name, description, icon, color, card_ty
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
+-- name: ResolveKanbanProjectByUUIDRef :one
+SELECT id FROM projects
+WHERE (id = $1 OR uuid = $1) AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: ResolveKanbanProjectByLegacyRef :one
+SELECT id FROM projects
+WHERE legacy_id = $1 AND deleted_at IS NULL
+LIMIT 1;
+
 -- name: ListKanbanBoards :many
 SELECT b.*,
        COUNT(DISTINCT c.id)::bigint AS card_count,
@@ -60,6 +70,11 @@ SELECT sqlc.arg('id'), b.id, sqlc.arg('name'), sqlc.arg('color'), sqlc.arg('posi
 FROM kanban_boards b WHERE b.id = sqlc.arg('board_id') AND b.owner_id = sqlc.arg('owner_id') AND b.archived_at IS NULL
 RETURNING *;
 
+-- name: LockKanbanBoardForColumnCreate :one
+SELECT id FROM kanban_boards
+WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') AND archived_at IS NULL
+FOR UPDATE;
+
 -- name: ListKanbanColumns :many
 SELECT c.* FROM kanban_columns c JOIN kanban_boards b ON b.id = c.board_id
 WHERE c.board_id = $1 AND b.owner_id = $2 ORDER BY c.position, c.id;
@@ -70,6 +85,17 @@ FROM kanban_boards b
 WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2 AND b.archived_at IS NULL
 RETURNING c.*;
 
+-- name: CountKanbanColumnsForOwner :one
+SELECT COUNT(*)::int
+FROM kanban_columns c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.board_id = sqlc.arg('board_id') AND b.owner_id = sqlc.arg('owner_id') AND b.archived_at IS NULL;
+
+-- name: SetKanbanColumnPosition :execrows
+UPDATE kanban_columns c SET position = sqlc.arg('position'), updated_at = NOW()
+FROM kanban_boards b
+WHERE c.id = sqlc.arg('id') AND c.board_id = sqlc.arg('board_id') AND c.board_id = b.id
+  AND b.owner_id = sqlc.arg('owner_id') AND b.archived_at IS NULL;
+
 -- name: DeleteKanbanColumn :execrows
 DELETE FROM kanban_columns c USING kanban_boards b
 WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2
@@ -79,6 +105,16 @@ WHERE c.id = $1 AND c.board_id = b.id AND b.owner_id = $2
 SELECT COALESCE(MAX(c.position), 0)::bigint + 1024
 FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
 WHERE c.column_id = $1 AND b.owner_id = $2 AND c.archived_at IS NULL;
+
+-- name: LockKanbanColumnForCreate :one
+SELECT c.wip_limit
+FROM kanban_columns c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = sqlc.arg('column_id') AND c.board_id = sqlc.arg('board_id')
+  AND b.owner_id = sqlc.arg('owner_id') AND b.archived_at IS NULL
+FOR UPDATE OF c;
+
+-- name: CountActiveKanbanCardsInColumn :one
+SELECT COUNT(*)::int FROM kanban_cards WHERE column_id = $1 AND archived_at IS NULL;
 
 -- name: CreateKanbanCard :one
 INSERT INTO kanban_cards (id, board_id, column_id, source_project_id, kind, title, description, priority, position, due_at, external_key, custom_fields)
@@ -121,6 +157,28 @@ WHERE c.id = sqlc.arg('id') AND c.board_id = b.id AND b.owner_id = sqlc.arg('own
   AND (c.column_id = col.id OR col.wip_limit IS NULL OR (SELECT COUNT(*) FROM kanban_cards k WHERE k.column_id = col.id AND k.archived_at IS NULL) < col.wip_limit)
 RETURNING c.*;
 
+-- name: LockKanbanCardForMove :one
+SELECT c.board_id, c.column_id
+FROM kanban_cards c JOIN kanban_boards b ON b.id = c.board_id
+WHERE c.id = sqlc.arg('id') AND b.owner_id = sqlc.arg('owner_id')
+  AND c.archived_at IS NULL AND b.archived_at IS NULL
+FOR UPDATE OF c;
+
+-- name: LockKanbanDestinationColumn :one
+SELECT wip_limit FROM kanban_columns
+WHERE id = sqlc.arg('id') AND board_id = sqlc.arg('board_id')
+FOR UPDATE;
+
+-- name: LockOrderedKanbanCardIDs :many
+SELECT id FROM kanban_cards
+WHERE column_id = sqlc.arg('column_id') AND archived_at IS NULL AND id <> sqlc.arg('exclude_id')
+ORDER BY position, id
+FOR UPDATE;
+
+-- name: SetKanbanCardPosition :execrows
+UPDATE kanban_cards SET column_id = sqlc.arg('column_id'), position = sqlc.arg('position'), updated_at = NOW()
+WHERE id = sqlc.arg('id') AND archived_at IS NULL;
+
 -- name: ArchiveKanbanCard :one
 UPDATE kanban_cards c SET archived_at = NOW(), updated_at = NOW()
 FROM kanban_boards b
@@ -132,6 +190,12 @@ SELECT c.* FROM kanban_cards c
 JOIN kanban_board_projects bp ON bp.board_id = c.board_id AND bp.project_id = sqlc.arg('project_id')
 WHERE c.board_id = sqlc.arg('board_id') AND c.source_project_id = sqlc.arg('project_id')
   AND c.external_key = sqlc.arg('external_key') AND c.archived_at IS NULL;
+
+-- name: GetInternalKanbanCardByID :one
+SELECT c.* FROM kanban_cards c
+JOIN kanban_board_projects bp ON bp.board_id = c.board_id AND bp.project_id = sqlc.arg('project_id')
+WHERE c.id = sqlc.arg('id') AND c.board_id = sqlc.arg('board_id')
+  AND c.source_project_id = sqlc.arg('project_id') AND c.archived_at IS NULL;
 
 -- name: GetLinkedKanbanBoardForProject :one
 SELECT b.* FROM kanban_boards b JOIN kanban_board_projects bp ON bp.board_id = b.id

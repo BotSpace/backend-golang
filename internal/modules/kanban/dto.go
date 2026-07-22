@@ -51,10 +51,15 @@ type MoveCardRequest struct {
 	ColumnID uuid.UUID `json:"column_id" binding:"required"`
 	Position int64     `json:"position" binding:"min=0"`
 }
+type ReorderColumnsRequest struct {
+	ColumnIDs []uuid.UUID `json:"column_ids" binding:"required,min=1"`
+}
 type CommentRequest struct {
 	Body string `json:"body" binding:"required"`
 }
 type InternalUpsertCardRequest struct {
+	Operation    string          `json:"operation"`
+	CardID       *uuid.UUID      `json:"card_id"`
 	ColumnID     uuid.UUID       `json:"column_id" binding:"required"`
 	Title        string          `json:"title" binding:"required,max=240"`
 	Description  string          `json:"description"`
