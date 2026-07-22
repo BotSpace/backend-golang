@@ -54,6 +54,9 @@ type KubernetesConfig struct {
 
 	MongoAddr   string
 	MongoDBName string
+
+	PoolSize        int
+	RuntimeReplicas int
 }
 
 func (c KubernetesConfig) image() string { return c.ImageRepository + ":" + c.ImageTag }
@@ -98,6 +101,12 @@ func newKubernetesOrchestrator(cs kubernetes.Interface, cfg KubernetesConfig) *K
 	}
 	if cfg.RegistrySecretName == "" {
 		cfg.RegistrySecretName = "registry-secret"
+	}
+	if cfg.PoolSize < 1 {
+		cfg.PoolSize = 3
+	}
+	if cfg.RuntimeReplicas < 1 {
+		cfg.RuntimeReplicas = 1
 	}
 	var rdb *redis.Client
 	if cfg.RedisAddr != "" {
@@ -287,6 +296,9 @@ func (o *KubernetesOrchestrator) Stop(ctx context.Context, serviceID string) err
 	if serviceID == "" {
 		return nil
 	}
+	if ref, ok := parsePoolRuntimeServiceID(serviceID); ok {
+		return o.stopPoolRuntime(ctx, ref)
+	}
 	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
 		return o.stopUserRuntime(ctx, ref)
 	}
@@ -330,6 +342,29 @@ func (o *KubernetesOrchestrator) Stop(ctx context.Context, serviceID string) err
 func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (Status, error) {
 	if serviceID == "" {
 		return StatusStopped, nil
+	}
+	if ref, ok := parsePoolRuntimeServiceID(serviceID); ok {
+		if o.rdb == nil {
+			return StatusStopped, nil
+		}
+		workers := o.poolPlacement(ctx, ref.WebhookID.String())
+		if len(workers) == 0 {
+			return StatusStopped, nil
+		}
+		failed := 0
+		for _, workerID := range workers {
+			status, statusErr := o.rdb.HGet(ctx, poolWorkerStatusHash(workerID), ref.WebhookID.String()).Result()
+			if statusErr == nil && status == "ready" {
+				return StatusRunning, nil
+			}
+			if statusErr == nil && status == "failed" {
+				failed++
+			}
+		}
+		if failed == len(workers) {
+			return StatusFailed, nil
+		}
+		return StatusInitializing, nil
 	}
 	var runtimeRef *userRuntimeRef
 	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
@@ -385,6 +420,15 @@ func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tai
 		return LogSnapshot{}, nil
 	}
 	var runtimeLogPrefix string
+	var specificPod string
+	if ref, ok := parsePoolRuntimeServiceID(serviceID); ok {
+		runtimeLogPrefix = "[" + ref.WebhookID.String() + "] "
+		workers := o.poolPlacement(ctx, ref.WebhookID.String())
+		if len(workers) > 0 {
+			specificPod = workers[0]
+		}
+		serviceID = poolDeploymentName
+	}
 	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
 		runtimeLogPrefix = "[" + ref.WebhookID.String() + "] "
 		serviceID = ownerDeploymentName(ref.OwnerID)
@@ -407,6 +451,14 @@ func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tai
 		return LogSnapshot{}, nil
 	}
 	podName := pods.Items[0].Name
+	if specificPod != "" {
+		for _, pod := range pods.Items {
+			if pod.Name == specificPod {
+				podName = pod.Name
+				break
+			}
+		}
+	}
 
 	opts := &corev1.PodLogOptions{TailLines: &tail, Timestamps: true}
 	if sinceSeconds > 0 {

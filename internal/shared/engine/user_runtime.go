@@ -74,7 +74,7 @@ func parseUserRuntimeServiceID(value string) (userRuntimeRef, bool) {
 
 // EnsureOwnerRuntime creates the empty owner supervisor once. Repeated calls
 // do not rewrite the Deployment, so creating/editing bots never restarts it.
-func (o *KubernetesOrchestrator) EnsureOwnerRuntime(ctx context.Context, ownerID uuid.UUID) (string, error) {
+func (o *KubernetesOrchestrator) ensureLegacyOwnerRuntime(ctx context.Context, ownerID uuid.UUID) (string, error) {
 	if ownerID == uuid.Nil {
 		return "", errors.New("owner id is required")
 	}
@@ -122,14 +122,14 @@ func (o *KubernetesOrchestrator) EnsureOwnerRuntime(ctx context.Context, ownerID
 	return name, nil
 }
 
-func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
+func (o *KubernetesOrchestrator) deployOwnerRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
 	if spec.WebhookUUID == uuid.Nil {
 		return DeployResult{}, errors.New("webhook uuid is required for user runtime")
 	}
 	if o.rdb == nil {
 		return DeployResult{}, errors.New("redis is required for user runtime")
 	}
-	name, err := o.EnsureOwnerRuntime(ctx, spec.OwnerID)
+	name, err := o.ensureLegacyOwnerRuntime(ctx, spec.OwnerID)
 	if err != nil {
 		return DeployResult{}, err
 	}
@@ -292,14 +292,14 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 	if o.rdb == nil {
 		return 0, errors.New("redis is required for migration")
 	}
-	locked, err := o.rdb.SetNX(ctx, "engine:migration:user-runtime:v1", time.Now().UnixMilli(), 10*time.Minute).Result()
+	locked, err := o.rdb.SetNX(ctx, "engine:migration:shared-pool:v1", time.Now().UnixMilli(), 30*time.Minute).Result()
 	if err != nil {
 		return 0, err
 	}
 	if !locked {
 		return 0, nil
 	}
-	defer o.rdb.Del(context.Background(), "engine:migration:user-runtime:v1")
+	defer o.rdb.Del(context.Background(), "engine:migration:shared-pool:v1")
 
 	deps, err := o.cs.AppsV1().Deployments(o.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=botmother-engine"})
 	if err != nil {
@@ -341,13 +341,7 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 		if updateErr != nil || !updated {
 			// DB no longer considers this runtime active. Restore its old route;
 			// the ordinary orphan sweep may remove it later.
-			_ = o.rdb.HDel(ctx, runtimeHashKey(ownerID), webhookID.String()).Err()
-			_ = o.publishRuntimeCommand(ctx, ownerID, "remove", webhookID)
-			legacyLabels := map[string]string{"app": "botmother-engine", "engine-name": dep.Name}
-			if project := dep.Labels["project_id"]; project != "" {
-				legacyLabels["project_id"] = project
-			}
-			_ = o.applyService(ctx, "bot-"+webhookID.String(), dep.Name, legacyLabels, 8000, 8000)
+			_ = o.stopPoolRuntime(ctx, poolRuntimeRef{WebhookID: webhookID})
 			if updateErr != nil {
 				migrationErrors = append(migrationErrors, fmt.Errorf("update %s service id: %w", dep.Name, updateErr))
 			}
@@ -358,6 +352,80 @@ func (o *KubernetesOrchestrator) MigrateLegacyRuntimes(
 			continue
 		}
 		migrated++
+	}
+
+	// The previous architecture already consolidated some bots into one pod
+	// per owner. Move those Redis-backed runtimes into the shared pool too,
+	// then delete an owner pod only after every one of its children cut over.
+	var cursor uint64
+	for {
+		keys, next, scanErr := o.rdb.Scan(ctx, cursor, "engine:user:*:runtimes", 100).Result()
+		if scanErr != nil {
+			migrationErrors = append(migrationErrors, scanErr)
+			break
+		}
+		for _, key := range keys {
+			parts := strings.Split(key, ":")
+			if len(parts) != 4 {
+				continue
+			}
+			ownerID, ownerErr := uuid.Parse(parts[2])
+			if ownerErr != nil {
+				continue
+			}
+			items, itemsErr := o.rdb.HGetAll(ctx, key).Result()
+			if itemsErr != nil {
+				migrationErrors = append(migrationErrors, itemsErr)
+				continue
+			}
+			ownerComplete := true
+			for webhookRaw, raw := range items {
+				webhookID, hookErr := uuid.Parse(webhookRaw)
+				var stored storedRuntimeSpec
+				if hookErr != nil || json.Unmarshal([]byte(raw), &stored) != nil {
+					ownerComplete = false
+					continue
+				}
+				projectID, projectErr := uuid.Parse(stored.ProjectID)
+				if projectErr != nil {
+					ownerComplete = false
+					migrationErrors = append(migrationErrors, fmt.Errorf("owner runtime %s has non-uuid canonical project %q", webhookID, stored.ProjectID))
+					continue
+				}
+				result, deployErr := o.deployPoolRuntime(ctx, DeploySpec{OwnerID: ownerID, ProjectID: projectID, RuntimeProjectID: stored.ProjectID, Debug: stored.Debug, Name: stored.Name, Flow: stored.Flow, Schemas: stored.Schemas, Modules: stored.Modules, Env: stored.Env, WebhookUUID: webhookID})
+				if deployErr != nil {
+					ownerComplete = false
+					migrationErrors = append(migrationErrors, fmt.Errorf("migrate owner runtime %s: %w", webhookID, deployErr))
+					continue
+				}
+				oldID := userRuntimeServiceID(ownerID, webhookID)
+				updated, updateErr := replaceServiceID(ctx, projectID, oldID, result.ServiceID, stored.Debug)
+				if updateErr != nil || !updated {
+					ownerComplete = false
+					_ = o.stopPoolRuntime(ctx, poolRuntimeRef{WebhookID: webhookID})
+					if updateErr != nil {
+						migrationErrors = append(migrationErrors, updateErr)
+					}
+					continue
+				}
+				_ = o.rdb.HDel(ctx, runtimeHashKey(ownerID), webhookRaw).Err()
+				_ = o.rdb.HDel(ctx, runtimeStatusKey(ownerID), webhookRaw).Err()
+				_ = o.publishRuntimeCommand(ctx, ownerID, "remove", webhookID)
+				migrated++
+			}
+			if ownerComplete {
+				remaining, _ := o.rdb.HLen(ctx, key).Result()
+				if remaining == 0 {
+					name := ownerDeploymentName(ownerID)
+					_ = ignoreNotFound(o.cs.AppsV1().Deployments(o.cfg.Namespace).Delete(ctx, name, metav1.DeleteOptions{}))
+					_ = ignoreNotFound(o.cs.CoreV1().Secrets(o.cfg.Namespace).Delete(ctx, name+"-env", metav1.DeleteOptions{}))
+				}
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
 	return migrated, errors.Join(migrationErrors...)
 }

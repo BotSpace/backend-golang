@@ -618,6 +618,18 @@ func TestStartDebugPublishesWSEvent(t *testing.T) {
 	}
 }
 
+func TestRuntimeReplicasFromProjectEnvironment(t *testing.T) {
+	if got := runtimeReplicas(map[string]string{"RUNTIME_REPLICAS": "10"}); got != 10 {
+		t.Fatalf("replicas = %d", got)
+	}
+	if got := runtimeReplicas(map[string]string{"RUNTIME_REPLICAS": "1000"}); got != 100 {
+		t.Fatalf("replicas must clamp to 100, got %d", got)
+	}
+	if got := runtimeReplicas(map[string]string{"RUNTIME_REPLICAS": "bad"}); got != 0 {
+		t.Fatalf("invalid value must use default, got %d", got)
+	}
+}
+
 // TestPublishSkippedWhenNoPublisherWired ensures the degrade-gracefully
 // contract: a plain NewUsecase (nil publisher) never touches the publish
 // path, matching every other optional-dependency convention in this backend.
