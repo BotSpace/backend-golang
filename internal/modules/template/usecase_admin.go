@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -9,6 +10,16 @@ import (
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/google/uuid"
 )
+
+func (u *usecase) AdminUpdateFlow(ctx context.Context, id uuid.UUID, flow json.RawMessage) error {
+	if err := u.repo.UpdateLinkedProjectFlow(ctx, id, flow); err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return httpx.NotFound("template.project_not_found", "linked template project not found")
+		}
+		return httpx.Internal(err)
+	}
+	return nil
+}
 
 // AdminList returns a page of the admin-wide catalog (any verification
 // status) plus the total match count.

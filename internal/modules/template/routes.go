@@ -85,6 +85,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		adminTemplates.POST("", h.AdminCreate)
 		adminTemplates.GET("/:id", h.AdminGet)
 		adminTemplates.PATCH("/:id", h.AdminUpdate)
+		adminTemplates.PATCH("/:id/flow", h.AdminUpdateFlow)
 		adminTemplates.DELETE("/:id", h.AdminDelete)
 		adminTemplates.PATCH("/:id/verify", h.AdminVerify)
 		adminTemplates.PATCH("/:id/reject", h.AdminReject)

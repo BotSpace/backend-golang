@@ -576,36 +576,16 @@ def main() -> None:
         backups = []
         skipped = []
         args.backup.write_text("[]")
+        rows_by_id = {str(row.get("id")): row for row in rows}
         for item in changed:
-            detail = api.request("GET", f"/api/v1/admin/templates/{item['id']}", role="superuser")
-            project_id = detail.get("project_id")
-            if not project_id:
-                skipped.append({"template_id": item["id"], "slug": item["slug"],
-                                "reason": "no linked project"})
-                continue
-            try:
-                admin_project = api.request(
-                    "GET", f"/api/v1/admin/projects/{project_id}", role="superuser"
-                )
-            except RuntimeError as exc:
-                if "HTTP 404" not in str(exc):
-                    raise
-                skipped.append({"template_id": item["id"], "slug": item["slug"],
-                                "project_id": project_id, "reason": "linked project not found"})
-                continue
-            owner_id = admin_project.get("owner_id")
-            if not owner_id:
-                raise RuntimeError(f"linked project {project_id} has no owner")
-            project = api.request("GET", f"/api/v1/projects/{project_id}", user_id=owner_id)
-            current = project.get("flow") or {}
+            current = (rows_by_id[str(item["id"])].get("flow") or {})
             migrated, _ = migrate_flow(current)
             if migrated == current:
                 continue
-            backups.append({"template_id": item["id"], "slug": item["slug"],
-                            "project_id": project_id, "owner_id": owner_id, "flow": current})
+            backups.append({"template_id": item["id"], "slug": item["slug"], "flow": current})
             args.backup.write_text(json.dumps(backups, ensure_ascii=False))
-            api.request("PATCH", f"/api/v1/projects/{project_id}", user_id=owner_id,
-                        body={"flow": migrated})
+            api.request("PATCH", f"/api/v1/admin/templates/{item['id']}/flow",
+                        role="superuser", body={"flow": migrated})
     else:
         skipped = []
 
