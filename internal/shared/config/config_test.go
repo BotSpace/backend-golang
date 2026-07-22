@@ -62,6 +62,18 @@ func TestLoad_EngineSpecificEnvWinsOverSharedFallback(t *testing.T) {
 	}
 }
 
+func TestLoad_MapsPluginAPIKeyIntoEngineConfig(t *testing.T) {
+	t.Setenv("APP_ENGINE_PLUGIN_API_KEY", "plugin-secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Engine.PluginAPIKey != "plugin-secret" {
+		t.Fatalf("Engine.PluginAPIKey = %q, want plugin-secret", cfg.Engine.PluginAPIKey)
+	}
+}
+
 func TestValidate_RequiresKeyPaths(t *testing.T) {
 	// missing key paths fail
 	missing := &Config{DB: DBConfig{Host: "db"}}
