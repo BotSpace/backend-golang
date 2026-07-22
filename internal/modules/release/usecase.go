@@ -129,6 +129,7 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
+		OwnerID:     ownerID,
 		ProjectID:   projectID,
 		ReleaseUUID: rel.ID,
 		Version:     int(rel.Version),
@@ -261,6 +262,7 @@ func (u *usecase) StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) 
 	}
 
 	result, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
+		OwnerID:     ownerID,
 		ProjectID:   projectID,
 		ReleaseUUID: dbg.ID,
 		Debug:       true,

@@ -30,6 +30,9 @@ const (
 
 // DeploySpec describes a bot deployment request.
 type DeploySpec struct {
+	// OwnerID switches bot deployments to the user-scoped supervisor model:
+	// one Kubernetes pod per owner, with independently hot-swappable runtimes.
+	OwnerID     uuid.UUID
 	ProjectID   uuid.UUID
 	ReleaseUUID uuid.UUID
 	Version     int
@@ -134,6 +137,13 @@ type Orchestrator interface {
 	// sinceSeconds (0/negative means "no restriction"). serviceID == ""
 	// (nothing deployed yet) returns a zero-value snapshot, not an error.
 	Logs(ctx context.Context, serviceID string, tailLines, sinceSeconds int) (LogSnapshot, error)
+}
+
+// OwnerRuntimeEnsurer is intentionally separate from Orchestrator so local
+// test fakes and non-Kubernetes implementations remain source-compatible.
+// Project creation calls it when supported; registration never does.
+type OwnerRuntimeEnsurer interface {
+	EnsureOwnerRuntime(ctx context.Context, ownerID uuid.UUID) (string, error)
 }
 
 // MongoProvisioner creates/deletes per-project MongoDB databases + users.

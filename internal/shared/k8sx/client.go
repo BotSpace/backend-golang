@@ -101,6 +101,17 @@ func (c *Client) RemoveDeployment(ctx context.Context, name string) error {
 	return nil
 }
 
+// RemoveBotRoute removes only the stable bot-<webhook> Service. User-scoped
+// runtimes share a Deployment, so stopping one debug/release must never call
+// RemoveDeployment on the owner pod.
+func (c *Client) RemoveBotRoute(ctx context.Context, webhookID string) error {
+	err := c.cs.CoreV1().Services(c.Namespace).Delete(ctx, "bot-"+webhookID, metav1.DeleteOptions{})
+	if err == nil || apierrors.IsNotFound(err) {
+		return nil
+	}
+	return fmt.Errorf("delete bot route: %w", err)
+}
+
 // EngineDeployments — app=botmother-engine label'li Deployment'lar (engine
 // tomonidan boshqarilgan resurslargina; boshqa hech narsaga tegilmaydi).
 func (c *Client) EngineDeployments(ctx context.Context) ([]appsv1.Deployment, error) {

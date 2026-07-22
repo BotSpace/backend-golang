@@ -17,12 +17,14 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,6 +62,7 @@ func (c KubernetesConfig) image() string { return c.ImageRepository + ":" + c.Im
 type KubernetesOrchestrator struct {
 	cs  kubernetes.Interface
 	cfg KubernetesConfig
+	rdb *redis.Client
 }
 
 // NewKubernetesOrchestrator builds a cluster client: in-cluster config first
@@ -96,12 +99,19 @@ func newKubernetesOrchestrator(cs kubernetes.Interface, cfg KubernetesConfig) *K
 	if cfg.RegistrySecretName == "" {
 		cfg.RegistrySecretName = "registry-secret"
 	}
-	return &KubernetesOrchestrator{cs: cs, cfg: cfg}
+	var rdb *redis.Client
+	if cfg.RedisAddr != "" {
+		rdb = redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword})
+	}
+	return &KubernetesOrchestrator{cs: cs, cfg: cfg, rdb: rdb}
 }
 
 // ── Deploy ──────────────────────────────────────────────────────────────
 
 func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (DeployResult, error) {
+	if len(spec.Flow) > 0 && spec.OwnerID != uuid.Nil {
+		return o.deployUserRuntime(ctx, spec)
+	}
 	name := resolveDeploymentName(spec)
 	ns := o.cfg.Namespace
 
@@ -255,7 +265,7 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	// ingress/routing depends on this name, not the deployment name). Shared
 	// module pods get "<name>" itself (see plugin.sharedEndpoint's DNS call).
 	if spec.WebhookUUID != uuid.Nil {
-		if err := o.applyService(ctx, "bot-"+spec.WebhookUUID.String(), name, labels, int32(port)); err != nil {
+		if err := o.applyService(ctx, "bot-"+spec.WebhookUUID.String(), name, labels, int32(port), int32(port)); err != nil {
 			// Non-fatal: Django also swallowed Service creation errors and let
 			// the Deployment stand (a manual Service can be created later).
 			return DeployResult{ServiceID: name, Status: StatusInitializing}, nil //nolint:nilerr
@@ -263,7 +273,7 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	} else if len(spec.Flow) == 0 {
 		// Module deploy: Name was pre-set by the caller, so the Service name
 		// equals the Deployment name.
-		if err := o.applyService(ctx, name, name, labels, int32(port)); err != nil {
+		if err := o.applyService(ctx, name, name, labels, int32(port), int32(port)); err != nil {
 			return DeployResult{ServiceID: name, Status: StatusInitializing}, nil //nolint:nilerr
 		}
 	}
@@ -276,6 +286,9 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 func (o *KubernetesOrchestrator) Stop(ctx context.Context, serviceID string) error {
 	if serviceID == "" {
 		return nil
+	}
+	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
+		return o.stopUserRuntime(ctx, ref)
 	}
 	ns := o.cfg.Namespace
 
@@ -318,6 +331,11 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 	if serviceID == "" {
 		return StatusStopped, nil
 	}
+	var runtimeRef *userRuntimeRef
+	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
+		runtimeRef = &ref
+		serviceID = ownerDeploymentName(ref.OwnerID)
+	}
 	dep, err := o.cs.AppsV1().Deployments(o.cfg.Namespace).Get(ctx, serviceID, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return StatusStopped, nil
@@ -326,6 +344,19 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 		return "", fmt.Errorf("get deployment %s: %w", serviceID, err)
 	}
 	if dep.Status.ReadyReplicas > 0 {
+		if runtimeRef != nil && o.rdb != nil {
+			runtimeStatus, statusErr := o.rdb.HGet(ctx, runtimeStatusKey(runtimeRef.OwnerID), runtimeRef.WebhookID.String()).Result()
+			switch {
+			case errors.Is(statusErr, redis.Nil), runtimeStatus == "loading":
+				return StatusInitializing, nil
+			case statusErr != nil:
+				return "", fmt.Errorf("get runtime status: %w", statusErr)
+			case runtimeStatus == "failed":
+				return StatusFailed, nil
+			case runtimeStatus != "ready":
+				return StatusInitializing, nil
+			}
+		}
 		return StatusRunning, nil
 	}
 	if dep.Status.Replicas > 0 {
@@ -352,6 +383,11 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tailLines, sinceSeconds int) (LogSnapshot, error) {
 	if serviceID == "" {
 		return LogSnapshot{}, nil
+	}
+	var runtimeLogPrefix string
+	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
+		runtimeLogPrefix = "[" + ref.WebhookID.String() + "] "
+		serviceID = ownerDeploymentName(ref.OwnerID)
 	}
 	tail := int64(tailLines)
 	if tail <= 0 {
@@ -384,7 +420,7 @@ func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tai
 
 	lines := make([]string, 0)
 	for _, ln := range strings.Split(string(raw), "\n") {
-		if ln != "" {
+		if ln != "" && (runtimeLogPrefix == "" || strings.Contains(ln, runtimeLogPrefix)) {
 			lines = append(lines, ln)
 		}
 	}
@@ -463,6 +499,7 @@ type buildDeploymentInput struct {
 	VolumeMounts   []corev1.VolumeMount
 	Volumes        []corev1.Volume
 	RegistrySecret string
+	Command        []string
 }
 
 // buildDeployment ports create_deployment (kubernetes_service.py): probes,
@@ -490,6 +527,7 @@ func buildDeployment(in buildDeploymentInput) *appsv1.Deployment {
 			},
 		},
 		VolumeMounts: in.VolumeMounts,
+		Command:      in.Command,
 		// The "metrics" port exposes the engine's Prometheus /metrics endpoint
 		// (bot_* counters) on 9090 — the engine's METRICS_PORT default, which
 		// the bot pods don't override. Named so the PodMonitor
@@ -614,7 +652,7 @@ func (o *KubernetesOrchestrator) ensureDataSecret(ctx context.Context, name stri
 	return err
 }
 
-func (o *KubernetesOrchestrator) applyService(ctx context.Context, name, deploymentName string, selector map[string]string, port int32) error {
+func (o *KubernetesOrchestrator) applyService(ctx context.Context, name, deploymentName string, selector map[string]string, port, targetPort int32) error {
 	client := o.cs.CoreV1().Services(o.cfg.Namespace)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -625,7 +663,7 @@ func (o *KubernetesOrchestrator) applyService(ctx context.Context, name, deploym
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: selector,
-			Ports:    []corev1.ServicePort{{Name: "http", Protocol: corev1.ProtocolTCP, Port: port, TargetPort: intstr.FromInt32(port)}},
+			Ports:    []corev1.ServicePort{{Name: "http", Protocol: corev1.ProtocolTCP, Port: port, TargetPort: intstr.FromInt32(targetPort)}},
 		},
 	}
 	_, err := client.Create(ctx, svc, metav1.CreateOptions{})
