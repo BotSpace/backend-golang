@@ -29,7 +29,6 @@ import (
 	"github.com/botspace/backend/internal/modules/plugin"
 	"github.com/botspace/backend/internal/modules/project"
 	"github.com/botspace/backend/internal/modules/release"
-	"github.com/botspace/backend/internal/modules/runtimemigration"
 	"github.com/botspace/backend/internal/modules/template"
 	"github.com/botspace/backend/internal/modules/ticket"
 	"github.com/botspace/backend/internal/modules/user"
@@ -189,14 +188,6 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// Falls back to the no-op Stub if the cluster is unreachable (local dev
 	// without a kubeconfig) so CRUD keeps working with deploys left pending.
 	orch := s.buildOrchestrator()
-	if migrator, ok := orch.(runtimemigration.Migrator); ok {
-		migrationRepo := runtimemigration.NewPostgresRepository(s.pool)
-		go func() {
-			migrationCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
-			defer cancel()
-			runtimemigration.Run(migrationCtx, migrator, migrationRepo, s.log)
-		}()
-	}
 
 	// user module
 	userRepo := user.NewPostgresRepository(s.pool)

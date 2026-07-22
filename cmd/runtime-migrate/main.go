@@ -24,10 +24,21 @@ import (
 
 func main() {
 	idsFlag := flag.String("ids", "", "comma-separated numeric legacy project ids")
+	sharedFlag := flag.Bool("shared", false, "migrate UUID and per-owner runtimes into the shared pool")
+	limitFlag := flag.Int("limit", 0, "maximum shared runtimes to migrate; zero means all")
 	flag.Parse()
-	ids, err := parseIDs(*idsFlag)
-	if err != nil {
-		panic(err)
+	if *limitFlag < 0 {
+		panic("--limit cannot be negative")
+	}
+	var ids []int32
+	var err error
+	if !*sharedFlag {
+		ids, err = parseIDs(*idsFlag)
+		if err != nil {
+			panic(err)
+		}
+	} else if strings.TrimSpace(*idsFlag) != "" {
+		panic("--ids and --shared cannot be used together")
 	}
 
 	cfg, err := config.Load()
@@ -53,6 +64,16 @@ func main() {
 		log.Fatal("orchestrator init failed", zap.Error(err))
 	}
 	repo := runtimemigration.NewPostgresRepository(pool)
+	if *sharedFlag {
+		migrationCtx, migrationCancel := context.WithTimeout(ctx, 30*time.Minute)
+		count, migrationErr := orch.MigrateLegacyRuntimesLimited(migrationCtx, *limitFlag, repo.OwnerForService, repo.ReplaceServiceID)
+		migrationCancel()
+		if migrationErr != nil {
+			log.Fatal("shared runtime migration failed", zap.Int("migrated", count), zap.Error(migrationErr))
+		}
+		log.Info("shared runtime migration complete", zap.Int("migrated", count), zap.Int("limit", *limitFlag))
+		return
+	}
 
 	failed := false
 	for _, legacyID := range ids {
