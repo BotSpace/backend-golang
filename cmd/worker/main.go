@@ -2,7 +2,6 @@
 //
 // Periodik (celery beat bilan bir xil jadval):
 //
-//	sync_debug               */5 daqiqa
 //	cleanup_expired_files    */5 daqiqa
 //	cleanup_failed_releases  */10 daqiqa
 //	sync_bot                 har soat :00
@@ -40,7 +39,6 @@ import (
 	"github.com/botspace/backend/internal/modules/broadcast"
 	"github.com/botspace/backend/internal/modules/chatsend"
 	"github.com/botspace/backend/internal/modules/collabpersist"
-	"github.com/botspace/backend/internal/modules/debugsync"
 	"github.com/botspace/backend/internal/modules/disksnap"
 	"github.com/botspace/backend/internal/modules/files"
 	"github.com/botspace/backend/internal/modules/orphansweep"
@@ -106,7 +104,6 @@ func main() {
 	if err != nil {
 		log.Fatal("redis client", zap.Error(err))
 	}
-	debugSync := &debugsync.Usecase{Repo: debugsync.NewPostgresRepository(pool), K8s: k8s, Log: log, Redis: rdbClient}
 	botSync := &botsync.Usecase{Repo: botsync.NewPostgresRepository(pool), Redis: rdbClient, Log: log}
 	diskSnap := &disksnap.Usecase{Repo: disksnap.NewPostgresRepository(pool), Mongo: mongo, Log: log}
 	bcast := &broadcast.Usecase{Repo: broadcast.NewPostgresRepository(pool), Mongo: mongo, Storage: storage, Log: log}
@@ -142,7 +139,6 @@ func main() {
 		}
 		mustAdd(spec, name, fn)
 	}
-	mustAdd("*/5 * * * *", "sync_debug", debugSync.Run)
 	mustAdd("*/5 * * * *", "cleanup_expired_files", fileCleanup.Run)
 	mustAdd("*/10 * * * *", "cleanup_failed_releases", releaseCleanup.Run)
 	mustAdd("*/15 * * * *", "orphan_sweep", orphanSweep.Run)

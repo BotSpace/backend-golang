@@ -310,6 +310,9 @@ type Querier interface {
 	// debug container (which, unlike a release, always runs the live draft).
 	GetProjectFlowForOwner(ctx context.Context, arg GetProjectFlowForOwnerParams) ([]byte, error)
 	GetProjectForOwner(ctx context.Context, arg GetProjectForOwnerParams) (Project, error)
+	// Imported Django projects must keep their numeric Mongo tenant key; native
+	// Go projects use the canonical UUID. This value is injected as PROJECT_ID.
+	GetProjectLegacyIDForOwner(ctx context.Context, arg GetProjectLegacyIDForOwnerParams) (*int32, error)
 	// Project <-> module links ----------------------------------------------
 	GetProjectModuleForOwner(ctx context.Context, arg GetProjectModuleForOwnerParams) (ProjectModule, error)
 	// Cross-tenant guard for the internal resolve endpoints: derive a project's
@@ -374,7 +377,6 @@ type Querier interface {
 	ListExecutionNodeRunsForOwner(ctx context.Context, arg ListExecutionNodeRunsForOwnerParams) ([]ExecutionNodeRun, error)
 	ListExecutionsForOwner(ctx context.Context, arg ListExecutionsForOwnerParams) ([]Execution, error)
 	ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, error)
-	ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error)
 	// project_id/filetype nargs let the caller optionally narrow the listing;
 	// NULL means "no filter" on that dimension.
 	ListFiles(ctx context.Context, arg ListFilesParams) ([]File, error)
@@ -448,7 +450,6 @@ type Querier interface {
 	LockKanbanDestinationColumn(ctx context.Context, arg LockKanbanDestinationColumnParams) (*int32, error)
 	LockOrderedKanbanCardIDs(ctx context.Context, arg LockOrderedKanbanCardIDsParams) ([]uuid.UUID, error)
 	MarkDebugFailedByService(ctx context.Context, serviceID *string) (int64, error)
-	MarkDebugStopping(ctx context.Context, id uuid.UUID) error
 	MarkExecutionNode(ctx context.Context, arg MarkExecutionNodeParams) error
 	// Marks a managed bot consumed once its token has been attached to a
 	// project's RELEASE_BOT_TOKEN — mirrors Django's
@@ -483,6 +484,7 @@ type Querier interface {
 	ReplaceLegacyReleaseRuntimeServiceID(ctx context.Context, arg ReplaceLegacyReleaseRuntimeServiceIDParams) (int64, error)
 	ResolveKanbanProjectByLegacyRef(ctx context.Context, legacyID *int32) (uuid.UUID, error)
 	ResolveKanbanProjectByUUIDRef(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	ResolveLegacyRuntimeProject(ctx context.Context, legacyID *int32) (ResolveLegacyRuntimeProjectRow, error)
 	// Internal lookup for the webhook-hook forwarder: token -> node/chat routing
 	// info plus the owning project's release/debug uuids.
 	ResolveWebhookToken(ctx context.Context, token uuid.UUID) (ResolveWebhookTokenRow, error)

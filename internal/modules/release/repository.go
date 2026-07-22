@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/botspace/backend/internal/shared/database"
 	sqlcdb "github.com/botspace/backend/internal/shared/database/sqlc"
@@ -202,6 +203,17 @@ func (r *pgRepo) GetProjectFlowForOwner(ctx context.Context, projectID, ownerID 
 		return nil, fmt.Errorf("get project flow: %w", err)
 	}
 	return json.RawMessage(flow), nil
+}
+
+func (r *pgRepo) ProjectRuntimeID(ctx context.Context, projectID, ownerID uuid.UUID) (string, error) {
+	legacyID, err := r.queries.GetProjectLegacyIDForOwner(ctx, sqlcdb.GetProjectLegacyIDForOwnerParams{ID: projectID, OwnerID: ownerID})
+	if err != nil {
+		return "", err
+	}
+	if legacyID != nil {
+		return strconv.FormatInt(int64(*legacyID), 10), nil
+	}
+	return projectID.String(), nil
 }
 
 func (r *pgRepo) ProjectOwnerID(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {

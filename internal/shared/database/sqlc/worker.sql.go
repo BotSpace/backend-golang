@@ -7,7 +7,6 @@ package sqlcdb
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -144,41 +143,6 @@ func (q *Queries) ListExpiredFiles(ctx context.Context) ([]ListExpiredFilesRow, 
 	for rows.Next() {
 		var i ListExpiredFilesRow
 		if err := rows.Scan(&i.ID, &i.FilePath); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listExpiredRunningDebugs = `-- name: ListExpiredRunningDebugs :many
-SELECT d.id, d.service_id
-FROM debug d
-JOIN projects p ON p.id = d.project_id
-WHERE d.status = 'running'
-  AND d.updated_at <= $1
-  AND p.is_template = false
-  AND p.deleted_at IS NULL
-`
-
-type ListExpiredRunningDebugsRow struct {
-	ID        uuid.UUID `json:"id"`
-	ServiceID *string   `json:"service_id"`
-}
-
-func (q *Queries) ListExpiredRunningDebugs(ctx context.Context, updatedAt time.Time) ([]ListExpiredRunningDebugsRow, error) {
-	rows, err := q.db.Query(ctx, listExpiredRunningDebugs, updatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListExpiredRunningDebugsRow{}
-	for rows.Next() {
-		var i ListExpiredRunningDebugsRow
-		if err := rows.Scan(&i.ID, &i.ServiceID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -338,15 +302,6 @@ func (q *Queries) MarkDebugFailedByService(ctx context.Context, serviceID *strin
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const markDebugStopping = `-- name: MarkDebugStopping :exec
-UPDATE debug SET status = 'stopping', updated_at = now() WHERE id = $1
-`
-
-func (q *Queries) MarkDebugStopping(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, markDebugStopping, id)
-	return err
 }
 
 const markMessageFailed = `-- name: MarkMessageFailed :exec

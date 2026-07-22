@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	OwnerForService(ctx context.Context, projectID uuid.UUID, serviceID string, debug bool) (uuid.UUID, bool, error)
 	ReplaceServiceID(ctx context.Context, projectID uuid.UUID, oldServiceID, newServiceID string, debug bool) (bool, error)
+	ResolveLegacyProject(ctx context.Context, legacyID int32) (projectID, ownerID uuid.UUID, err error)
 }
 
 type Migrator interface {

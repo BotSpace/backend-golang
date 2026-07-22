@@ -1,15 +1,3 @@
--- name: ListExpiredRunningDebugs :many
-SELECT d.id, d.service_id
-FROM debug d
-JOIN projects p ON p.id = d.project_id
-WHERE d.status = 'running'
-  AND d.updated_at <= $1
-  AND p.is_template = false
-  AND p.deleted_at IS NULL;
-
--- name: MarkDebugStopping :exec
-UPDATE debug SET status = 'stopping', updated_at = now() WHERE id = $1;
-
 -- name: ListExpiredFiles :many
 SELECT id, file_path FROM file WHERE expires_at IS NOT NULL AND expires_at < now();
 

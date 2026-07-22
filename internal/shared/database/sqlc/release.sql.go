@@ -176,6 +176,26 @@ func (q *Queries) GetProjectFlowForOwner(ctx context.Context, arg GetProjectFlow
 	return flow, err
 }
 
+const getProjectLegacyIDForOwner = `-- name: GetProjectLegacyIDForOwner :one
+SELECT legacy_id
+FROM projects
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+`
+
+type GetProjectLegacyIDForOwnerParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+// Imported Django projects must keep their numeric Mongo tenant key; native
+// Go projects use the canonical UUID. This value is injected as PROJECT_ID.
+func (q *Queries) GetProjectLegacyIDForOwner(ctx context.Context, arg GetProjectLegacyIDForOwnerParams) (*int32, error) {
+	row := q.db.QueryRow(ctx, getProjectLegacyIDForOwner, arg.ID, arg.OwnerID)
+	var legacy_id *int32
+	err := row.Scan(&legacy_id)
+	return legacy_id, err
+}
+
 const getProjectWebhookUUIDsForOwner = `-- name: GetProjectWebhookUUIDsForOwner :one
 SELECT release_webhook_uuid, debug_webhook_uuid FROM projects
 WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL

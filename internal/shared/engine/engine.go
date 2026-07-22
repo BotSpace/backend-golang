@@ -32,15 +32,19 @@ const (
 type DeploySpec struct {
 	// OwnerID switches bot deployments to the user-scoped supervisor model:
 	// one Kubernetes pod per owner, with independently hot-swappable runtimes.
-	OwnerID     uuid.UUID
-	ProjectID   uuid.UUID
-	ReleaseUUID uuid.UUID
-	Version     int
-	Debug       bool
-	Flow        []byte // constructor graph JSON
-	Schemas     []byte // collection -> field -> CMS kind JSON
-	Modules     []byte // {"modules": [...]} runtime module routing JSON
-	Env         map[string]string
+	OwnerID   uuid.UUID
+	ProjectID uuid.UUID
+	// RuntimeProjectID preserves an imported Django numeric tenant id while
+	// ProjectID remains the canonical Go UUID used for ownership. Empty uses
+	// ProjectID.String().
+	RuntimeProjectID string
+	ReleaseUUID      uuid.UUID
+	Version          int
+	Debug            bool
+	Flow             []byte // constructor graph JSON
+	Schemas          []byte // collection -> field -> CMS kind JSON
+	Modules          []byte // {"modules": [...]} runtime module routing JSON
+	Env              map[string]string
 
 	// Name overrides how KubernetesOrchestrator derives the Deployment/Service
 	// name. Empty means "derive from ProjectID/Version/Debug" (bot-engine

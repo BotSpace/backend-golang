@@ -98,3 +98,22 @@ func (q *Queries) ReplaceLegacyReleaseRuntimeServiceID(ctx context.Context, arg 
 	}
 	return result.RowsAffected(), nil
 }
+
+const resolveLegacyRuntimeProject = `-- name: ResolveLegacyRuntimeProject :one
+SELECT id, owner_id
+FROM projects
+WHERE legacy_id = $1 AND deleted_at IS NULL
+LIMIT 1
+`
+
+type ResolveLegacyRuntimeProjectRow struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) ResolveLegacyRuntimeProject(ctx context.Context, legacyID *int32) (ResolveLegacyRuntimeProjectRow, error) {
+	row := q.db.QueryRow(ctx, resolveLegacyRuntimeProject, legacyID)
+	var i ResolveLegacyRuntimeProjectRow
+	err := row.Scan(&i.ID, &i.OwnerID)
+	return i, err
+}
