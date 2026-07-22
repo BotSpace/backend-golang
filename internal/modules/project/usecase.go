@@ -720,10 +720,17 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 	// model StartDebug is a Redis-backed hot swap (not a pod redeploy), so the
 	// constructor's ordinary save becomes visible without pressing reload.
 	if len(in.Flow) > 0 && u.rel != nil {
-		if dbg, dbgErr := u.repo.GetDebugForOwner(ctx, id, ownerID); dbgErr == nil && dbg != nil && (dbg.Status == "running" || dbg.Status == "initializing" || dbg.Status == "pending") {
-			if _, reloadErr := u.rel.StartDebug(ctx, id, ownerID); reloadErr != nil {
-				return nil, reloadErr
-			}
+		if dbg, dbgErr := u.repo.GetDebugForOwner(ctx, id, ownerID); dbgErr == nil && dbg != nil && (dbg.Status == "running" || dbg.Status == "initializing" || dbg.Status == "pending" || dbg.Status == "failed") {
+			// Saving the constructor must stay fast. Redis is the durable source
+			// of the latest graph and the supervisor coalesces repeated upserts,
+			// so finish the readiness/cutover outside the HTTP request lifetime.
+			go func() {
+				reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+				defer cancel()
+				if _, reloadErr := u.rel.StartDebug(reloadCtx, id, ownerID); reloadErr != nil {
+					zap.L().Error("debug runtime hot reload failed", logger.String("project_id", id.String()), logger.Err(reloadErr))
+				}
+			}()
 		}
 	}
 	return p, nil
