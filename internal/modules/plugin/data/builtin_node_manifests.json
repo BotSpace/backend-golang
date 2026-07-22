@@ -3377,7 +3377,8 @@
         "key": "jsCode",
         "outputsKey": "outputs",
         "language": "javascript",
-        "label": "JavaScript kodi"
+        "label": "JavaScript kodi",
+        "description": "Goja JavaScript kodi. Mavjud vars/context/private va xavfsiz DB, HTTP, Telegram helper API'laridan foydalanadi; nomli branch uchun exit(name) ishlating."
       }
     ],
     "defaults": {
@@ -3393,6 +3394,7 @@
   },
   {
     "type": "StateNode",
+    "savesState": true,
     "status": "runtime",
     "category": "customLogic",
     "titleKey": "constructor.customLogic.state.name",
@@ -4977,6 +4979,12 @@
     ],
     "content": [
       {
+        "type": "text",
+        "key": "toolName",
+        "label": "Tool nomi",
+        "placeholder": "collection_debts"
+      },
+      {
         "type": "textarea",
         "key": "systemPrompt",
         "labelKey": "constructor.ai.agent.fields.systemPrompt",
@@ -5609,32 +5617,13 @@
     ],
     "defaults": {
       "tool": "collection",
+      "toolName": "collection_data",
       "collection": "",
-      "action": "create",
-      "createFields": [],
-      "readFilter": {
-        "field": "",
-        "value": "",
-        "aiMode": false,
-        "aiDescription": ""
-      },
-      "readContextKey": "",
-      "updateFilter": {
-        "field": "",
-        "value": "",
-        "aiMode": false,
-        "aiDescription": ""
-      },
-      "updateFields": [],
-      "deleteFilter": {
-        "field": "",
-        "value": "",
-        "aiMode": false,
-        "aiDescription": ""
-      },
-      "listFilters": [],
-      "listLimit": 10,
-      "listContextKey": "",
+      "operation": "read",
+      "filterMatch": "and",
+      "filterConditions": [],
+      "documentFields": [],
+      "changeFields": [],
       "description": ""
     },
     "aiDoc": "Collection tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='collection'. TEMPLATE (gibrid) model — har node BITTA `operation` (create|read|update|delete). read+create kerak bo'lsa BIR agentga ikki alohida collection tool ulang (har biri bitta operation). Sen (builder) so'rov SKELETINI sozlaysan, har field uchun FIXED yoki AI-SLOT tanlaysan; runtime AI faqat ai-slot'larni to'ldiradi. operation='read'/'update'/'delete' → filterMatch ('and'|'or') + filterConditions:[{field, op, source:'fixed'|'ai', value?|aiDescription?}]; op ∈ eq|ne|gt|gte|lt|lte|in|nin|contains|exists. operation='create' → documentFields:[{field, source, value?|aiDescription?}]. operation='update' → YANA changeFields (SET qilinadigan maydonlar; filterConditions QAYSI hujjat ekanini tanlaydi). source='fixed' → SEN `value` belgilaysan (constant yoki {{chat_id}}/{{<key>}}/{{user_id}}/{{username}} placeholder; saqlangan qiymat uchun {{<key>}} ishlatiladi va engine runtime'da resolve qiladi, BUTUN-placeholder XOM tipni saqlaydi: value=\"{{chat_id}}\" int qoladi). FIXED slot'ni runtime AI O'ZGARTIROLMAYDI — shuning uchun user_id=\"{{chat_id}}\" qilib tool'ni JORIY foydalanuvchiga xavfsiz biriktir. source='ai' → `value` bo'sh, `aiDescription` yoz; runtime AI shu tavsifga qarab qiymatni to'ldiradi. MISOL read: operation='read', filterMatch='and', filterConditions=[{field:'user_id', op:'eq', source:'fixed', value:'{{chat_id}}'},{field:'status', op:'eq', source:'ai', aiDescription:'qaysi holatdagi qarzlar (masalan active)'}]. MISOL create: operation='create', documentFields=[{field:'user_id', source:'fixed', value:'{{chat_id}}'},{field:'amount', source:'ai', aiDescription:'qarz summasi'},{field:'text', source:'ai', aiDescription:'qarz izohi'}]. LEGACY (hanuz qabul qilinadi, engine fallback qiladi): `operation` bermasang eski model — `operations` allow-list + `searchFields` ([{field, description?}]); u holda runtime AI butun filtrni o'zi quradi. Yangi node'larda TEMPLATE afzal. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
@@ -6604,7 +6593,7 @@
     "producesState": [
       "message_id_{{nodeId}}"
     ],
-    "summary": "Telegram invoice yuboradi.",
+    "summary": "Telegram orqali to'lov invoice yuboradi.",
     "agentCategory": "payments",
     "aiDoc": "Telegram-native invoice yuboradi. To'lov natijasiga reaksiya kerak bo'lsa SendInvoiceNode → PreCheckoutTriggerNode → SuccessfulPaymentTriggerNode zanjirini qur. providerToken bo'sh va currency='XTR' bo'lsa Telegram Stars ishlaydi. Har bir node alohida global trigger ekanini hisobga ol."
   },
