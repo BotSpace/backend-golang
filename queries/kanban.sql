@@ -86,6 +86,7 @@ SELECT sqlc.arg('id'), b.id, c.id, sqlc.narg('source_project_id'), sqlc.arg('kin
        sqlc.arg('priority'), sqlc.arg('position'), sqlc.narg('due_at'), sqlc.narg('external_key'), sqlc.arg('custom_fields')
 FROM kanban_boards b JOIN kanban_columns c ON c.board_id = b.id
 WHERE b.id = sqlc.arg('board_id') AND c.id = sqlc.arg('column_id') AND b.owner_id = sqlc.arg('owner_id') AND b.archived_at IS NULL
+  AND (c.wip_limit IS NULL OR (SELECT COUNT(*) FROM kanban_cards k WHERE k.column_id = c.id AND k.archived_at IS NULL) < c.wip_limit)
   AND (sqlc.narg('source_project_id')::uuid IS NULL OR EXISTS (
       SELECT 1 FROM kanban_board_projects bp
       JOIN projects p ON p.id = bp.project_id
@@ -117,6 +118,7 @@ UPDATE kanban_cards c SET column_id = sqlc.arg('column_id'), position = sqlc.arg
 FROM kanban_boards b, kanban_columns col
 WHERE c.id = sqlc.arg('id') AND c.board_id = b.id AND b.owner_id = sqlc.arg('owner_id')
   AND col.id = sqlc.arg('column_id') AND col.board_id = c.board_id AND c.archived_at IS NULL
+  AND (c.column_id = col.id OR col.wip_limit IS NULL OR (SELECT COUNT(*) FROM kanban_cards k WHERE k.column_id = col.id AND k.archived_at IS NULL) < col.wip_limit)
 RETURNING c.*;
 
 -- name: ArchiveKanbanCard :one
