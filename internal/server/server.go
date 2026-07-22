@@ -841,7 +841,6 @@ func (s *Server) buildOrchestrator() engine.Orchestrator {
 		APIURL:             s.cfg.Engine.APIURL,
 		InternalToken:      s.cfg.Engine.InternalToken,
 		TestBotToken:       s.cfg.Engine.TestBotToken,
-		PluginAPIKey:       s.cfg.Engine.PluginAPIKey,
 		RedisAddr:          s.cfg.Engine.RedisAddr(),
 		RedisPassword:      s.cfg.Engine.RedisPassword,
 		MongoAddr:          s.cfg.Engine.MongoAddr,

@@ -46,7 +46,6 @@ type KubernetesConfig struct {
 	APIURL        string
 	InternalToken string
 	TestBotToken  string
-	PluginAPIKey  string
 
 	RedisAddr     string
 	RedisPassword string
@@ -135,10 +134,6 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	if o.cfg.APIURL != "" {
 		env["API_URL"] = o.cfg.APIURL
 	}
-	if o.cfg.PluginAPIKey != "" && len(spec.Flow) > 0 {
-		env["PLUGIN_API_KEY"] = o.cfg.PluginAPIKey
-	}
-
 	var volumeMounts []corev1.VolumeMount
 	var volumes []corev1.Volume
 

@@ -3544,11 +3544,12 @@
   {
     "type": "SubFlowNode",
     "status": "runtime",
+    "agentHidden": true,
     "category": "integrations",
     "titleKey": "constructor.integrations.subflow.name",
     "descriptionKey": "constructor.integrations.subflow.description",
     "titleFallback": "Subflow",
-    "descriptionFallback": "Boshqa oqim yoki plugin ishga tushiradi.",
+    "descriptionFallback": "Ichiga joylangan boshqa oqimni ishga tushiradi.",
     "iconName": "plugin",
     "colorToken": "integration-indigo",
     "size": {
