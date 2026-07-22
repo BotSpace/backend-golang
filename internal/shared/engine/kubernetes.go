@@ -17,7 +17,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -299,9 +298,6 @@ func (o *KubernetesOrchestrator) Stop(ctx context.Context, serviceID string) err
 	if ref, ok := parsePoolRuntimeServiceID(serviceID); ok {
 		return o.stopPoolRuntime(ctx, ref)
 	}
-	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
-		return o.stopUserRuntime(ctx, ref)
-	}
 	ns := o.cfg.Namespace
 
 	if err := ignoreNotFound(o.cs.AppsV1().Deployments(ns).Delete(ctx, serviceID, metav1.DeleteOptions{})); err != nil {
@@ -366,11 +362,6 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 		}
 		return StatusInitializing, nil
 	}
-	var runtimeRef *userRuntimeRef
-	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
-		runtimeRef = &ref
-		serviceID = ownerDeploymentName(ref.OwnerID)
-	}
 	dep, err := o.cs.AppsV1().Deployments(o.cfg.Namespace).Get(ctx, serviceID, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return StatusStopped, nil
@@ -379,19 +370,6 @@ func (o *KubernetesOrchestrator) Status(ctx context.Context, serviceID string) (
 		return "", fmt.Errorf("get deployment %s: %w", serviceID, err)
 	}
 	if dep.Status.ReadyReplicas > 0 {
-		if runtimeRef != nil && o.rdb != nil {
-			runtimeStatus, statusErr := o.rdb.HGet(ctx, runtimeStatusKey(runtimeRef.OwnerID), runtimeRef.WebhookID.String()).Result()
-			switch {
-			case errors.Is(statusErr, redis.Nil), runtimeStatus == "loading":
-				return StatusInitializing, nil
-			case statusErr != nil:
-				return "", fmt.Errorf("get runtime status: %w", statusErr)
-			case runtimeStatus == "failed":
-				return StatusFailed, nil
-			case runtimeStatus != "ready":
-				return StatusInitializing, nil
-			}
-		}
 		return StatusRunning, nil
 	}
 	if dep.Status.Replicas > 0 {
@@ -428,10 +406,6 @@ func (o *KubernetesOrchestrator) Logs(ctx context.Context, serviceID string, tai
 			specificPod = workers[0]
 		}
 		serviceID = poolDeploymentName
-	}
-	if ref, ok := parseUserRuntimeServiceID(serviceID); ok {
-		runtimeLogPrefix = "[" + ref.WebhookID.String() + "] "
-		serviceID = ownerDeploymentName(ref.OwnerID)
 	}
 	tail := int64(tailLines)
 	if tail <= 0 {

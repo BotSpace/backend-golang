@@ -52,18 +52,6 @@ func TestEnsureOwnerRuntimeCreatesOneSharedPoolDeployment(t *testing.T) {
 	}
 }
 
-func TestUserRuntimeServiceIDRoundTrip(t *testing.T) {
-	ownerID, webhookID := uuid.New(), uuid.New()
-	value := userRuntimeServiceID(ownerID, webhookID)
-	ref, ok := parseUserRuntimeServiceID(value)
-	if !ok || ref.OwnerID != ownerID || ref.WebhookID != webhookID {
-		t.Fatalf("parse %q = %#v, %v", value, ref, ok)
-	}
-	if _, ok := parseUserRuntimeServiceID("release-legacy-1"); ok {
-		t.Fatal("legacy service id must not parse as user runtime")
-	}
-}
-
 func TestPoolRuntimeServiceIDRoundTrip(t *testing.T) {
 	webhookID := uuid.New()
 	value := poolRuntimeServiceID(webhookID)

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -20,9 +21,12 @@ import (
 const channelName = "collab_ops"
 
 type Usecase struct {
-	Repo  Repository
-	Redis *redis.Client
-	Log   *zap.Logger
+	Repo     Repository
+	Redis    *redis.Client
+	Log      *zap.Logger
+	Reloader RuntimeReloader
+	reloadMu sync.Mutex
+	reloads  map[string]*time.Timer
 }
 
 type payload struct {
@@ -90,8 +94,33 @@ func (u *Usecase) handleMessage(ctx context.Context, raw string) error {
 	if !changed {
 		return nil
 	}
+	u.scheduleReload(ctx, projectID)
 	u.Log.Debug("collab_persist saved", zap.String("project_id", projectID), zap.String("op", opType(op)))
 	return nil
+}
+
+func (u *Usecase) scheduleReload(ctx context.Context, projectID string) {
+	if u.Reloader == nil {
+		return
+	}
+	u.reloadMu.Lock()
+	if u.reloads == nil {
+		u.reloads = make(map[string]*time.Timer)
+	}
+	if timer := u.reloads[projectID]; timer != nil {
+		timer.Stop()
+	}
+	u.reloads[projectID] = time.AfterFunc(750*time.Millisecond, func() {
+		reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if err := u.Reloader.ReloadProject(reloadCtx, projectID); err != nil {
+			u.Log.Warn("collab runtime reload failed", zap.String("project_id", projectID), zap.Error(err))
+		}
+		u.reloadMu.Lock()
+		delete(u.reloads, projectID)
+		u.reloadMu.Unlock()
+	})
+	u.reloadMu.Unlock()
 }
 
 func decodeOp(encoded string) (map[string]any, error) {
