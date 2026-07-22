@@ -149,6 +149,7 @@ SELECT $1, b.id, c.id, $2, $3, $4, $5,
        $6, $7, $8, $9, $10
 FROM kanban_boards b JOIN kanban_columns c ON c.board_id = b.id
 WHERE b.id = $11 AND c.id = $12 AND b.owner_id = $13 AND b.archived_at IS NULL
+  AND (c.wip_limit IS NULL OR (SELECT COUNT(*) FROM kanban_cards k WHERE k.column_id = c.id AND k.archived_at IS NULL) < c.wip_limit)
   AND ($2::uuid IS NULL OR EXISTS (
       SELECT 1 FROM kanban_board_projects bp
       JOIN projects p ON p.id = bp.project_id
@@ -769,6 +770,7 @@ UPDATE kanban_cards c SET column_id = $1, position = $2, updated_at = NOW()
 FROM kanban_boards b, kanban_columns col
 WHERE c.id = $3 AND c.board_id = b.id AND b.owner_id = $4
   AND col.id = $1 AND col.board_id = c.board_id AND c.archived_at IS NULL
+  AND (c.column_id = col.id OR col.wip_limit IS NULL OR (SELECT COUNT(*) FROM kanban_cards k WHERE k.column_id = col.id AND k.archived_at IS NULL) < col.wip_limit)
 RETURNING c.id, c.board_id, c.column_id, c.source_project_id, c.kind, c.title, c.description, c.priority, c.position, c.due_at, c.external_key, c.custom_fields, c.archived_at, c.created_at, c.updated_at
 `
 
