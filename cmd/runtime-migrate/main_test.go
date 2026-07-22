@@ -16,3 +16,18 @@ func TestParseIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLegacyProjects(t *testing.T) {
+	items, err := parseLegacyProjects("1193=9682a68e-1d0a-4078-929c-2942bb5401d2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := items[1193].String(); got != "9682a68e-1d0a-4078-929c-2942bb5401d2" {
+		t.Fatalf("project UUID = %q", got)
+	}
+	for _, raw := range []string{"1193", "abc=9682a68e-1d0a-4078-929c-2942bb5401d2", "1193=invalid"} {
+		if _, err := parseLegacyProjects(raw); err == nil {
+			t.Fatalf("parseLegacyProjects(%q) must fail", raw)
+		}
+	}
+}
