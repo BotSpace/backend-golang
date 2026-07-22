@@ -19,6 +19,7 @@ import (
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/botspace/backend/internal/shared/logger"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -26,12 +27,17 @@ func main() {
 	idsFlag := flag.String("ids", "", "comma-separated numeric legacy project ids")
 	sharedFlag := flag.Bool("shared", false, "migrate UUID and per-owner runtimes into the shared pool")
 	limitFlag := flag.Int("limit", 0, "maximum shared runtimes to attempt; zero means all")
+	legacyProjectsFlag := flag.String("legacy-projects", "", "comma-separated legacy_id=project_uuid mappings for the external Django database")
 	flag.Parse()
 	if *limitFlag < 0 {
 		panic("--limit cannot be negative")
 	}
 	var ids []int32
 	var err error
+	legacyProjects, err := parseLegacyProjects(*legacyProjectsFlag)
+	if err != nil {
+		panic(err)
+	}
 	if !*sharedFlag {
 		ids, err = parseIDs(*idsFlag)
 		if err != nil {
@@ -78,7 +84,22 @@ func main() {
 	failed := false
 	for _, legacyID := range ids {
 		itemCtx, itemCancel := context.WithTimeout(ctx, 3*time.Minute)
-		result, migrateErr := orch.MigrateLegacyNumericRuntime(itemCtx, legacyID, repo.ResolveLegacyProject, repo.ReplaceServiceID)
+		resolve := repo.ResolveLegacyProject
+		replace := repo.ReplaceServiceID
+		if projectID, external := legacyProjects[legacyID]; external {
+			resolve = func(context.Context, int32) (uuid.UUID, uuid.UUID, error) {
+				// Shared-pool placement is account-independent. The project UUID is
+				// used as the temporary owner identity because the external Django
+				// account still has a numeric primary key.
+				return projectID, projectID, nil
+			}
+			replace = func(context.Context, uuid.UUID, string, string, bool) (bool, error) {
+				// The operator updates RelaseModel through Django ORM after the
+				// pool child is ready and this command reports its ServiceID.
+				return true, nil
+			}
+		}
+		result, migrateErr := orch.MigrateLegacyNumericRuntime(itemCtx, legacyID, resolve, replace)
 		itemCancel()
 		if migrateErr != nil {
 			failed = true
@@ -90,6 +111,29 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+func parseLegacyProjects(raw string) (map[int32]uuid.UUID, error) {
+	out := map[int32]uuid.UUID{}
+	if strings.TrimSpace(raw) == "" {
+		return out, nil
+	}
+	for _, item := range strings.Split(raw, ",") {
+		parts := strings.SplitN(strings.TrimSpace(item), "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid legacy project mapping %q", item)
+		}
+		legacyID, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 32)
+		if err != nil || legacyID <= 0 {
+			return nil, fmt.Errorf("invalid legacy id in mapping %q", item)
+		}
+		projectID, err := uuid.Parse(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid project uuid in mapping %q: %w", item, err)
+		}
+		out[int32(legacyID)] = projectID
+	}
+	return out, nil
 }
 
 func parseIDs(raw string) ([]int32, error) {
