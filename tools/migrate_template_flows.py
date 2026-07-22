@@ -539,8 +539,6 @@ class API:
                 if exc.code != 429 or attempt == 5:
                     raise RuntimeError(f"{method} {path}: HTTP {exc.code}: {exc.read().decode()}") from exc
                 time.sleep(1 + attempt)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path)
@@ -576,11 +574,28 @@ def main() -> None:
 
     if args.apply and api:
         backups = []
+        skipped = []
+        args.backup.write_text("[]")
         for item in changed:
             detail = api.request("GET", f"/api/v1/admin/templates/{item['id']}", role="superuser")
-            project_id, owner_id = detail.get("project_id"), detail.get("author_id")
-            if not project_id or not owner_id:
-                raise RuntimeError(f"template {item['slug']} has no linked project/author")
+            project_id = detail.get("project_id")
+            if not project_id:
+                skipped.append({"template_id": item["id"], "slug": item["slug"],
+                                "reason": "no linked project"})
+                continue
+            try:
+                admin_project = api.request(
+                    "GET", f"/api/v1/admin/projects/{project_id}", role="superuser"
+                )
+            except RuntimeError as exc:
+                if "HTTP 404" not in str(exc):
+                    raise
+                skipped.append({"template_id": item["id"], "slug": item["slug"],
+                                "project_id": project_id, "reason": "linked project not found"})
+                continue
+            owner_id = admin_project.get("owner_id")
+            if not owner_id:
+                raise RuntimeError(f"linked project {project_id} has no owner")
             project = api.request("GET", f"/api/v1/projects/{project_id}", user_id=owner_id)
             current = project.get("flow") or {}
             migrated, _ = migrate_flow(current)
@@ -591,9 +606,12 @@ def main() -> None:
             args.backup.write_text(json.dumps(backups, ensure_ascii=False))
             api.request("PATCH", f"/api/v1/projects/{project_id}", user_id=owner_id,
                         body={"flow": migrated})
+    else:
+        skipped = []
 
     print(json.dumps({"templates": len(rows), "changed": len(changed),
-                      "totals": dict(totals), "details": changed}, ensure_ascii=False))
+                      "totals": dict(totals), "details": changed,
+                      "skipped": skipped}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
