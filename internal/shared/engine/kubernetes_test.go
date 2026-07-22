@@ -19,7 +19,6 @@ func testOrchestrator() (*KubernetesOrchestrator, *fake.Clientset) {
 		ImageTag:        "1.1.0",
 		InternalToken:   "internal-tok",
 		TestBotToken:    "test-bot-tok",
-		PluginAPIKey:    "plugin-tok",
 		RedisAddr:       "redis:6379",
 		RedisPassword:   "redis-pass",
 		MongoAddr:       "mongodb://mongo:27017",
@@ -86,7 +85,7 @@ func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T)
 	if err != nil {
 		t.Fatalf("secret not created: %v", err)
 	}
-	for _, want := range []string{"IS_RELEASE", "FLOW_FILE_PATH", "WEBHOOK_ENABLED", "PROJECT_ID", "API_TOKEN", "INTERNAL_TOKEN", "PLUGIN_API_KEY", "REDIS_ADDR", "MONGO_ADDR", "API_URL"} {
+	for _, want := range []string{"IS_RELEASE", "FLOW_FILE_PATH", "WEBHOOK_ENABLED", "PROJECT_ID", "API_TOKEN", "INTERNAL_TOKEN", "REDIS_ADDR", "MONGO_ADDR", "API_URL"} {
 		if _, ok := secret.Data[want]; !ok {
 			t.Errorf("secret missing key %q (got %v)", want, keysOf(secret.Data))
 		}
