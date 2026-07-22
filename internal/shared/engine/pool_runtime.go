@@ -65,6 +65,7 @@ func (o *KubernetesOrchestrator) EnsureEnginePool(ctx context.Context) (string, 
 	env := map[string]string{
 		"REDIS_ENABLED": "true", "REDIS_ADDR": o.cfg.RedisAddr,
 		"REDIS_PASSWORD": o.cfg.RedisPassword, "LOG_LEVEL": "info", "BOT_RUNTIME_PATH": "/app/bot",
+		"RUNTIME_IDLE_TIMEOUT": o.cfg.RuntimeIdleTimeout,
 	}
 	if o.cfg.APIURL != "" {
 		env["API_URL"] = o.cfg.APIURL

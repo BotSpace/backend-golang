@@ -3,6 +3,8 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -367,6 +369,76 @@ func TestCreateReleaseStopsPriorActiveReleases(t *testing.T) {
 	}
 	if len(orch.deployed) != 2 {
 		t.Fatalf("expected 2 deploy calls, got %d", len(orch.deployed))
+	}
+}
+
+func TestCreateReleaseRegistersTelegramWebhook(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	_, _ = repo.UpsertEnvironment(context.Background(), UpsertEnvironmentInput{
+		ProjectID: projectID, OwnerID: ownerID, UserID: ownerID,
+		Key: "RELEASE_BOT_TOKEN", Value: "123:test-token",
+	})
+	releaseWebhookUUID, _, _ := repo.GetProjectWebhookUUIDs(context.Background(), projectID, ownerID)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bot123:test-token/setWebhook" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		want := "https://hooks.example/api/bot-webhook/release/" + releaseWebhookUUID.String() + "/"
+		if got := r.Form.Get("url"); got != want {
+			t.Errorf("webhook url = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer server.Close()
+	oldBase := telegramAPIBaseURL
+	telegramAPIBaseURL = server.URL
+	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
+	t.Setenv("DOMAIN", "hooks.example")
+
+	rel, err := NewUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
+	if err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+	if rel.Status != StatusRunning {
+		t.Fatalf("status = %s, want running", rel.Status)
+	}
+}
+
+func TestCreateReleaseFailsAndStopsRuntimeWhenWebhookRegistrationFails(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`[]`))
+	_, _ = repo.UpsertEnvironment(context.Background(), UpsertEnvironmentInput{
+		ProjectID: projectID, OwnerID: ownerID, UserID: ownerID,
+		Key: "RELEASE_BOT_TOKEN", Value: "bad-token",
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":false,"description":"invalid token"}`))
+	}))
+	defer server.Close()
+	oldBase := telegramAPIBaseURL
+	telegramAPIBaseURL = server.URL
+	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
+
+	rel, err := NewUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
+	if err == nil {
+		t.Fatal("expected webhook registration failure")
+	}
+	if rel == nil || rel.Status != StatusFailed {
+		t.Fatalf("release = %#v, want failed", rel)
+	}
+	if len(orch.stopped) != 1 {
+		t.Fatalf("stopped runtimes = %v, want one", orch.stopped)
 	}
 }
 
