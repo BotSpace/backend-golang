@@ -51,4 +51,19 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 	if !hasStaticOption || !hasStaticValue {
 		t.Fatalf("callback static capture contract missing: option=%v value=%v", hasStaticOption, hasStaticValue)
 	}
+
+	for nodeType, node := range byType {
+		content, _ := node["content"].([]any)
+		hasKeyboardRows := false
+		for _, raw := range content {
+			field, _ := raw.(map[string]any)
+			if field["type"] == "nested-rows" && field["key"] == "rows" {
+				hasKeyboardRows = true
+				break
+			}
+		}
+		if hasKeyboardRows && node["buttonEdge"] != true {
+			t.Errorf("%s renders keyboard rows but does not declare buttonEdge", nodeType)
+		}
+	}
 }
