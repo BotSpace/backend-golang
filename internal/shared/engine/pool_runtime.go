@@ -171,7 +171,7 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 		env["IS_RELEASE"] = "true"
 	}
 
-	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Flow: normalizeJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`), Schemas: normalizeJSONObject(spec.Schemas, `{}`), Modules: normalizeJSONObject(spec.Modules, `{"modules":[]}`), Env: env}
+	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Replicas: replication, Flow: normalizeJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`), Schemas: normalizeJSONObject(spec.Schemas, `{}`), Modules: normalizeJSONObject(spec.Modules, `{"modules":[]}`), Env: env}
 	raw, err := json.Marshal(runtime)
 	if err != nil {
 		return DeployResult{}, err

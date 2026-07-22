@@ -35,6 +35,7 @@ type storedRuntimeSpec struct {
 	Name      string            `json:"name"`
 	Debug     bool              `json:"debug"`
 	RoutePort int               `json:"route_port"`
+	Replicas  int               `json:"replicas,omitempty"`
 	Flow      json.RawMessage   `json:"flow"`
 	Schemas   json.RawMessage   `json:"schemas"`
 	Modules   json.RawMessage   `json:"modules"`
