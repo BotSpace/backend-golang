@@ -19,6 +19,7 @@ import (
 const (
 	chatsSetTTL = 24 * time.Hour
 	chatsSetCap = 50
+	commandTTL  = 2 * time.Minute
 )
 
 // RedisContextCache implements ContextCache by SETting the latest variable
@@ -145,10 +146,32 @@ func (c *RedisContextCache) ListContext(ctx context.Context, projectID uuid.UUID
 	return out, nil
 }
 
+func (c *RedisContextCache) EnqueueNodeRun(ctx context.Context, projectID uuid.UUID, chatID int64, nodeID string) error {
+	body, err := json.Marshal(struct {
+		ChatID int64  `json:"chat_id"`
+		NodeID string `json:"node_id"`
+	}{ChatID: chatID, NodeID: nodeID})
+	if err != nil {
+		return fmt.Errorf("marshal debug node command: %w", err)
+	}
+	key := debugCommandKey(projectID)
+	pipe := c.rdb.TxPipeline()
+	pipe.RPush(ctx, key, body)
+	pipe.Expire(ctx, key, commandTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("enqueue debug node command: %w", err)
+	}
+	return nil
+}
+
 func contextCacheKey(projectID uuid.UUID, chatID int64) string {
 	return fmt.Sprintf("debug:ctx:%s:%d", projectID, chatID)
 }
 
 func chatsSetKey(projectID uuid.UUID) string {
 	return fmt.Sprintf("debug:ctx:chats:%s", projectID)
+}
+
+func debugCommandKey(projectID uuid.UUID) string {
+	return fmt.Sprintf("engine:debug:commands:%s", projectID)
 }

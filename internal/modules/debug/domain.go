@@ -138,3 +138,10 @@ type ContextCache interface {
 	// DebugContextListView exactly.
 	ListContext(ctx context.Context, projectID uuid.UUID) ([]ContextSnapshot, error)
 }
+
+// CommandQueue is the backend -> debug-engine command path. Commands are
+// deliberately kept out of backend:events (which flows in the opposite
+// direction) and are scoped by the internal project UUID.
+type CommandQueue interface {
+	EnqueueNodeRun(ctx context.Context, projectID uuid.UUID, chatID int64, nodeID string) error
+}

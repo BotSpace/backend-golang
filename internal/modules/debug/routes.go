@@ -20,5 +20,7 @@ func RegisterRoutes(rg *gin.RouterGroup, h *Handler, verifier middleware.TokenVe
 		g.GET("/errors/", h.ListErrors)
 		g.GET("/context", h.ListContext)
 		g.GET("/context/", h.ListContext)
+		g.POST("/run-node", h.RunNode)
+		g.POST("/run-node/", h.RunNode)
 	}
 }

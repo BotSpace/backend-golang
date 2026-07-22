@@ -68,3 +68,28 @@ func (h *Handler) ListContext(c *gin.Context) {
 	}
 	httpx.OK(c, 200, toContextResponse(items))
 }
+
+// RunNode queues one selected node against the latest real debug chat.
+func (h *Handler) RunNode(c *gin.Context) {
+	ownerID, err := uuid.Parse(middleware.UserID(c))
+	if err != nil {
+		httpx.Error(c, httpx.Unauthorized("auth.invalid_token", "invalid token"))
+		return
+	}
+	var req RunNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, httpx.BadRequest("request.malformed", "project_id and node_id are required"))
+		return
+	}
+	projectID, err := uuid.Parse(req.ProjectID)
+	if err != nil {
+		httpx.Error(c, httpx.BadRequest("debug.invalid_project_id", "project_id must be a uuid"))
+		return
+	}
+	result, err := h.uc.RunNode(c.Request.Context(), ownerID, projectID, req.NodeID)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 202, result)
+}

@@ -52,6 +52,17 @@ type ListContextResponse struct {
 	Chats []ContextChatResponse `json:"chats"`
 }
 
+type RunNodeRequest struct {
+	ProjectID string `json:"project_id" binding:"required"`
+	NodeID    string `json:"node_id" binding:"required"`
+}
+
+type RunNodeResult struct {
+	NodeID string `json:"node_id"`
+	ChatID int64  `json:"chat_id"`
+	Queued bool   `json:"queued"`
+}
+
 func toContextResponse(items []ContextSnapshot) ListContextResponse {
 	out := make([]ContextChatResponse, len(items))
 	for i, s := range items {
