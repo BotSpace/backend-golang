@@ -2316,6 +2316,8 @@ definitions:
         items:
           type: integer
         type: array
+      managed_bot_id:
+        type: string
       name:
         maxLength: 255
         minLength: 1

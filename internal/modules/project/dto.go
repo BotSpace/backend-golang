@@ -122,11 +122,12 @@ type CreateFromTemplateRequest struct {
 }
 
 type UpdateRequest struct {
-	Name        *string         `json:"name" validate:"omitempty,min=1,max=255"`
-	Description *string         `json:"description" validate:"omitempty,max=5000"`
-	Username    *string         `json:"username" validate:"omitempty,max=255"`
-	Flow        json.RawMessage `json:"flow" validate:"omitempty"`
-	Token       *string         `json:"token" validate:"omitempty,max=255"`
+	Name         *string         `json:"name" validate:"omitempty,min=1,max=255"`
+	Description  *string         `json:"description" validate:"omitempty,max=5000"`
+	Username     *string         `json:"username" validate:"omitempty,max=255"`
+	Flow         json.RawMessage `json:"flow" validate:"omitempty"`
+	Token        *string         `json:"token" validate:"omitempty,max=255"`
+	ManagedBotID *string         `json:"managed_bot_id" validate:"omitempty"`
 }
 
 // ListResponse is a paginated envelope for a project listing.

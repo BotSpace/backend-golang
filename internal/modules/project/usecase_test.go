@@ -1017,6 +1017,30 @@ func TestCreate_WithManagedBotID_StoresDecryptedTokenAsReleaseBotToken(t *testin
 	}
 }
 
+func TestUpdate_WithManagedBotID_ReplacesReleaseBotToken(t *testing.T) {
+	repo := newFakeRepo()
+	ownerID := uuid.New()
+	managedBotID := uuid.New()
+	resolver := &fakeManagedBotResolver{managedBotID: managedBotID, ownerID: ownerID, token: "777:managed-update-token"}
+	uc := NewUsecaseWithManagedBotResolver(repo, nil, nil, nil, nil, nil, "", resolver)
+	ctx := context.Background()
+
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "Existing project", Token: "111:old-token"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	managedID := managedBotID.String()
+	if _, err := uc.Update(ctx, p.ID, ownerID, UpdateInput{ManagedBotID: &managedID}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("resolver calls = %d, want 1", resolver.calls)
+	}
+	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != resolver.token {
+		t.Fatalf("RELEASE_BOT_TOKEN = %q, want %q", got, resolver.token)
+	}
+}
+
 // TestCreate_WithManagedBotID_NotOwned_ReturnsError ensures a managed_bot_id
 // that doesn't exist (or isn't owned by the caller) fails the create with a
 // clear error — not a silently tokenless project.

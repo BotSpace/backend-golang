@@ -93,11 +93,12 @@ type CreateInput struct {
 // UpdateInput carries optional fields; nil pointers are left unchanged. A
 // non-nil, non-empty Token (re)writes RELEASE_BOT_TOKEN, same as CreateInput.
 type UpdateInput struct {
-	Name        *string
-	Description *string
-	Username    *string
-	Flow        json.RawMessage
-	Token       *string
+	Name         *string
+	Description  *string
+	Username     *string
+	Flow         json.RawMessage
+	Token        *string
+	ManagedBotID *string
 }
 
 // ListFilter narrows and paginates an owner's project listing.
