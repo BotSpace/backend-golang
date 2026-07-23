@@ -44,8 +44,14 @@ type Consumer struct {
 	group    string
 	consumer string
 	handlers map[string]Handler
+	failures map[string]int
 	log      *logger.Logger
 }
+
+// Permanently invalid entries (for example events from a deleted project)
+// must not block every newer stream event forever. Transient failures are
+// retried, then the poison entry is acknowledged after this limit.
+const maxHandlerAttempts = 3
 
 // NewConsumer dials Redis at addr (host:port) with password (empty for
 // none). consumerName should be unique per replica (e.g. the pod name) so
@@ -61,6 +67,7 @@ func NewConsumer(addr, password, stream, group, consumerName string, log *logger
 		group:    group,
 		consumer: consumerName,
 		handlers: map[string]Handler{},
+		failures: map[string]int{},
 		log:      log,
 	}
 }
@@ -78,6 +85,7 @@ func NewURLConsumer(redisURL, stream, group, consumerName string, log *logger.Lo
 		group:    group,
 		consumer: consumerName,
 		handlers: map[string]Handler{},
+		failures: map[string]int{},
 		log:      log,
 	}, nil
 }
@@ -168,12 +176,25 @@ func (c *Consumer) handle(ctx context.Context, msg redis.XMessage) bool {
 		return true
 	}
 	if err := h(ctx, ev.Args); err != nil {
-		// No ack — redelivered as a pending entry after a restart/rebalance.
-		// No per-task retry cap: handlers must be idempotent and cheap to
-		// retry rather than the consumer tracking attempt counts.
-		c.log.Error("redisq: handler failed", logger.String("task", ev.Task), logger.Err(err))
+		c.failures[msg.ID]++
+		attempt := c.failures[msg.ID]
+		if attempt >= maxHandlerAttempts {
+			c.log.Error("redisq: discarding poison event after retry limit",
+				logger.String("id", msg.ID),
+				logger.String("task", ev.Task),
+				logger.Int("attempt", attempt),
+				logger.Err(err))
+			c.rdb.XAck(ctx, c.stream, c.group, msg.ID)
+			delete(c.failures, msg.ID)
+			return true
+		}
+		c.log.Error("redisq: handler failed",
+			logger.String("task", ev.Task),
+			logger.Int("attempt", attempt),
+			logger.Err(err))
 		return false
 	}
 	c.rdb.XAck(ctx, c.stream, c.group, msg.ID)
+	delete(c.failures, msg.ID)
 	return true
 }
