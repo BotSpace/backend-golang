@@ -7600,8 +7600,7 @@
             "value": "clear",
             "label": "Kataklarni tozalash"
           }
-        ],
-        "variant": "tabs"
+        ]
       },
       {
         "type": "credential",
