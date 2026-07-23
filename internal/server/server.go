@@ -180,6 +180,9 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// affected modules surface errors at request time.
 	cipher, err := crypto.FromEnv()
 	if err != nil {
+		if s.cfg.Env == "production" {
+			panic(fmt.Sprintf("production secret encryption is unavailable: %v", err))
+		}
 		s.log.Warn("crypto key not set — credential/webhook secrets disabled", logger.Err(err))
 	}
 	// Engine orchestrator: real KubernetesOrchestrator when engine.mode=k8s
@@ -243,6 +246,9 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	var cmsUC cms.Usecase
 	mongoClient, err := cms.NewMongoClient(ctx)
 	if err != nil {
+		if s.cfg.Env == "production" {
+			panic(fmt.Sprintf("production CMS MongoDB is unavailable: %v", err))
+		}
 		s.log.Warn("mongo unavailable — cms routes disabled", logger.Err(err))
 	} else {
 		cmsUC = cms.NewUsecase(cms.NewPostgresRepository(s.pool), cms.NewMongoDocumentRepository(mongoClient), s.cfg.Engine.MongoDBName)
@@ -259,8 +265,19 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// degrade-gracefully convention as the rest of this function.
 	var wsPub wsevents.Publisher
 	if addr := s.cfg.Engine.RedisAddr(); addr != "" {
-		wsPub = wsevents.NewRedisPublisher(addr, s.cfg.Engine.RedisPassword, s.log)
+		publisher := wsevents.NewRedisPublisher(addr, s.cfg.Engine.RedisPassword, s.log)
+		if err := publisher.Ping(ctx); err != nil {
+			if s.cfg.Env == "production" {
+				panic(fmt.Sprintf("production engine Redis is unavailable: %v", err))
+			}
+			s.log.Warn("wsevents: engine Redis unavailable — realtime events disabled", logger.Err(err))
+		} else {
+			wsPub = publisher
+		}
 	} else {
+		if s.cfg.Env == "production" {
+			panic("production engine Redis is required for realtime events")
+		}
 		s.log.Warn("wsevents: engine.redis_host not configured — release/debug WS events disabled")
 	}
 
@@ -306,11 +323,8 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// release / environment / debug — deploys via the engine orchestrator.
 	// Built ahead of the project module below so
 	// project.Usecase.CreateFromTemplate can apply envs + deploy the first
-	// release/debug container through it (nil would just mean
-	// CreateFromTemplate skips that deploy step, same degrade-gracefully
-	// convention as cmsUC above). NewUsecaseWithEventPublisher (over plain
-	// NewUsecase) wires wsPub so every release/debug status transition
-	// broadcasts to the constructor — see release/ws_events.go.
+	// release/debug runtime through it. Runtime assets and realtime publisher
+	// are wired explicitly so deploys cannot proceed with incomplete inputs.
 	releaseUC := release.NewUsecaseWithRuntimeAssets(release.NewPostgresRepository(s.pool), orch, wsPub, runtimeAssets)
 	release.RegisterRoutes(v1, release.NewHandler(releaseUC), tokens)
 
@@ -463,6 +477,9 @@ func (s *Server) registerRoutes(ctx context.Context) {
 	// Same degrade-gracefully-without-Mongo pattern as cms above.
 	chatMongo, err := chat.NewMongoDB(ctx, s.cfg.Engine.MongoDBName)
 	if err != nil {
+		if s.cfg.Env == "production" {
+			panic(fmt.Sprintf("production Chat MongoDB is unavailable: %v", err))
+		}
 		s.log.Warn("mongo unavailable — chat routes disabled", logger.Err(err))
 	} else {
 		chatUC := chat.NewUsecase(chat.NewPostgresRepository(s.pool), chatMongo)
@@ -884,6 +901,9 @@ type debugContextEventPayload struct {
 func (s *Server) buildOrchestrator() engine.Orchestrator {
 	wantK8s := s.cfg.Engine.Mode == "k8s" || (s.cfg.Engine.Mode == "" && s.cfg.Env == "production")
 	if !wantK8s {
+		if s.cfg.Env == "production" {
+			panic("production engine orchestrator cannot run in stub mode")
+		}
 		s.log.Info("engine orchestrator: stub", logger.String("engine_mode", s.cfg.Engine.Mode))
 		return engine.NewStub()
 	}
@@ -905,6 +925,9 @@ func (s *Server) buildOrchestrator() engine.Orchestrator {
 		RuntimeIdleTimeout: s.cfg.Engine.RuntimeIdleTimeout,
 	})
 	if err != nil {
+		if s.cfg.Env == "production" || s.cfg.Engine.Mode == "k8s" {
+			panic(fmt.Sprintf("kubernetes engine orchestrator is unavailable: %v", err))
+		}
 		s.log.Warn("engine orchestrator: kubernetes unavailable — falling back to stub", logger.Err(err))
 		return engine.NewStub()
 	}

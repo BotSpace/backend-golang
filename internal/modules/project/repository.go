@@ -343,7 +343,7 @@ func fromSQLC(r sqlcdb.Project) Project {
 
 func flowOrEmpty(f json.RawMessage) []byte {
 	if len(f) == 0 {
-		return []byte("[]")
+		return []byte(`{"nodes":[],"edges":[]}`)
 	}
 	return f
 }

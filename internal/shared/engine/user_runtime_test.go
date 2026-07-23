@@ -8,18 +8,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestEnsureOwnerRuntimeCreatesOneSharedPoolDeployment(t *testing.T) {
+func TestEnsureEnginePoolCreatesOneSharedDeployment(t *testing.T) {
 	ctx := context.Background()
 	orch, cs := testOrchestrator()
-	ownerID := uuid.New()
 
-	first, err := orch.EnsureOwnerRuntime(ctx, ownerID)
+	first, err := orch.EnsureEnginePool(ctx)
 	if err != nil {
-		t.Fatalf("EnsureOwnerRuntime: %v", err)
+		t.Fatalf("EnsureEnginePool: %v", err)
 	}
-	second, err := orch.EnsureOwnerRuntime(ctx, uuid.New())
+	second, err := orch.EnsureEnginePool(ctx)
 	if err != nil {
-		t.Fatalf("EnsureOwnerRuntime second call: %v", err)
+		t.Fatalf("EnsureEnginePool second call: %v", err)
 	}
 	if first != second || first != poolDeploymentName {
 		t.Fatalf("deployment names = %q, %q", first, second)
@@ -61,11 +60,15 @@ func TestPoolRuntimeServiceIDRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNormalizeJSONObject(t *testing.T) {
-	if got := string(normalizeJSONObject([]byte(`[]`), `{"fallback":true}`)); got != `{"fallback":true}` {
-		t.Fatalf("array normalization = %s", got)
+func TestCanonicalJSONObject(t *testing.T) {
+	if _, err := canonicalJSONObject([]byte(`[]`), `{}`, "flow"); err == nil {
+		t.Fatal("array must be rejected")
 	}
-	if got := string(normalizeJSONObject([]byte(`{"nodes":[]}`), `{}`)); got != `{"nodes":[]}` {
+	got, err := canonicalJSONObject([]byte(`{"nodes":[]}`), `{}`, "flow")
+	if err != nil {
+		t.Fatalf("object rejected: %v", err)
+	}
+	if string(got) != `{"nodes":[]}` {
 		t.Fatalf("object normalization = %s", got)
 	}
 }

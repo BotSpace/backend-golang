@@ -213,14 +213,6 @@ func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) 
 // disabled only by CreateFromTemplate so it can first apply the template envs
 // and release mode, then launch the draft runtime with the complete config.
 func (u *usecase) create(ctx context.Context, in CreateInput, autoStartDebug bool) (*Project, error) {
-	// Runtime capacity is created lazily with the first bot/project, never at
-	// account registration. Ensure it before inserting the project so a failed
-	// cluster operation cannot leave a bot row whose promised runtime is absent.
-	if ensurer, ok := u.orch.(engine.OwnerRuntimeEnsurer); ok {
-		if _, err := ensurer.EnsureOwnerRuntime(ctx, in.OwnerID); err != nil {
-			return nil, httpx.Internal(fmt.Errorf("ensure owner runtime: %w", err))
-		}
-	}
 	p, err := u.repo.Create(ctx, in)
 	if err != nil {
 		return nil, httpx.Internal(err)

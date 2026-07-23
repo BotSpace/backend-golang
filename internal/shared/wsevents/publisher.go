@@ -120,6 +120,13 @@ func NewRedisPublisher(addr, password string, log *logger.Logger) *RedisPublishe
 	}
 }
 
+func (p *RedisPublisher) Ping(ctx context.Context) error {
+	if p == nil || p.rdb == nil {
+		return fmt.Errorf("wsevents publisher is unavailable")
+	}
+	return p.rdb.Ping(ctx).Err()
+}
+
 // Publish is fire-and-forget and best-effort — mirrors Django's
 // _send_ws_notification, which wraps the whole publish in a bare try/except
 // so a WS hiccup never fails the request/event that triggered it. Safe to

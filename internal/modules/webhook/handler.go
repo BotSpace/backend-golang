@@ -174,10 +174,10 @@ func (h *Handler) ManagedBotClaim(c *gin.Context) {
 func (h *Handler) ManagedBotWebhook(c *gin.Context) {
 	secret := c.Param("secret")
 	var body managedBotWebhookBody
-	// Best-effort bind: an unparsable body still needs to 200 most paths
-	// Telegram cares about (ack), so a bind error just yields an empty
-	// payload rather than a hard failure.
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		httpx.Error(c, httpx.BadRequest("managed_bot.invalid_update", "Telegram update JSON noto'g'ri"))
+		return
+	}
 
 	err := h.uc.HandleManagedBotWebhook(c.Request.Context(), secret, c.GetHeader(telegramSecretHeader), toWebhookPayload(body))
 	if err != nil {

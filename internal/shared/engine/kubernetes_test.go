@@ -28,194 +28,15 @@ func testOrchestrator() (*KubernetesOrchestrator, *fake.Clientset) {
 	return NewKubernetesOrchestratorWithClient(cs, cfg), cs
 }
 
-func TestDeploy_Release_CreatesDeploymentSecretConfigMapAndService(t *testing.T) {
-	ctx := context.Background()
-	orch, cs := testOrchestrator()
-
-	projectID := uuid.New()
-	webhookUUID := uuid.New()
-
-	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID:   projectID,
-		ReleaseUUID: uuid.New(),
-		Version:     3,
-		Debug:       false,
-		Flow:        []byte(`{"nodes":[]}`),
-		Schemas:     []byte(`{"courses":{"price":"int"}}`),
-		Modules:     []byte(`{"modules":[{"slug":"files"}]}`),
-		Env:         map[string]string{"IS_RELEASE": "true"},
-		WebhookUUID: webhookUUID,
-	})
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-
-	wantName := "release-" + projectID.String() + "-3"
-	if result.ServiceID != wantName {
-		t.Fatalf("ServiceID = %q, want %q", result.ServiceID, wantName)
-	}
-	if result.Status != StatusInitializing {
-		t.Fatalf("Status = %q, want initializing", result.Status)
-	}
-
-	dep, err := cs.AppsV1().Deployments("botmother").Get(ctx, wantName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("deployment not created: %v", err)
-	}
-	if got := dep.Spec.Template.Spec.Containers[0].Image; got != "registry.iprogrammer.uz/botspace/golang-engine:1.1.0" {
-		t.Errorf("image = %q", got)
-	}
-	if dep.Labels["project_id"] != projectID.String() {
-		t.Errorf("missing project_id label: %+v", dep.Labels)
-	}
-	if dep.Spec.Template.Spec.ImagePullSecrets[0].Name != "registry-secret" {
-		t.Errorf("imagePullSecrets = %+v", dep.Spec.Template.Spec.ImagePullSecrets)
-	}
-	if dep.Spec.Template.Spec.AutomountServiceAccountToken == nil || *dep.Spec.Template.Spec.AutomountServiceAccountToken {
-		t.Error("engine pod must not mount a Kubernetes service-account token")
-	}
-	if dep.Spec.Strategy.Type != appsv1.RollingUpdateDeploymentStrategyType {
-		t.Errorf("strategy type = %v", dep.Spec.Strategy.Type)
-	}
-	if dep.Spec.Strategy.RollingUpdate.MaxUnavailable.IntValue() != 0 || dep.Spec.Strategy.RollingUpdate.MaxSurge.IntValue() != 1 {
-		t.Errorf("rolling update = %+v", dep.Spec.Strategy.RollingUpdate)
-	}
-
-	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, wantName+"-env", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("secret not created: %v", err)
-	}
-	for _, want := range []string{"IS_RELEASE", "FLOW_FILE_PATH", "WEBHOOK_ENABLED", "PROJECT_ID", "API_TOKEN", "INTERNAL_TOKEN", "REDIS_ADDR", "MONGO_ADDR", "API_URL"} {
-		if _, ok := secret.Data[want]; !ok {
-			t.Errorf("secret missing key %q (got %v)", want, keysOf(secret.Data))
-		}
-	}
-	if string(secret.Data["PROJECT_ID"]) != projectID.String() {
-		t.Errorf("PROJECT_ID = %q", secret.Data["PROJECT_ID"])
-	}
-
-	cm, err := cs.CoreV1().ConfigMaps("botmother").Get(ctx, wantName+"-flow", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("configmap not created: %v", err)
-	}
-	if cm.Data["flow.json"] != `{"nodes":[]}` {
-		t.Errorf("flow.json = %q", cm.Data["flow.json"])
-	}
-	if cm.Data["schemas.json"] != `{"courses":{"price":"int"}}` {
-		t.Errorf("schemas.json = %q", cm.Data["schemas.json"])
-	}
-	if _, exposed := cm.Data["modules.json"]; exposed {
-		t.Error("modules.json may contain auth tokens and must not be stored in a ConfigMap")
-	}
-	runtimeSecret, err := cs.CoreV1().Secrets("botmother").Get(ctx, wantName+"-runtime", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("runtime secret not created: %v", err)
-	}
-	if string(runtimeSecret.Data["modules.json"]) != `{"modules":[{"slug":"files"}]}` {
-		t.Errorf("modules.json = %q", runtimeSecret.Data["modules.json"])
-	}
-
-	svc, err := cs.CoreV1().Services("botmother").Get(ctx, "bot-"+webhookUUID.String(), metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("service not created: %v", err)
-	}
-	if svc.Spec.Selector["engine-name"] != wantName {
-		t.Errorf("service selector = %+v", svc.Spec.Selector)
-	}
-}
-
-func TestDeploy_Debug_UsesDebugNamingAndDebugEnv(t *testing.T) {
-	ctx := context.Background()
+func TestDeploy_BotRuntimeRequiresOwnerAndWebhook(t *testing.T) {
 	orch, _ := testOrchestrator()
-
-	projectID := uuid.New()
-	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID: projectID,
-		Debug:     true,
-		Flow:      []byte(`{}`),
-	})
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
+	base := DeploySpec{ProjectID: uuid.New(), Flow: []byte(`{"nodes":[]}`)}
+	if _, err := orch.Deploy(context.Background(), base); err == nil {
+		t.Fatal("bot runtime without owner_id must fail")
 	}
-	want := "debug-" + projectID.String()
-	if result.ServiceID != want {
-		t.Fatalf("ServiceID = %q, want %q", result.ServiceID, want)
-	}
-}
-
-func TestDeploy_Release_MapsReleaseBotTokenToBotToken(t *testing.T) {
-	ctx := context.Background()
-	orch, cs := testOrchestrator()
-
-	projectID := uuid.New()
-	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID:   projectID,
-		ReleaseUUID: uuid.New(),
-		Version:     1,
-		Debug:       false,
-		Flow:        []byte(`{}`),
-		Env:         map[string]string{"RELEASE_BOT_TOKEN": "123:release-tok"},
-	})
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("secret not created: %v", err)
-	}
-	if got := string(secret.Data["BOT_TOKEN"]); got != "123:release-tok" {
-		t.Errorf("BOT_TOKEN = %q, want RELEASE_BOT_TOKEN value", got)
-	}
-}
-
-func TestDeploy_Release_ExplicitBotTokenWinsOverReleaseBotToken(t *testing.T) {
-	ctx := context.Background()
-	orch, cs := testOrchestrator()
-
-	projectID := uuid.New()
-	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID:   projectID,
-		ReleaseUUID: uuid.New(),
-		Version:     1,
-		Debug:       false,
-		Flow:        []byte(`{}`),
-		Env:         map[string]string{"BOT_TOKEN": "explicit-tok", "RELEASE_BOT_TOKEN": "123:release-tok"},
-	})
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("secret not created: %v", err)
-	}
-	if got := string(secret.Data["BOT_TOKEN"]); got != "explicit-tok" {
-		t.Errorf("BOT_TOKEN = %q, want explicit value preserved", got)
-	}
-}
-
-func TestDeploy_Debug_DoesNotFallBackToReleaseBotToken(t *testing.T) {
-	ctx := context.Background()
-	orch, cs := testOrchestrator()
-
-	projectID := uuid.New()
-	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID: projectID,
-		Debug:     true,
-		Flow:      []byte(`{}`),
-		Env:       map[string]string{"RELEASE_BOT_TOKEN": "123:release-tok"},
-	})
-	if err != nil {
-		t.Fatalf("Deploy: %v", err)
-	}
-	secret, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("secret not created: %v", err)
-	}
-	// Debug mode must ignore RELEASE_BOT_TOKEN and fall straight through to
-	// the shared TestBotToken fallback (mirrors kubernetes_service.py's
-	// `prefix == "release"` guard).
-	if got := string(secret.Data["BOT_TOKEN"]); got != "test-bot-tok" {
-		t.Errorf("BOT_TOKEN = %q, want TestBotToken fallback", got)
+	base.OwnerID = uuid.New()
+	if _, err := orch.Deploy(context.Background(), base); err == nil {
+		t.Fatal("bot runtime without webhook_uuid must fail")
 	}
 }
 
@@ -269,8 +90,11 @@ func TestDeploy_Module_UsesExplicitNameAndImage(t *testing.T) {
 func TestDeploy_IsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	orch, cs := testOrchestrator()
-	projectID := uuid.New()
-	spec := DeploySpec{ProjectID: projectID, Version: 1, Flow: []byte(`{}`)}
+	spec := DeploySpec{
+		Name:  "module-idempotent",
+		Image: "registry.example/module:1",
+		Env:   map[string]string{"MODULE_SLUG": "idempotent"},
+	}
 
 	if _, err := orch.Deploy(ctx, spec); err != nil {
 		t.Fatalf("first deploy: %v", err)
@@ -289,14 +113,14 @@ func TestDeploy_IsIdempotent(t *testing.T) {
 	}
 }
 
-func TestStop_RemovesDeploymentSecretConfigMapAndService(t *testing.T) {
+func TestStop_RemovesModuleDeploymentSecretAndService(t *testing.T) {
 	ctx := context.Background()
 	orch, cs := testOrchestrator()
-	projectID := uuid.New()
-	webhookUUID := uuid.New()
 
 	result, err := orch.Deploy(ctx, DeploySpec{
-		ProjectID: projectID, Version: 1, Flow: []byte(`{}`), WebhookUUID: webhookUUID,
+		Name:  "module-stop-test",
+		Image: "registry.example/module:1",
+		Env:   map[string]string{"MODULE_SLUG": "stop-test"},
 	})
 	if err != nil {
 		t.Fatalf("deploy: %v", err)
@@ -312,10 +136,7 @@ func TestStop_RemovesDeploymentSecretConfigMapAndService(t *testing.T) {
 	if _, err := cs.CoreV1().Secrets("botmother").Get(ctx, result.ServiceID+"-env", metav1.GetOptions{}); err == nil {
 		t.Error("secret still exists after Stop")
 	}
-	if _, err := cs.CoreV1().ConfigMaps("botmother").Get(ctx, result.ServiceID+"-flow", metav1.GetOptions{}); err == nil {
-		t.Error("configmap still exists after Stop")
-	}
-	if _, err := cs.CoreV1().Services("botmother").Get(ctx, "bot-"+webhookUUID.String(), metav1.GetOptions{}); err == nil {
+	if _, err := cs.CoreV1().Services("botmother").Get(ctx, result.ServiceID, metav1.GetOptions{}); err == nil {
 		t.Error("service still exists after Stop")
 	}
 }
@@ -433,12 +254,4 @@ func TestReconcileStatus(t *testing.T) {
 			}
 		})
 	}
-}
-
-func keysOf(m map[string][]byte) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

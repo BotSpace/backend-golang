@@ -54,7 +54,7 @@ type DebugResponse struct {
 func toResponse(p *Project) ProjectResponse {
 	flow := p.Flow
 	if len(flow) == 0 {
-		flow = json.RawMessage("[]")
+		flow = json.RawMessage(`{"nodes":[],"edges":[]}`)
 	}
 	resp := ProjectResponse{
 		ID:                 p.ID.String(),

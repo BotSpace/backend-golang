@@ -52,12 +52,6 @@ func poolWorkerCommandStream(workerID string) string {
 	return poolWorkerRuntimeBase + workerID + ":commands"
 }
 
-// EnsureOwnerRuntime now means "ensure shared runtime capacity". ownerID is
-// intentionally ignored: creating a user or bot never creates a dedicated pod.
-func (o *KubernetesOrchestrator) EnsureOwnerRuntime(ctx context.Context, _ uuid.UUID) (string, error) {
-	return o.EnsureEnginePool(ctx)
-}
-
 func (o *KubernetesOrchestrator) EnsureEnginePool(ctx context.Context) (string, error) {
 	if o.rdb == nil {
 		return "", errors.New("redis is required for engine pool")
@@ -104,10 +98,6 @@ func (o *KubernetesOrchestrator) EnsureEnginePool(ctx context.Context) (string, 
 		return "", fmt.Errorf("ensure engine pool service: %w", err)
 	}
 	return poolDeploymentName, nil
-}
-
-func (o *KubernetesOrchestrator) deployUserRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
-	return o.deployPoolRuntime(ctx, spec)
 }
 
 func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
@@ -162,8 +152,11 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 	if !spec.Debug && env["BOT_TOKEN"] == "" {
 		env["BOT_TOKEN"] = env["RELEASE_BOT_TOKEN"]
 	}
-	if env["BOT_TOKEN"] == "" {
+	if spec.Debug && env["BOT_TOKEN"] == "" {
 		env["BOT_TOKEN"] = o.cfg.TestBotToken
+	}
+	if env["BOT_TOKEN"] == "" {
+		return DeployResult{}, fmt.Errorf("BOT_TOKEN is required for runtime %s", spec.WebhookUUID)
 	}
 	if spec.Debug {
 		env["DEBUG_MODE"] = "true"
@@ -172,7 +165,19 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 		env["IS_RELEASE"] = "true"
 	}
 
-	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Replicas: replication, Flow: normalizeJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`), Schemas: normalizeJSONObject(spec.Schemas, `{}`), Modules: normalizeJSONObject(spec.Modules, `{"modules":[]}`), Env: env}
+	flow, err := canonicalJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`, "flow")
+	if err != nil {
+		return DeployResult{}, err
+	}
+	schemas, err := canonicalJSONObject(spec.Schemas, `{}`, "schemas")
+	if err != nil {
+		return DeployResult{}, err
+	}
+	modules, err := canonicalJSONObject(spec.Modules, `{"modules":[]}`, "modules")
+	if err != nil {
+		return DeployResult{}, err
+	}
+	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Replicas: replication, Flow: flow, Schemas: schemas, Modules: modules, Env: env}
 	raw, err := json.Marshal(runtime)
 	if err != nil {
 		return DeployResult{}, err
