@@ -65,13 +65,9 @@ func (u *Usecase) Handle(ctx context.Context, raw json.RawMessage) error {
 
 	token, err := u.Repo.GetProjectEnv(ctx, msg.ProjectID, "RELEASE_BOT_TOKEN")
 	if err != nil {
-		// backend release_bot_token fallback: BOT_TOKEN (debug)
-		token, err = u.Repo.GetProjectEnv(ctx, msg.ProjectID, "BOT_TOKEN")
-		if err != nil {
-			u.Log.Error("broadcast: bot token yo'q", zap.String("project", database.UUIDString(msg.ProjectID)))
-			fail()
-			return nil
-		}
+		u.Log.Error("broadcast: release bot token yo'q", zap.String("project", database.UUIDString(msg.ProjectID)))
+		fail()
+		return nil
 	}
 	tg := telegramx.New(token)
 

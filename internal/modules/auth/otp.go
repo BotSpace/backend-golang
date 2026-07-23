@@ -59,7 +59,10 @@ func (s *OTPService) SendConfirm(ctx context.Context, phone string) error {
 		return httpx.Internal(err)
 	}
 
-	code := s.generateCode()
+	code, err := s.generateCode()
+	if err != nil {
+		return httpx.Internal(err)
+	}
 	now := time.Now()
 	resendUnlock := now.Add(s.cfg.ResendAfter)
 	if _, err := s.q.UpsertSmsConfirm(ctx, sqlcdb.UpsertSmsConfirmParams{
@@ -117,20 +120,19 @@ func (s *OTPService) CheckConfirm(ctx context.Context, phone, code string) error
 }
 
 // generateCode returns a random numeric code in prod, or the fixed dev code.
-func (s *OTPService) generateCode() string {
+func (s *OTPService) generateCode() (string, error) {
 	if !s.cfg.Prod {
-		return s.cfg.Default
+		return s.cfg.Default, nil
 	}
 	var b strings.Builder
 	for i := 0; i < s.cfg.Size; i++ {
 		n, err := rand.Int(rand.Reader, big.NewInt(10))
 		if err != nil {
-			// crypto/rand failure is unrecoverable here; fall back to the dev code.
-			return s.cfg.Default
+			return "", fmt.Errorf("generate secure otp: %w", err)
 		}
 		b.WriteString(n.String())
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // subtleEqual compares codes in constant time to avoid leaking length/prefix.

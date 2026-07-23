@@ -14,9 +14,7 @@ import (
 	"github.com/botspace/backend/internal/shared/crypto"
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/httpx"
-	"github.com/botspace/backend/internal/shared/logger"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // claimTTL mirrors Django's cache.set(..., 900) — a wizard-side username
@@ -170,14 +168,8 @@ func (u *usecase) ResolveManagedBotToken(ctx context.Context, managedBotID, owne
 	if err != nil {
 		return "", httpx.Internal(fmt.Errorf("decrypt managed bot token: %w", err))
 	}
-	// Best-effort, same convention as HandleManagedBotWebhook's own upsert —
-	// a failed "used" flip must not fail an otherwise-successful token
-	// resolution (the bot is already about to be attached to the project).
 	if err := u.repo.MarkManagedBotUsed(ctx, bot.ID); err != nil {
-		zap.L().Warn("webhook mark managed bot used failed",
-			logger.String("managed_bot_id", bot.ID.String()),
-			logger.Err(err),
-		)
+		return "", httpx.Internal(fmt.Errorf("mark managed bot used: %w", err))
 	}
 	return string(plain), nil
 }

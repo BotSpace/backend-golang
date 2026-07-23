@@ -51,7 +51,7 @@ type usecase struct {
 	repo   Repository
 	orch   engine.Orchestrator
 	assets RuntimeAssetLoader
-	// pub is nil-able — see NewUsecaseWithEventPublisher's doc comment.
+	// pub may be nil in focused unit tests; production wires Redis publisher.
 	pub wsevents.Publisher
 }
 
@@ -60,30 +60,13 @@ type usecase struct {
 // the cms/plugin modules directly.
 type RuntimeAssetLoader func(ctx context.Context, projectID, ownerID uuid.UUID) (schemas, modules []byte, err error)
 
-func NewUsecase(repo Repository, orch engine.Orchestrator) Usecase {
-	return &usecase{repo: repo, orch: orch}
-}
-
-// NewUsecaseWithEventPublisher wires a real-time event publisher (see
-// internal/shared/wsevents) that broadcasts release/debug status changes to
-// the constructor via the standalone websocket service — mirrors Django's
-// watch_k8s_events._send_ws_notification / ReleaseView.perform_create /
-// ProjectView._start_debug_container's ws_publish calls (core/domain/ws.py
-// EventTypes.RELEASE_STATUS / DEBUG_STATUS). pub may be nil — same
-// degrade-gracefully convention as the rest of this backend's optional deps
-// (see server.go's cms/chat Mongo wiring): nil just means every publish
-// call below no-ops.
-func NewUsecaseWithEventPublisher(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher) Usecase {
-	return &usecase{repo: repo, orch: orch, pub: pub}
-}
-
 func NewUsecaseWithRuntimeAssets(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher, assets RuntimeAssetLoader) Usecase {
 	return &usecase{repo: repo, orch: orch, pub: pub, assets: assets}
 }
 
 func (u *usecase) runtimeAssets(ctx context.Context, projectID, ownerID uuid.UUID) ([]byte, []byte, error) {
 	if u.assets == nil {
-		return []byte(`{}`), []byte(`{"modules":[]}`), nil
+		return nil, nil, fmt.Errorf("engine runtime asset loader is required")
 	}
 	schemas, modules, err := u.assets(ctx, projectID, ownerID)
 	if err != nil {
@@ -117,9 +100,10 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 		if old.ServiceID == "" {
 			continue
 		}
-		// Best-effort like Django's remove_service(): a stop failure on an old
-		// container must not block deploying the new release.
-		_ = u.orch.Stop(ctx, old.ServiceID)
+		if err := u.orch.Stop(ctx, old.ServiceID); err != nil {
+			_, _ = u.repo.UpdateReleaseDeployResult(ctx, rel.ID, "", StatusFailed)
+			return nil, httpx.Internal(fmt.Errorf("stop previous release %s: %w", old.ID, err))
+		}
 	}
 
 	env, err := u.envMap(ctx, projectID)
@@ -128,10 +112,11 @@ func (u *usecase) CreateRelease(ctx context.Context, projectID, ownerID uuid.UUI
 	}
 	env["IS_RELEASE"] = "true"
 
-	// Best-effort: the project row was just proven to exist/be owned above, so
-	// this practically never fails. A failure just means the orchestrator
-	// skips creating the "bot-<uuid>" Service (deployment still proceeds).
-	releaseWebhookUUID, _, _ := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	releaseWebhookUUID, _, err := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	if err != nil {
+		_, _ = u.repo.UpdateReleaseDeployResult(ctx, rel.ID, "", StatusFailed)
+		return nil, httpx.Internal(fmt.Errorf("load project webhook UUID: %w", err))
+	}
 	schemas, modules, err := u.runtimeAssets(ctx, projectID, ownerID)
 	if err != nil {
 		return nil, httpx.Internal(err)

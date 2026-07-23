@@ -146,13 +146,6 @@ type Orchestrator interface {
 	Logs(ctx context.Context, serviceID string, tailLines, sinceSeconds int) (LogSnapshot, error)
 }
 
-// OwnerRuntimeEnsurer is intentionally separate from Orchestrator so local
-// test fakes and non-Kubernetes implementations remain source-compatible.
-// Project creation calls it when supported; registration never does.
-type OwnerRuntimeEnsurer interface {
-	EnsureOwnerRuntime(ctx context.Context, ownerID uuid.UUID) (string, error)
-}
-
 // MongoProvisioner creates/deletes per-project MongoDB databases + users.
 type MongoProvisioner interface {
 	Provision(ctx context.Context, projectID uuid.UUID) (MongoCredentials, error)

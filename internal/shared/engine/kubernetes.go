@@ -17,8 +17,8 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +73,9 @@ type KubernetesOrchestrator struct {
 // back to the local kubeconfig for development against a remote/staging
 // cluster.
 func NewKubernetesOrchestrator(cfg KubernetesConfig) (*KubernetesOrchestrator, error) {
+	if cfg.ImageRepository == "" || cfg.ImageTag == "" || cfg.ImageTag == "latest" {
+		return nil, errors.New("an immutable engine image repository and tag are required")
+	}
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
 		restCfg, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -121,16 +124,25 @@ func newKubernetesOrchestrator(cs kubernetes.Interface, cfg KubernetesConfig) *K
 // ── Deploy ──────────────────────────────────────────────────────────────
 
 func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (DeployResult, error) {
-	if len(spec.Flow) > 0 && spec.OwnerID != uuid.Nil {
-		return o.deployUserRuntime(ctx, spec)
+	if len(spec.Flow) > 0 {
+		if spec.OwnerID == uuid.Nil {
+			return DeployResult{}, errors.New("bot runtime owner_id is required")
+		}
+		if spec.WebhookUUID == uuid.Nil {
+			return DeployResult{}, errors.New("bot runtime webhook_uuid is required")
+		}
+		return o.deployPoolRuntime(ctx, spec)
+	}
+	if spec.Name == "" || spec.Image == "" {
+		return DeployResult{}, errors.New("module deployment requires explicit name and image")
+	}
+	if spec.OwnerID != uuid.Nil || spec.ProjectID != uuid.Nil || spec.WebhookUUID != uuid.Nil {
+		return DeployResult{}, errors.New("module deployment cannot contain bot runtime identity")
 	}
 	name := resolveDeploymentName(spec)
 	ns := o.cfg.Namespace
 
 	labels := map[string]string{"app": "botmother-engine", "engine-name": name}
-	if spec.ProjectID != uuid.Nil {
-		labels["project_id"] = spec.ProjectID.String()
-	}
 
 	port := spec.ContainerPort
 	if port == 0 {
@@ -145,9 +157,6 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 		livenessPath = "/health"
 	}
 	image := spec.Image
-	if image == "" {
-		image = o.cfg.image()
-	}
 
 	env := make(map[string]string, len(spec.Env)+8)
 	for k, v := range spec.Env {
@@ -158,97 +167,6 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 	}
 	var volumeMounts []corev1.VolumeMount
 	var volumes []corev1.Volume
-
-	// Bot-engine convention: a non-empty Flow means this is a release/debug
-	// deploy (not a shared module pod) — mount the flow + wire the runtime
-	// env the golang-engine binary expects.
-	if len(spec.Flow) > 0 {
-		cmName := name + "-flow"
-		// The engine requires all three runtime assets to exist and be valid JSON.
-		// The engine's loader.Schema is an OBJECT ({nodes,edges,...}); a brand-new
-		// project's flow defaults to an empty array `[]` (Django JSONField
-		// default=list parity), which the loader rejects with "cannot unmarshal
-		// array into loader.Schema". Normalize any non-object flow to an empty
-		// schema so tokensiz/debug bots with no flow yet still boot.
-		flowJSON := strings.TrimSpace(string(spec.Flow))
-		if flowJSON == "" || flowJSON[0] == '[' {
-			flowJSON = `{"nodes":[],"edges":[]}`
-		}
-		schemasJSON := strings.TrimSpace(string(spec.Schemas))
-		if schemasJSON == "" || schemasJSON[0] != '{' {
-			schemasJSON = `{}`
-		}
-		modulesJSON := strings.TrimSpace(string(spec.Modules))
-		if modulesJSON == "" || modulesJSON[0] != '{' {
-			modulesJSON = `{"modules":[]}`
-		}
-		cmData := map[string]string{"flow.json": flowJSON, "schemas.json": schemasJSON}
-		if err := o.ensureConfigMap(ctx, cmName, cmData); err != nil {
-			return DeployResult{}, fmt.Errorf("ensure flow configmap: %w", err)
-		}
-		runtimeSecretName := name + "-runtime"
-		if err := o.ensureDataSecret(ctx, runtimeSecretName, map[string][]byte{"modules.json": []byte(modulesJSON)}); err != nil {
-			return DeployResult{}, fmt.Errorf("ensure runtime asset secret: %w", err)
-		}
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: "flow-volume", MountPath: "/app/assets", ReadOnly: true})
-		volumes = append(volumes, corev1.Volume{
-			Name: "flow-volume",
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{
-					{ConfigMap: &corev1.ConfigMapProjection{LocalObjectReference: corev1.LocalObjectReference{Name: cmName}}},
-					{Secret: &corev1.SecretProjection{LocalObjectReference: corev1.LocalObjectReference{Name: runtimeSecretName}}},
-				}},
-			},
-		})
-
-		env["FLOW_FILE_PATH"] = "/app/assets/flow.json"
-		env["SCHEMAS_FILE_PATH"] = "/app/assets/schemas.json"
-		env["MODULE_CONFIG_PATH"] = "/app/assets/modules.json"
-		env["WEBHOOK_ENABLED"] = "true"
-		env["WEBHOOK_PORT"] = strconv.Itoa(port)
-		if o.cfg.RedisAddr != "" {
-			env["REDIS_ENABLED"] = "true"
-			env["REDIS_ADDR"] = o.cfg.RedisAddr
-			env["REDIS_PASSWORD"] = o.cfg.RedisPassword
-			env["REDIS_PREFIX"] = redisPrefix(spec, name)
-			// Route debug node/context/error events over the backend:events Redis
-			// stream (consumed by startEventConsumer, which forwards them to the
-			// constructor's WS room). Without this the engine falls back to HTTP
-			// POST /api/debug/node-event/ — an endpoint the Go backend doesn't
-			// serve (Django did) — so every node/context event 404s and the
-			// constructor never sees node colors / variables / error alerts.
-			env["BACKEND_EVENTS_STREAM"] = "true"
-		}
-		if o.cfg.MongoAddr != "" {
-			env["MONGO_ADDR"] = o.cfg.MongoAddr
-			env["MONGO_DB_NAME"] = o.cfg.MongoDBName
-		}
-		if spec.ProjectID != uuid.Nil {
-			env["PROJECT_ID"] = spec.ProjectID.String()
-		}
-		if o.cfg.InternalToken != "" {
-			env["API_TOKEN"] = o.cfg.InternalToken
-			env["INTERNAL_TOKEN"] = o.cfg.InternalToken
-		}
-		// Mirrors kubernetes_service.py:680-685: for a release (not debug)
-		// deploy, an explicit BOT_TOKEN env wins; otherwise fall back to the
-		// project's RELEASE_BOT_TOKEN (set on the project via its token field
-		// or the set-bot-token flow), and only then to the shared test token.
-		if _, ok := env["BOT_TOKEN"]; !ok && !spec.Debug {
-			if releaseToken, ok := env["RELEASE_BOT_TOKEN"]; ok && releaseToken != "" {
-				env["BOT_TOKEN"] = releaseToken
-			}
-		}
-		if _, ok := env["BOT_TOKEN"]; !ok && o.cfg.TestBotToken != "" {
-			env["BOT_TOKEN"] = o.cfg.TestBotToken
-		}
-		if spec.Debug {
-			env["DEBUG_MODE"] = "true"
-			if o.cfg.InternalToken != "" {
-				env["DEBUG_EVENT_TOKEN"] = o.cfg.InternalToken
-			}
-		}
-	}
 
 	secretName := name + "-env"
 	if err := o.ensureEnvSecret(ctx, secretName, env); err != nil {
@@ -273,21 +191,8 @@ func (o *KubernetesOrchestrator) Deploy(ctx context.Context, spec DeploySpec) (D
 		return DeployResult{}, fmt.Errorf("apply deployment %s: %w", name, err)
 	}
 
-	// Service: bot engines get "bot-<webhook uuid>" (stable across redeploys —
-	// ingress/routing depends on this name, not the deployment name). Shared
-	// module pods get "<name>" itself (see plugin.sharedEndpoint's DNS call).
-	if spec.WebhookUUID != uuid.Nil {
-		if err := o.applyService(ctx, "bot-"+spec.WebhookUUID.String(), name, labels, int32(port), int32(port)); err != nil {
-			// Non-fatal: Django also swallowed Service creation errors and let
-			// the Deployment stand (a manual Service can be created later).
-			return DeployResult{ServiceID: name, Status: StatusInitializing}, nil //nolint:nilerr
-		}
-	} else if len(spec.Flow) == 0 {
-		// Module deploy: Name was pre-set by the caller, so the Service name
-		// equals the Deployment name.
-		if err := o.applyService(ctx, name, name, labels, int32(port), int32(port)); err != nil {
-			return DeployResult{ServiceID: name, Status: StatusInitializing}, nil //nolint:nilerr
-		}
+	if err := o.applyService(ctx, name, name, labels, int32(port), int32(port)); err != nil {
+		return DeployResult{}, fmt.Errorf("apply module service: %w", err)
 	}
 
 	return DeployResult{ServiceID: name, Status: StatusInitializing}, nil

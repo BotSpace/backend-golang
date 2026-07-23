@@ -377,12 +377,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("engine.mode", "") // "" = auto (k8s in production, stub otherwise)
 	v.SetDefault("engine.namespace", "botmother")
 	v.SetDefault("engine.image_repository", "registry.iprogrammer.uz/botspace/golang-engine")
-	// The live cluster's engine tag moves independently of this backend (it
-	// was e.g. "3.5.87-prod" at the time of writing — Django tracked it in an
-	// admin-editable DB setting, engine_version()). "latest" here is only a
-	// safe fallback; set APP_ENGINE_IMAGE_TAG in the deploy env to whatever
-	// tag is currently promoted so releases don't pin to a stale/missing one.
-	v.SetDefault("engine.image_tag", "latest")
+	// Deploy configuration must provide an immutable promoted engine tag.
+	v.SetDefault("engine.image_tag", "")
 	v.SetDefault("engine.registry_secret_name", "registry-secret")
 	v.SetDefault("engine.redis_host", "redis")
 	v.SetDefault("engine.redis_port", "6379")

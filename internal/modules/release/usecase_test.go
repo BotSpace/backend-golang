@@ -9,8 +9,21 @@ import (
 
 	"github.com/botspace/backend/internal/shared/database"
 	"github.com/botspace/backend/internal/shared/engine"
+	"github.com/botspace/backend/internal/shared/wsevents"
 	"github.com/google/uuid"
 )
+
+func testRuntimeAssets(context.Context, uuid.UUID, uuid.UUID) ([]byte, []byte, error) {
+	return []byte(`{}`), []byte(`{"modules":[]}`), nil
+}
+
+func newTestUsecase(repo Repository, orch engine.Orchestrator) Usecase {
+	return NewUsecaseWithRuntimeAssets(repo, orch, nil, testRuntimeAssets)
+}
+
+func newTestUsecaseWithPublisher(repo Repository, orch engine.Orchestrator, pub wsevents.Publisher) Usecase {
+	return NewUsecaseWithRuntimeAssets(repo, orch, pub, testRuntimeAssets)
+}
 
 // fakeRepo is an in-memory Repository for usecase tests — no DB required.
 // It only enforces the one invariant the tests below care about: every
@@ -334,7 +347,7 @@ func (f *fakePublisher) last() (publishCall, bool) {
 func TestCreateReleaseStopsPriorActiveReleases(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
-	uc := NewUsecase(repo, orch)
+	uc := newTestUsecase(repo, orch)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -403,7 +416,7 @@ func TestCreateReleaseRegistersTelegramWebhook(t *testing.T) {
 	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
 	t.Setenv("DOMAIN", "hooks.example")
 
-	rel, err := NewUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
+	rel, err := newTestUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
 	if err != nil {
 		t.Fatalf("CreateRelease: %v", err)
 	}
@@ -430,7 +443,7 @@ func TestCreateReleaseFailsAndStopsRuntimeWhenWebhookRegistrationFails(t *testin
 	telegramAPIBaseURL = server.URL
 	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
 
-	rel, err := NewUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
+	rel, err := newTestUsecase(repo, orch).CreateRelease(context.Background(), projectID, ownerID)
 	if err == nil {
 		t.Fatal("expected webhook registration failure")
 	}
@@ -451,7 +464,7 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
 	orch.status = engine.StatusInitializing // Deploy() reports this at create time
-	uc := NewUsecase(repo, orch)
+	uc := newTestUsecase(repo, orch)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -518,7 +531,7 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 // instead of erroring, and a project owned by someone else is rejected.
 func TestUpsertEnvironmentIsIdempotentByKey(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, newFakeOrchestrator())
+	uc := newTestUsecase(repo, newFakeOrchestrator())
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -565,7 +578,7 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
 	pub := &fakePublisher{}
-	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	uc := newTestUsecaseWithPublisher(repo, orch, pub)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -605,7 +618,7 @@ func TestCreateReleasePublishesWSEvent(t *testing.T) {
 func TestPublishStatus_OwnerLookupFails_SkipsPublish(t *testing.T) {
 	repo := newFakeRepo()
 	pub := &fakePublisher{}
-	uc := NewUsecaseWithEventPublisher(repo, newFakeOrchestrator(), pub)
+	uc := newTestUsecaseWithPublisher(repo, newFakeOrchestrator(), pub)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -633,7 +646,7 @@ func TestReconcileReleasePublishesWSEventOnStatusChange(t *testing.T) {
 	orch := newFakeOrchestrator()
 	orch.status = engine.StatusInitializing
 	pub := &fakePublisher{}
-	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	uc := newTestUsecaseWithPublisher(repo, orch, pub)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -668,7 +681,7 @@ func TestStartDebugPublishesWSEvent(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
 	pub := &fakePublisher{}
-	uc := NewUsecaseWithEventPublisher(repo, orch, pub)
+	uc := newTestUsecaseWithPublisher(repo, orch, pub)
 	ctx := context.Background()
 
 	ownerID := uuid.New()
@@ -707,7 +720,7 @@ func TestRuntimeReplicasFromProjectEnvironment(t *testing.T) {
 // path, matching every other optional-dependency convention in this backend.
 func TestPublishSkippedWhenNoPublisherWired(t *testing.T) {
 	repo := newFakeRepo()
-	uc := NewUsecase(repo, newFakeOrchestrator())
+	uc := newTestUsecase(repo, newFakeOrchestrator())
 	ctx := context.Background()
 
 	ownerID := uuid.New()

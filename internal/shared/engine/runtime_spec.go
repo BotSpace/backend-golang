@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -23,10 +24,13 @@ type storedRuntimeSpec struct {
 	Env       map[string]string `json:"env"`
 }
 
-func normalizeJSONObject(raw []byte, fallback string) json.RawMessage {
+func canonicalJSONObject(raw []byte, empty string, field string) (json.RawMessage, error) {
 	trimmed := strings.TrimSpace(string(raw))
-	if trimmed == "" || trimmed[0] != '{' {
-		return json.RawMessage(fallback)
+	if trimmed == "" {
+		return json.RawMessage(empty), nil
 	}
-	return append(json.RawMessage(nil), raw...)
+	if !json.Valid(raw) || trimmed[0] != '{' {
+		return nil, fmt.Errorf("%s must be a JSON object", field)
+	}
+	return append(json.RawMessage(nil), raw...), nil
 }
