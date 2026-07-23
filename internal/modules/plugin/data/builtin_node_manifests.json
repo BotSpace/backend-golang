@@ -7952,6 +7952,7 @@
     "sidebar": { "enabled": true, "groupId": "ai_tools", "sortOrder": 39, "elementType": "ai_tool_kanban" },
     "handles": [{ "preset": "source-top" }],
     "content": [
+      { "type": "board-select", "key": "boardId", "columnKey": "columnId", "label": "Board va boshlang‘ich ustun" },
       { "type": "widget", "widgetKey": "aiKanbanToolConfig" },
       { "type": "select", "key": "operation", "label": "Ruxsat etilgan amal", "options": [
         { "value": "upsert", "label": "Yaratish yoki yangilash" }, { "value": "create", "label": "Yangi yaratish" },
