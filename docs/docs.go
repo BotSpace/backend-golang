@@ -12337,6 +12337,9 @@ const docTemplate = `{
                         "type": "integer"
                     }
                 },
+                "managed_bot_id": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,

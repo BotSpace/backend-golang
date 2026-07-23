@@ -743,6 +743,12 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 	if in.Token != nil {
 		token = *in.Token
 	}
+	if strings.TrimSpace(token) == "" && in.ManagedBotID != nil && strings.TrimSpace(*in.ManagedBotID) != "" {
+		token, err = u.resolveManagedBotToken(ctx, *in.ManagedBotID, ownerID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := u.applyToken(ctx, p, ownerID, token); err != nil {
 		return nil, err
 	}

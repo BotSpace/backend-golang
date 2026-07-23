@@ -2,8 +2,8 @@ package project
 
 import (
 	"strconv"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/botspace/backend/internal/shared/httpx"
 	"github.com/botspace/backend/internal/shared/middleware"
@@ -263,11 +263,12 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	p, err := h.uc.Update(c.Request.Context(), id, ownerID, UpdateInput{
-		Name:        req.Name,
-		Description: req.Description,
-		Username:    req.Username,
-		Flow:        req.Flow,
-		Token:       req.Token,
+		Name:         req.Name,
+		Description:  req.Description,
+		Username:     req.Username,
+		Flow:         req.Flow,
+		Token:        req.Token,
+		ManagedBotID: req.ManagedBotID,
 	})
 	if err != nil {
 		httpx.Error(c, err)
