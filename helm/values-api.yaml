@@ -66,7 +66,7 @@ env:
   - name: APP_OTP_PROD
     value: "true"
   - name: APP_ENGINE_IMAGE_TAG
-    value: "4.0.4-prod"
+    value: "4.0.6-prod"
   - name: APP_ENGINE_POOL_SIZE
     value: "3"
   - name: APP_ENGINE_RUNTIME_REPLICAS
