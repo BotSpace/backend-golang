@@ -7952,8 +7952,7 @@
     "sidebar": { "enabled": true, "groupId": "ai_tools", "sortOrder": 39, "elementType": "ai_tool_kanban" },
     "handles": [{ "preset": "source-top" }],
     "content": [
-      { "type": "textarea", "key": "description", "label": "Tavsif (LLM uchun)", "rows": 3, "placeholder": "Qachon karta yaratish kerakligini yozing" },
-      { "type": "board-select", "key": "boardId", "columnKey": "columnId", "label": "Board va boshlang'ich ustun" },
+      { "type": "widget", "widgetKey": "aiKanbanToolConfig" },
       { "type": "select", "key": "operation", "label": "Ruxsat etilgan amal", "options": [
         { "value": "upsert", "label": "Yaratish yoki yangilash" }, { "value": "create", "label": "Yangi yaratish" },
         { "value": "update", "label": "Yangilash" }, { "value": "move", "label": "Ko'chirish" }, { "value": "archive", "label": "Arxivlash" }
@@ -7961,7 +7960,7 @@
       { "type": "text", "key": "externalKeyTemplate", "label": "Takrorlanmas kalit", "placeholder": "{{chat_id}}", "helpText": "AI bu xavfsiz qiymatni o'zgartira olmaydi. Bir suhbat uchun bitta karta kerak bo'lsa {{chat_id}} qoldiring." },
       { "type": "text", "key": "cardIdTemplate", "label": "Karta ID shabloni", "placeholder": "{{kanban_card_id}}", "optional": true, "defaultVisible": false, "helpText": "Update, move va archive amallari uchun. externalKey orqali topilsa bo'sh qolishi mumkin." }
     ],
-    "defaults": { "tool": "kanban_card", "toolName": "save_to_kanban", "description": "Suhbatdan muhim lead, vazifa yoki buyurtmani ish boardiga saqla.", "boardId": "", "columnId": "", "operation": "upsert", "externalKeyTemplate": "{{chat_id}}", "cardIdTemplate": "" },
+    "defaults": { "tool": "kanban_card", "toolName": "save_to_kanban", "description": "Suhbatdan muhim lead, vazifa yoki buyurtmani ish boardiga saqla.", "boardId": "", "columnId": "", "operation": "upsert", "externalKeyTemplate": "{{chat_id}}", "cardIdTemplate": "", "titleConfig": { "source": "ai", "value": "", "aiDescription": "Suhbatdan kelib chiqib qisqa va aniq karta sarlavhasi yozing." }, "descriptionConfig": { "source": "ai", "value": "", "aiDescription": "Suhbatdagi karta uchun muhim tafsilotlarni yozing." }, "customFieldConfig": {} },
     "aiDoc": "AIAgentNode acc:ai_tool portiga ulanadi. Mutation Redis Stream orqali asinxron yuboriladi. Builder operation, boardId, columnId, projectId, externalKeyTemplate va cardIdTemplate scope'larini qat'iy belgilaydi; AI almashtira olmaydi. upsert/create/update da AI title, description, priority beradi; move/archive fixed reference bilan ishlaydi. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun Kanban kartani yaratish/yangilash tool'i",
     "agentCategory": "ai",
