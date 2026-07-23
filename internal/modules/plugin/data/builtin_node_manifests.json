@@ -7958,7 +7958,7 @@
         { "value": "upsert", "label": "Yaratish yoki yangilash" }, { "value": "create", "label": "Yangi yaratish" },
         { "value": "update", "label": "Yangilash" }, { "value": "move", "label": "Ko'chirish" }, { "value": "archive", "label": "Arxivlash" }
       ]},
-      { "type": "text", "key": "externalKeyTemplate", "label": "Takrorlanmas kalit", "placeholder": "{{chat_id}}", "helpText": "AI bu xavfsiz qiymatni o'zgartira olmaydi. Bir suhbat uchun bitta karta kerak bo'lsa {{chat_id}} qoldiring." },
+      { "type": "text", "key": "externalKeyTemplate", "label": "Takrorlanmas kalit", "placeholder": "{{chat_id}}", "optional": true, "defaultVisible": false, "helpText": "Ixtiyoriy. Bir suhbat uchun bitta karta kerak bo'lsa {{chat_id}} qoldiring; bo'sh qoldirilsa yangi karta uchun avtomatik kalit yaratiladi." },
       { "type": "text", "key": "cardIdTemplate", "label": "Karta ID shabloni", "placeholder": "{{kanban_card_id}}", "optional": true, "defaultVisible": false, "helpText": "Update, move va archive amallari uchun. externalKey orqali topilsa bo'sh qolishi mumkin." }
     ],
     "defaults": { "tool": "kanban_card", "toolName": "save_to_kanban", "description": "Suhbatdan muhim lead, vazifa yoki buyurtmani ish boardiga saqla.", "boardId": "", "columnId": "", "operation": "upsert", "externalKeyTemplate": "{{chat_id}}", "cardIdTemplate": "", "titleConfig": { "source": "ai", "value": "", "aiDescription": "Suhbatdan kelib chiqib qisqa va aniq karta sarlavhasi yozing." }, "descriptionConfig": { "source": "ai", "value": "", "aiDescription": "Suhbatdagi karta uchun muhim tafsilotlarni yozing." }, "customFieldConfig": {} },
