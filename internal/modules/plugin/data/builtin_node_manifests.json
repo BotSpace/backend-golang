@@ -4980,12 +4980,6 @@
     ],
     "content": [
       {
-        "type": "text",
-        "key": "toolName",
-        "label": "Tool nomi",
-        "placeholder": "collection_debts"
-      },
-      {
         "type": "textarea",
         "key": "systemPrompt",
         "labelKey": "constructor.ai.agent.fields.systemPrompt",
@@ -7256,7 +7250,8 @@
         "key": "spreadsheet_id",
         "label": "Jadval (Spreadsheet)",
         "resource": "google_spreadsheets",
-        "credentialKey": "credential_id"
+        "credentialKey": "credential_id",
+        "allowCustom": false
       },
       {
         "type": "dynamic_select",
@@ -7264,6 +7259,7 @@
         "label": "Varaq (Sheet)",
         "resource": "google_sheet_tabs",
         "credentialKey": "credential_id",
+        "allowCustom": false,
         "dependsOn": [
           "spreadsheet_id"
         ]
@@ -7584,66 +7580,68 @@
     ],
     "content": [
       {
-        "type": "credential",
-        "key": "credential_id",
-        "credentialType": "google_sheets",
-        "label": "Google Sheets Credential",
-        "required": true
-      },
-      {
-        "type": "text",
-        "key": "spreadsheetId",
-        "label": "Spreadsheet ID",
-        "placeholder": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
-        "helpText": "Google Sheets spreadsheet ID from the URL."
-      },
-      {
-        "type": "text",
-        "key": "sheet",
-        "label": "Sheet Name",
-        "placeholder": "Sheet1"
-      },
-      {
         "type": "select",
         "key": "operation",
-        "label": "Operation",
+        "label": "Amal",
         "options": [
           {
             "value": "read",
-            "label": "Read"
+            "label": "Qatorlarni o'qish"
           },
           {
             "value": "append",
-            "label": "Append"
+            "label": "Qator qo'shish"
           },
           {
             "value": "update",
-            "label": "Update"
+            "label": "Kataklarni yangilash"
           },
           {
             "value": "clear",
-            "label": "Clear"
-          },
-          {
-            "value": "list_tabs",
-            "label": "List tabs"
-          },
-          {
-            "value": "list_spreadsheets",
-            "label": "List spreadsheets"
+            "label": "Kataklarni tozalash"
           }
         ],
         "variant": "tabs"
+      },
+      {
+        "type": "credential",
+        "key": "credential_id",
+        "credentialType": "google_sheets",
+        "label": "Google Sheets credential",
+        "required": true
+      },
+      {
+        "type": "dynamic_select",
+        "key": "spreadsheet_id",
+        "label": "Jadval (Spreadsheet)",
+        "resource": "google_spreadsheets",
+        "credentialKey": "credential_id",
+        "allowCustom": false
+      },
+      {
+        "type": "dynamic_select",
+        "key": "sheet",
+        "label": "Varaq (Sheet)",
+        "resource": "google_sheet_tabs",
+        "credentialKey": "credential_id",
+        "allowCustom": false,
+        "dependsOn": [
+          "spreadsheet_id"
+        ]
+      },
+      {
+        "type": "widget",
+        "widgetKey": "aiToolParamConfig"
       }
     ],
     "defaults": {
       "tool": "google_sheets",
       "credential_id": "",
-      "spreadsheetId": "",
-      "sheet": "Sheet1",
+      "spreadsheet_id": "",
+      "sheet": "",
       "operation": "read"
     },
-    "aiDoc": "Google Sheets tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='google_sheets'. Credential bilan sheet'ni KO'RISH (read, list_tabs) va BOSHQARISH (append, update, clear) — lookup jadval, log, buyurtma jurnali. LLM runtime'da operation'ni O'ZI tanlaydi (node'da static EMAS). Operatsiyalar: read (range'dan qatorlar o'qish), append (qator(lar) qo'shish, values 2D), update (range'ga values yozish, values 2D), clear (range'ni tozalash), list_tabs (sahifa/tab nomlari ro'yxati). Runtime args: operation, spreadsheet_id, sheet, range, values. CREDENTIAL MAJBURIY: credential_id — type_key 'google_sheets' OAuth. Qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ULASH linkini ber (API orqali YARATIB BO'LMAYDI); ulangach qayta list qilib credential_id ol. Ixtiyoriy default'lar: spreadsheetId, sheet, operation. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
+    "aiDoc": "Google Sheets tool sub-node. AIAgentNode'ning acc:ai_tool portiga ulanadi. tool='google_sheets'. Amal, credential, spreadsheet va sheet konstruktor tomonidan aniq tanlanadi; agent ularni o'zgartirmaydi. read qatorlarni o'qiydi; append yangi qator(lar) qo'shadi; update tanlangan range'ga yozadi; clear tanlangan range'ni tozalaydi. range va values parametrlarining har biri paramConfig orqali fixed yoki ai bo'ladi: fixed bo'lsa foydalanuvchi qiymatni yozadi va AI uni ko'rmaydi/o'zgartirmaydi; ai bo'lsa aiDescription agentga parametrni qanday to'ldirishni tushuntiradi. values 2D JSON array. CREDENTIAL MAJBURIY: credential_id — type_key 'google_sheets' OAuth. Qurishdan OLDIN credentials.list(type_key='google_sheets'); yo'q bo'lsa credentials.connect_oauth(type_key='google_sheets') bilan ulash linkini ber; credential tanlangach spreadsheet_id `google_spreadsheets`, sheet esa `google_sheet_tabs` resource optionlaridan tanlanadi. Edge: source=<this_id>, sourceHandle='source-default', target=<agent_id>, targetHandle='acc:ai_tool'.",
     "summary": "AI agent uchun Google Sheets tool'i (o'qish/boshqarish)",
     "agentCategory": "ai",
     "sourceHandles": [

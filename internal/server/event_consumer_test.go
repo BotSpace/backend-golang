@@ -106,6 +106,7 @@ func TestNodeExecutionWSPayloadCarriesExecutionIdentity(t *testing.T) {
 		Seq:         7,
 		ExecutionID: executionID,
 		Attempt:     3,
+		RuntimeMode: "debug",
 	}
 
 	got := nodeExecutionWSPayload(projectID.String(), payload)
@@ -114,5 +115,8 @@ func TestNodeExecutionWSPayloadCarriesExecutionIdentity(t *testing.T) {
 	}
 	if got["attempt"] != int32(3) {
 		t.Fatalf("expected attempt 3, got %#v", got["attempt"])
+	}
+	if got["runtime_mode"] != "debug" {
+		t.Fatalf("expected debug runtime mode, got %#v", got["runtime_mode"])
 	}
 }

@@ -680,23 +680,26 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			t := time.Unix(payload.TS, 0).UTC()
 			eventTS = &t
 		}
-		if err := debugUC.RecordNodeEvent(ctx, debugmod.RecordNodeEventInput{
-			ProjectRef: payload.ProjectID,
-			ChatID:     payload.ChatID,
-			NodeID:     payload.NodeID,
-			NodeType:   payload.NodeType,
-			Status:     payload.Status,
-			Error:      payload.Error,
-			RunID:      payload.RunID,
-			Seq:        payload.Seq,
-			EventTS:    eventTS,
-		}); err != nil {
-			return err
+		isDebugRuntime := payload.RuntimeMode == "" || payload.RuntimeMode == "debug"
+		if isDebugRuntime {
+			if err := debugUC.RecordNodeEvent(ctx, debugmod.RecordNodeEventInput{
+				ProjectRef: payload.ProjectID,
+				ChatID:     payload.ChatID,
+				NodeID:     payload.NodeID,
+				NodeType:   payload.NodeType,
+				Status:     payload.Status,
+				Error:      payload.Error,
+				RunID:      payload.RunID,
+				Seq:        payload.Seq,
+				EventTS:    eventTS,
+			}); err != nil {
+				return err
+			}
 		}
 		// Live canvas feedback must not depend on the durable execution ledger.
 		// Publish first; if the idempotent ledger write below fails, Redis keeps
 		// the event pending and retries it after restart without freezing the UI.
-		if wsPub != nil {
+		if isDebugRuntime && wsPub != nil {
 			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.node_event", payload.ProjectID); ok {
 				wsPub.Publish(ctx, room, wsevents.EventNodeExecution, nodeExecutionWSPayload(project, payload))
 			}
@@ -734,21 +737,29 @@ func (s *Server) startEventConsumer(ctx context.Context, debugUC debugmod.Usecas
 			t := time.Unix(payload.TS, 0).UTC()
 			eventTS = &t
 		}
-		if err := debugUC.RecordContext(ctx, debugmod.RecordContextEventInput{
-			ProjectRef: payload.ProjectID,
-			ChatID:     payload.ChatID,
-			Variables:  payload.Variables,
-			EventTS:    eventTS,
-		}); err != nil {
-			return err
+		isDebugRuntime := payload.RuntimeMode == "" || payload.RuntimeMode == "debug"
+		if isDebugRuntime {
+			if err := debugUC.RecordContext(ctx, debugmod.RecordContextEventInput{
+				ProjectRef: payload.ProjectID,
+				ChatID:     payload.ChatID,
+				Variables:  payload.Variables,
+				EventTS:    eventTS,
+			}); err != nil {
+				return err
+			}
 		}
-		if wsPub != nil {
+		if isDebugRuntime && wsPub != nil {
 			if room, project, ok := s.wsForwardTarget(ctx, debugUC, "debug.context_event", payload.ProjectID); ok {
 				wsPub.Publish(ctx, room, wsevents.EventContext, map[string]any{
-					"project":   project,
-					"chat_id":   payload.ChatID,
-					"variables": payload.Variables,
-					"ts":        payload.TS,
+					"project":      project,
+					"chat_id":      payload.ChatID,
+					"variables":    payload.Variables,
+					"node_id":      payload.NodeID,
+					"changes":      payload.Changes,
+					"removed":      payload.Removed,
+					"run_id":       payload.RunID,
+					"runtime_mode": payload.RuntimeMode,
+					"ts":           payload.TS,
 				})
 			}
 		}
@@ -840,6 +851,7 @@ type debugNodeEventPayload struct {
 	Seq         int64  `json:"seq"`
 	ExecutionID string `json:"execution_id"`
 	Attempt     int32  `json:"attempt"`
+	RuntimeMode string `json:"runtime_mode"`
 }
 
 func nodeExecutionWSPayload(project string, payload debugNodeEventPayload) map[string]any {
@@ -855,6 +867,7 @@ func nodeExecutionWSPayload(project string, payload debugNodeEventPayload) map[s
 		"seq":          payload.Seq,
 		"execution_id": payload.ExecutionID,
 		"attempt":      payload.Attempt,
+		"runtime_mode": payload.RuntimeMode,
 	}
 }
 
@@ -887,10 +900,15 @@ func eventTSOrNow(ts *time.Time) time.Time {
 // raw JSON: this backend only caches it (Redis SET, no schema), never
 // interprets its shape.
 type debugContextEventPayload struct {
-	ProjectID string          `json:"project_id"`
-	ChatID    int64           `json:"chat_id"`
-	Variables json.RawMessage `json:"variables"`
-	TS        int64           `json:"ts"`
+	ProjectID   string          `json:"project_id"`
+	ChatID      int64           `json:"chat_id"`
+	Variables   json.RawMessage `json:"variables"`
+	NodeID      string          `json:"node_id"`
+	Changes     json.RawMessage `json:"changes"`
+	Removed     []string        `json:"removed"`
+	RunID       int64           `json:"run_id"`
+	RuntimeMode string          `json:"runtime_mode"`
+	TS          int64           `json:"ts"`
 }
 
 // buildOrchestrator picks the engine.Orchestrator implementation: the real
