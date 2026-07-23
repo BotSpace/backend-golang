@@ -206,7 +206,53 @@ func NewUsecaseWithMetrics(uc Usecase, metrics MetricsProvider) Usecase {
 }
 
 func (u *usecase) Create(ctx context.Context, in CreateInput) (*Project, error) {
+	in.Flow = starterFlowIfEmpty(in.Flow)
 	return u.create(ctx, in, true)
+}
+
+// starterFlowIfEmpty gives a new blank project a useful first-run flow instead
+// of an empty canvas. Existing/imported flows remain untouched.
+func starterFlowIfEmpty(raw json.RawMessage) json.RawMessage {
+	if len(strings.TrimSpace(string(raw))) == 0 || string(raw) == "null" {
+		return starterFlow()
+	}
+
+	var decoded struct {
+		Nodes []json.RawMessage `json:"nodes"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err == nil && len(decoded.Nodes) == 0 {
+		return starterFlow()
+	}
+	return raw
+}
+
+func starterFlow() json.RawMessage {
+	return json.RawMessage(`{
+		"nodes": [
+			{
+				"id": "starter-trigger",
+				"type": "CommandTriggerNode",
+				"position": {"x": 80, "y": 180},
+				"data": {"command": "start", "withArgs": false, "global": true}
+			},
+			{
+				"id": "starter-greeting",
+				"type": "SendTextMessageNode",
+				"position": {"x": 420, "y": 180},
+				"data": {
+					"recipients": {"sendToSender": true, "additionalIds": []},
+					"messageText": "Salom! Botimizga xush kelibsiz 👋",
+					"parseMode": "HTML",
+					"disableNotification": false,
+					"protectContent": false,
+					"keyboard": {"active": "inline", "inline": [], "reply": []}
+				}
+			}
+		],
+		"edges": [
+			{"id": "starter-edge", "source": "starter-trigger", "target": "starter-greeting", "sourceHandle": "source-handler"}
+		]
+	}`)
 }
 
 // create contains the shared persistence/provisioning path. autoStartDebug is
