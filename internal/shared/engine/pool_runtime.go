@@ -15,8 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -52,61 +50,13 @@ func poolWorkerCommandStream(workerID string) string {
 	return poolWorkerRuntimeBase + workerID + ":commands"
 }
 
-func (o *KubernetesOrchestrator) EnsureEnginePool(ctx context.Context) (string, error) {
-	if o.rdb == nil {
-		return "", errors.New("redis is required for engine pool")
-	}
-	env := map[string]string{
-		"REDIS_ENABLED": "true", "REDIS_ADDR": o.cfg.RedisAddr,
-		"REDIS_PASSWORD": o.cfg.RedisPassword, "LOG_LEVEL": "info", "BOT_RUNTIME_PATH": "/app/bot",
-		"RUNTIME_IDLE_TIMEOUT": o.cfg.RuntimeIdleTimeout,
-	}
-	if o.cfg.APIURL != "" {
-		env["API_URL"] = o.cfg.APIURL
-	}
-	if o.cfg.InternalToken != "" {
-		env["API_TOKEN"] = o.cfg.InternalToken
-		env["INTERNAL_TOKEN"] = o.cfg.InternalToken
-	}
-	if o.cfg.MongoAddr != "" {
-		env["MONGO_ADDR"] = o.cfg.MongoAddr
-		env["MONGO_DB_NAME"] = o.cfg.MongoDBName
-	}
-	secretName := poolDeploymentName + "-env"
-	if err := o.ensureEnvSecret(ctx, secretName, env); err != nil {
-		return "", fmt.Errorf("ensure pool env: %w", err)
-	}
-	labels := map[string]string{"app": "botmother-engine-pool", "engine-name": poolDeploymentName}
-	dep := buildDeployment(buildDeploymentInput{Namespace: o.cfg.Namespace, Name: poolDeploymentName, Image: o.cfg.image(), Labels: labels, SecretName: secretName, Port: 8000, ReadinessPath: "/ready", LivenessPath: "/health", RegistrySecret: o.cfg.RegistrySecretName, Command: []string{"/app/supervisor"}})
-	replicas := int32(o.cfg.PoolSize)
-	dep.Spec.Replicas = &replicas
-	dep.Spec.Template.Spec.Hostname = ""
-	dep.Spec.Template.Spec.Subdomain = ""
-	dep.Spec.Template.Spec.Containers[0].Env = append(dep.Spec.Template.Spec.Containers[0].Env,
-		corev1.EnvVar{Name: "POOL_WORKER_ID", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
-		corev1.EnvVar{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}},
-	)
-	dep.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")},
-		Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-	}
-	delete(dep.Spec.Template.Annotations, "kubectl.kubernetes.io/restartedAt")
-	if err := o.applyDeployment(ctx, dep); err != nil {
-		return "", fmt.Errorf("ensure engine pool deployment: %w", err)
-	}
-	if err := o.applyService(ctx, poolDeploymentName, poolDeploymentName, labels, 8000, 8000); err != nil {
-		return "", fmt.Errorf("ensure engine pool service: %w", err)
-	}
-	return poolDeploymentName, nil
-}
-
 func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
 	if spec.WebhookUUID == uuid.Nil {
 		return DeployResult{}, errors.New("webhook uuid is required for pool runtime")
 	}
-	if _, err := o.EnsureEnginePool(ctx); err != nil {
-		return DeployResult{}, err
-	}
+	// The engine pool is a Kubernetes-managed infrastructure Deployment. The
+	// backend only assigns runtimes to its live workers; it must never create or
+	// mutate the pool as a side effect of a project deploy.
 	workers, err := o.waitPoolWorkers(ctx, 60*time.Second)
 	if err != nil {
 		return DeployResult{}, err
