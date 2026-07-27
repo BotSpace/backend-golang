@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -800,12 +798,10 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 }
 
 // applyToken stores a non-blank Telegram bot token as the project's
-// RELEASE_BOT_TOKEN environment variable and best-effort registers Telegram's
-// webhook for it — mirrors Django's EnviromentModel.objects.update_or_create
-// (bot.py:39) + core/apps/api/services/webhook.py's set_webhook(instance,
-// "release"). A blank token is a no-op: Create/Update never force a token,
-// only store one when given (dashboard's bot_token_required flow handles the
-// tokenless path at release-deploy time instead).
+// RELEASE_BOT_TOKEN environment variable. Webhook registration belongs to the
+// release deploy path: doing it here as well sends two immediate setWebhook
+// calls for every create and Telegram rate-limits the second one with 429.
+// A blank token remains a no-op; tokenless projects are handled at deploy time.
 func (u *usecase) applyToken(ctx context.Context, p *Project, ownerID uuid.UUID, token string) error {
 	token = strings.TrimSpace(token)
 	if token == "" {
@@ -814,39 +810,7 @@ func (u *usecase) applyToken(ctx context.Context, p *Project, ownerID uuid.UUID,
 	if err := u.repo.SetReleaseBotToken(ctx, p.ID, ownerID, token); err != nil {
 		return httpx.Internal(fmt.Errorf("store release bot token: %w", err))
 	}
-	setReleaseWebhook(token, p.ReleaseWebhookUUID)
 	return nil
-}
-
-// setReleaseWebhook registers this project's stable release webhook route
-// with Telegram for the given token. Best-effort by design (mirrors Django's
-// set_webhook, which swallows httpx errors and logs — see webhook.py:43-50):
-// a bad token or an unreachable Telegram API must never fail project
-// create/update, since the release deploy path retries this same
-// registration (release.Usecase.CreateRelease -> engine deploy) anyway.
-func setReleaseWebhook(token string, releaseWebhookUUID uuid.UUID) {
-	domain := os.Getenv("DOMAIN")
-	if domain == "" {
-		domain = "api.botspace.uz"
-	}
-	hookURL := fmt.Sprintf("https://%s/api/bot-webhook/release/%s/", domain, releaseWebhookUUID.String())
-	telegramURL := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook?url=%s", token, hookURL)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, telegramURL, nil)
-	if err != nil {
-		zap.L().Warn("project build setWebhook request failed", logger.Err(err))
-		return
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		zap.L().Warn("project setWebhook call failed", logger.Err(err))
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		zap.L().Warn("project setWebhook returned non-200", logger.Int("status", resp.StatusCode))
-	}
 }
 
 // Delete ports Django's project delete, which tore down every running k8s
