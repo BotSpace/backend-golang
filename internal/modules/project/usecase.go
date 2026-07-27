@@ -231,7 +231,7 @@ func starterFlow() json.RawMessage {
 				"id": "starter-trigger",
 				"type": "CommandTriggerNode",
 				"position": {"x": 80, "y": 180},
-				"data": {"command": "start", "withArgs": false, "global": true}
+				"data": {"command": "/start", "withArgs": false, "global": true, "state_key": "", "state_type": "text", "private": false}
 			},
 			{
 				"id": "starter-greeting",
