@@ -176,6 +176,28 @@ func (r *fakeRepo) GetReleaseBotToken(_ context.Context, projectID uuid.UUID) (s
 // EnviromentModel key="RELEASE_BOT_TOKEN", bot.py:39) so release.Usecase's
 // envMap() — and from there kubernetes.go's BOT_TOKEN mapping — actually sees
 // it.
+func TestStarterFlowUsesCanonicalStartCommandAndStateDefaults(t *testing.T) {
+	var flow struct {
+		Nodes []struct {
+			Type string         `json:"type"`
+			Data map[string]any `json:"data"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(starterFlow(), &flow); err != nil {
+		t.Fatalf("unmarshal starter flow: %v", err)
+	}
+	if len(flow.Nodes) == 0 || flow.Nodes[0].Type != "CommandTriggerNode" {
+		t.Fatalf("starter trigger = %#v", flow.Nodes)
+	}
+	data := flow.Nodes[0].Data
+	if data["command"] != "/start" {
+		t.Fatalf("command = %#v, want /start", data["command"])
+	}
+	if data["state_key"] != "" || data["state_type"] != "text" || data["private"] != false {
+		t.Fatalf("state defaults = %#v", data)
+	}
+}
+
 func TestCreate_WithToken_StoresReleaseBotToken(t *testing.T) {
 	repo := newFakeRepo()
 	uc := NewUsecase(repo, nil, nil, nil, nil)
