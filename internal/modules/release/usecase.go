@@ -167,27 +167,53 @@ func registerReleaseWebhook(ctx context.Context, token string, releaseWebhookUUI
 		domain = "api.botspace.uz"
 	}
 	hookURL := fmt.Sprintf("https://%s/api/bot-webhook/release/%s/", domain, releaseWebhookUUID.String())
-	form := url.Values{"url": {hookURL}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(telegramAPIBaseURL, "/")+"/bot"+token+"/setWebhook", strings.NewReader(form.Encode()))
-	if err != nil {
-		return fmt.Errorf("build setWebhook request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	endpoint := strings.TrimRight(telegramAPIBaseURL, "/") + "/bot" + token + "/setWebhook"
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("call setWebhook: %w", err)
-	}
-	defer resp.Body.Close()
-	var result struct {
-		OK          bool   `json:"ok"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("decode setWebhook response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK || !result.OK {
-		return fmt.Errorf("setWebhook rejected: status=%d description=%s", resp.StatusCode, result.Description)
+
+	for attempt := 0; attempt < 3; attempt++ {
+		form := url.Values{"url": {hookURL}}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+		if err != nil {
+			return fmt.Errorf("build setWebhook request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("call setWebhook: %w", err)
+		}
+		var result struct {
+			OK          bool   `json:"ok"`
+			Description string `json:"description"`
+			Parameters  struct {
+				RetryAfter int `json:"retry_after"`
+			} `json:"parameters"`
+		}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+		_ = resp.Body.Close()
+		if decodeErr != nil {
+			return fmt.Errorf("decode setWebhook response: %w", decodeErr)
+		}
+		if resp.StatusCode == http.StatusOK && result.OK {
+			return nil
+		}
+		if resp.StatusCode != http.StatusTooManyRequests || attempt == 2 {
+			return fmt.Errorf("setWebhook rejected: status=%d description=%s", resp.StatusCode, result.Description)
+		}
+
+		retryAfter := result.Parameters.RetryAfter
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		if retryAfter > 5 {
+			retryAfter = 5
+		}
+		timer := time.NewTimer(time.Duration(retryAfter)*time.Second + 250*time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	return nil
 }

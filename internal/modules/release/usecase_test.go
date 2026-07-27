@@ -425,6 +425,31 @@ func TestCreateReleaseRegistersTelegramWebhook(t *testing.T) {
 	}
 }
 
+func TestRegisterReleaseWebhookRetriesTelegramRateLimit(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"ok":false,"description":"Too Many Requests","parameters":{"retry_after":1}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer server.Close()
+	oldBase := telegramAPIBaseURL
+	telegramAPIBaseURL = server.URL
+	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
+
+	if err := registerReleaseWebhook(context.Background(), "123:test-token", uuid.New()); err != nil {
+		t.Fatalf("registerReleaseWebhook: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
 func TestCreateReleaseFailsAndStopsRuntimeWhenWebhookRegistrationFails(t *testing.T) {
 	repo := newFakeRepo()
 	orch := newFakeOrchestrator()
