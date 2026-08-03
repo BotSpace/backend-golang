@@ -80,6 +80,30 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 		}
 	}
 
+	aiAgent := byType["AIAgentNode"]
+	aiContent, ok := aiAgent["content"].([]any)
+	if !ok {
+		t.Fatal("AIAgentNode has no content")
+	}
+	var structuredOutputField map[string]any
+	for _, raw := range aiContent {
+		field, _ := raw.(map[string]any)
+		if field["key"] == "jsonSchema" {
+			structuredOutputField = field
+			break
+		}
+	}
+	if structuredOutputField == nil {
+		t.Fatal("AIAgentNode jsonSchema field is missing")
+	}
+	if structuredOutputField["type"] != "textarea" || structuredOutputField["editor"] != "json-schema" {
+		t.Fatalf("AIAgentNode jsonSchema editor contract = %#v", structuredOutputField)
+	}
+	modes, _ := structuredOutputField["editorModes"].([]any)
+	if len(modes) != 2 || modes[0] != "builder" || modes[1] != "json" {
+		t.Fatalf("AIAgentNode jsonSchema editorModes = %#v, want [builder json]", modes)
+	}
+
 	for nodeType, node := range byType {
 		content, _ := node["content"].([]any)
 		hasKeyboardRows := false

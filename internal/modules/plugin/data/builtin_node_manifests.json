@@ -5017,7 +5017,13 @@
         "label": "Structured Output (JSON Schema)",
         "placeholder": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"answer\": { \"type\": \"string\" }\n  }\n}",
         "rows": 5,
-        "helpText": "Schema kiritilsa Structured Output avtomatik yoqiladi. Maydonni olib tashlasangiz oddiy text output ishlaydi.",
+        "editor": "json-schema",
+        "editorModes": [
+          "builder",
+          "json"
+        ],
+        "defaultEditorMode": "builder",
+        "helpText": "Builder orqali yarating yoki JSON Schema'ni bevosita kiriting. Bo'sh schema oddiy text output ishlatadi.",
         "optional": true
       },
       {
