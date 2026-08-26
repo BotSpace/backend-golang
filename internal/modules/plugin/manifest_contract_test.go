@@ -27,6 +27,11 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 	assertHandles("ElseIfNode", "true", "false")
 	assertHandles("ElseNode", "true")
 
+	commandDefaults, ok := byType["CommandTriggerNode"]["defaults"].(map[string]any)
+	if !ok || commandDefaults["state_type"] != "text" {
+		t.Fatalf("CommandTriggerNode state_type default = %#v, want text", commandDefaults["state_type"])
+	}
+
 	callback := byType["CallbackQueryTriggerNode"]
 	content, ok := callback["content"].([]any)
 	if !ok {

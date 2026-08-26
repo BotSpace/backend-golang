@@ -98,7 +98,8 @@
     "defaults": {
       "command": "/start",
       "withArgs": false,
-      "global": true
+      "global": true,
+      "state_type": "text"
     },
     "aiDoc": "Telegram /command trigger. global:true har yerda ishlaydi. withArgs:true bo'lsa argument qabul qiladi. Argumentni saqlash uchun state_key + state_type:'text' ishlat. Masalan state_key='ref' qiymati keyingi node'da `{{ref}}` bilan o'qiladi.",
     "summary": "/command (masalan /start) kelganda flow'ni boshlaydi",
