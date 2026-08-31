@@ -3,8 +3,10 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/botspace/backend/internal/shared/database"
@@ -286,6 +288,7 @@ type fakeOrchestrator struct {
 	byService map[string]engine.Status
 	logs      engine.LogSnapshot
 	logsErr   error
+	deployErr error
 }
 
 func newFakeOrchestrator() *fakeOrchestrator {
@@ -294,6 +297,9 @@ func newFakeOrchestrator() *fakeOrchestrator {
 
 func (f *fakeOrchestrator) Deploy(_ context.Context, spec engine.DeploySpec) (engine.DeployResult, error) {
 	f.deployed = append(f.deployed, spec)
+	if f.deployErr != nil {
+		return engine.DeployResult{}, f.deployErr
+	}
 	return engine.DeployResult{ServiceID: "svc-" + spec.ReleaseUUID.String(), Status: f.status}, nil
 }
 
@@ -554,6 +560,162 @@ func TestGetReleaseReconcilesLiveStatus(t *testing.T) {
 // TestUpsertEnvironmentIsIdempotentByKey ports the CreateEnviromentSerializer
 // upsert semantics: re-posting the same key+project overwrites the value
 // instead of erroring, and a project owned by someone else is rejected.
+func TestRefreshRuntimesPreservesReleaseAndReloadsDebugDraft(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	uc := newTestUsecase(repo, orch)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	frozenFlow := json.RawMessage(`{"nodes":[{"id":"released"}]}`)
+	projectID := repo.addProject(ownerID, frozenFlow)
+
+	rel, err := uc.CreateRelease(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+	if _, err := uc.StartDebug(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("StartDebug: %v", err)
+	}
+	currentDraft := json.RawMessage(`{"nodes":[{"id":"draft-now"}]}`)
+	repo.projectFlow[projectID] = currentDraft
+	orch.deployed = nil
+
+	if _, err := uc.UpsertEnvironment(ctx, UpsertEnvironmentInput{
+		ProjectID: projectID, OwnerID: ownerID, UserID: ownerID, Key: "FEATURE_FLAG", Value: "enabled",
+	}); err != nil {
+		t.Fatalf("UpsertEnvironment: %v", err)
+	}
+	if len(orch.deployed) != 2 {
+		t.Fatalf("refresh deploys = %d, want release + debug", len(orch.deployed))
+	}
+
+	var releaseSpec, debugSpec engine.DeploySpec
+	for _, spec := range orch.deployed {
+		if spec.Debug {
+			debugSpec = spec
+		} else {
+			releaseSpec = spec
+		}
+	}
+	releaseWebhook, debugWebhook, _ := repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	if releaseSpec.ReleaseUUID != rel.ID || releaseSpec.Version != int(rel.Version) {
+		t.Fatalf("release identity/version = (%s,%d), want (%s,%d)", releaseSpec.ReleaseUUID, releaseSpec.Version, rel.ID, rel.Version)
+	}
+	if string(releaseSpec.Flow) != string(frozenFlow) {
+		t.Fatalf("release flow = %s, want frozen %s", releaseSpec.Flow, frozenFlow)
+	}
+	if releaseSpec.WebhookUUID != releaseWebhook {
+		t.Fatalf("release webhook = %s, want stable %s", releaseSpec.WebhookUUID, releaseWebhook)
+	}
+	if string(debugSpec.Flow) != string(currentDraft) {
+		t.Fatalf("debug flow = %s, want current draft %s", debugSpec.Flow, currentDraft)
+	}
+	if debugSpec.WebhookUUID != debugWebhook {
+		t.Fatalf("debug webhook = %s, want stable %s", debugSpec.WebhookUUID, debugWebhook)
+	}
+	if len(repo.releases) != 1 {
+		t.Fatalf("release rows = %d, want no new release", len(repo.releases))
+	}
+}
+
+func TestRefreshRuntimesReregistersReleaseWebhookWithUpdatedToken(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	uc := newTestUsecase(repo, orch)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`{"nodes":[]}`))
+	if _, err := uc.CreateRelease(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("CreateRelease: %v", err)
+	}
+	releaseWebhook, _, _ := repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/bot456:updated-token/setWebhook" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		want := "https://hooks.example/api/bot-webhook/release/" + releaseWebhook.String() + "/"
+		if got := r.Form.Get("url"); got != want {
+			t.Errorf("webhook url = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer server.Close()
+	oldBase := telegramAPIBaseURL
+	telegramAPIBaseURL = server.URL
+	t.Cleanup(func() { telegramAPIBaseURL = oldBase })
+	t.Setenv("DOMAIN", "hooks.example")
+
+	if _, err := uc.UpsertEnvironment(ctx, UpsertEnvironmentInput{
+		ProjectID: projectID, OwnerID: ownerID, UserID: ownerID,
+		Key: "RELEASE_BOT_TOKEN", Value: "456:updated-token", Secret: true,
+	}); err != nil {
+		t.Fatalf("UpsertEnvironment: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("setWebhook requests = %d, want 1", requests)
+	}
+}
+
+func TestDeleteEnvironmentRefreshesActiveRuntimeWithoutDeletedValue(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	uc := newTestUsecase(repo, orch)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`{"nodes":[]}`))
+	in := UpsertEnvironmentInput{ProjectID: projectID, OwnerID: ownerID, UserID: ownerID, Key: "REMOVE_ME", Value: "old"}
+	if _, err := uc.UpsertEnvironment(ctx, in); err != nil {
+		t.Fatalf("seed environment: %v", err)
+	}
+	if _, err := uc.StartDebug(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("StartDebug: %v", err)
+	}
+	orch.deployed = nil
+
+	if err := uc.DeleteEnvironment(ctx, "REMOVE_ME", projectID, ownerID); err != nil {
+		t.Fatalf("DeleteEnvironment: %v", err)
+	}
+	if len(orch.deployed) != 1 || !orch.deployed[0].Debug {
+		t.Fatalf("refresh deploys = %#v, want one debug refresh", orch.deployed)
+	}
+	if _, exists := orch.deployed[0].Env["REMOVE_ME"]; exists {
+		t.Fatal("deleted environment value was still sent to runtime")
+	}
+}
+
+func TestUpsertEnvironmentRefreshFailureSaysMutationPersisted(t *testing.T) {
+	repo := newFakeRepo()
+	orch := newFakeOrchestrator()
+	uc := newTestUsecase(repo, orch)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := repo.addProject(ownerID, json.RawMessage(`{"nodes":[]}`))
+	if _, err := uc.StartDebug(ctx, projectID, ownerID); err != nil {
+		t.Fatalf("StartDebug: %v", err)
+	}
+	orch.deployErr = errors.New("pool unavailable")
+
+	_, err := uc.UpsertEnvironment(ctx, UpsertEnvironmentInput{
+		ProjectID: projectID, OwnerID: ownerID, UserID: ownerID, Key: "SAVED", Value: "yes",
+	})
+	if err == nil || !strings.Contains(err.Error(), "environment variable was saved") {
+		t.Fatalf("error = %v, want explicit saved-but-refresh-failed message", err)
+	}
+	if got := repo.envs[envKey(projectID, "SAVED")]; got == nil || got.Value != "yes" {
+		t.Fatalf("environment was not persisted: %#v", got)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "rollback") {
+		t.Fatalf("error must not claim rollback: %v", err)
+	}
+}
+
 func TestUpsertEnvironmentIsIdempotentByKey(t *testing.T) {
 	repo := newFakeRepo()
 	uc := newTestUsecase(repo, newFakeOrchestrator())

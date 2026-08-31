@@ -99,20 +99,8 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 		env["MONGO_ADDR"] = o.cfg.MongoAddr
 		env["MONGO_DB_NAME"] = o.cfg.MongoDBName
 	}
-	if !spec.Debug && env["BOT_TOKEN"] == "" {
-		env["BOT_TOKEN"] = env["RELEASE_BOT_TOKEN"]
-	}
-	if spec.Debug && env["BOT_TOKEN"] == "" {
-		env["BOT_TOKEN"] = o.cfg.TestBotToken
-	}
-	if env["BOT_TOKEN"] == "" {
+	if err := configurePoolRuntimeMode(env, spec.Debug, o.cfg.TestBotToken, o.cfg.InternalToken); err != nil {
 		return DeployResult{}, fmt.Errorf("BOT_TOKEN is required for runtime %s", spec.WebhookUUID)
-	}
-	if spec.Debug {
-		env["DEBUG_MODE"] = "true"
-		env["DEBUG_EVENT_TOKEN"] = o.cfg.InternalToken
-	} else {
-		env["IS_RELEASE"] = "true"
 	}
 
 	flow, err := canonicalJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`, "flow")
@@ -177,7 +165,7 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 	}
 	committed = true
 	for _, workerID := range difference(previous, targets) {
-		o.removePoolWorkerRuntime(ctx, workerID, webhookID)
+		_ = o.removePoolWorkerRuntime(ctx, workerID, webhookID)
 	}
 	return DeployResult{ServiceID: poolRuntimeServiceID(spec.WebhookUUID), Status: StatusInitializing}, nil
 }
@@ -195,29 +183,115 @@ func (o *KubernetesOrchestrator) rollbackPoolRuntime(ctx context.Context, webhoo
 		_ = o.rdb.HSet(ctx, poolPlacementHash, webhookID, raw).Err()
 	}
 	for _, workerID := range difference(attempted, previous) {
-		o.removePoolWorkerRuntime(ctx, workerID, webhookID)
+		_ = o.removePoolWorkerRuntime(ctx, workerID, webhookID)
 	}
 }
 
 func (o *KubernetesOrchestrator) stopPoolRuntime(ctx context.Context, ref poolRuntimeRef) error {
 	webhookID := ref.WebhookID.String()
-	workers := o.poolPlacement(ctx, webhookID)
-	for _, workerID := range workers {
-		o.removePoolWorkerRuntime(ctx, workerID, webhookID)
+	var cleanupErrors []error
+
+	if err := o.rdb.HDel(ctx, poolDesiredHash, webhookID).Err(); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("remove desired runtime: %w", err))
 	}
-	pipe := o.rdb.Pipeline()
-	pipe.HDel(ctx, poolDesiredHash, webhookID)
-	pipe.HDel(ctx, poolPlacementHash, webhookID)
-	_, err := pipe.Exec(ctx)
-	return err
+
+	workers, err := o.loadPoolPlacement(ctx, webhookID)
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("load pool placement: %w", err))
+	}
+	staleWorkers, err := o.poolAssignmentWorkers(ctx)
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("discover pool assignments: %w", err))
+	}
+	workers = uniqueStrings(append(workers, staleWorkers...))
+	for _, workerID := range workers {
+		assigned, assignedErr := o.poolWorkerHasRuntime(ctx, workerID, webhookID)
+		if assignedErr != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("check runtime assignment on %s: %w", workerID, assignedErr))
+			assigned = true
+		}
+		if !assigned {
+			continue
+		}
+		if err := o.removePoolWorkerRuntime(ctx, workerID, webhookID); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove runtime from %s: %w", workerID, err))
+		}
+	}
+
+	if err := o.rdb.HDel(ctx, poolPlacementHash, webhookID).Err(); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("remove pool placement: %w", err))
+	}
+	if err := o.releasePoolPorts(ctx, webhookID); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("release pool ports: %w", err))
+	}
+	return errors.Join(cleanupErrors...)
 }
 
-func (o *KubernetesOrchestrator) removePoolWorkerRuntime(ctx context.Context, workerID, webhookID string) {
+func (o *KubernetesOrchestrator) removePoolWorkerRuntime(ctx context.Context, workerID, webhookID string) error {
 	pipe := o.rdb.Pipeline()
 	pipe.HDel(ctx, poolWorkerRuntimeHash(workerID), webhookID)
 	pipe.HDel(ctx, poolWorkerStatusHash(workerID), webhookID)
 	pipe.XAdd(ctx, &redis.XAddArgs{Stream: poolWorkerCommandStream(workerID), MaxLen: 1000, Approx: true, Values: map[string]any{"action": "remove", "webhook_id": webhookID, "ts": time.Now().UnixMilli()}})
-	_, _ = pipe.Exec(ctx)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (o *KubernetesOrchestrator) poolAssignmentWorkers(ctx context.Context) ([]string, error) {
+	var workers []string
+	for _, suffix := range []string{":runtimes", ":status"} {
+		var cursor uint64
+		for {
+			keys, next, err := o.rdb.Scan(ctx, cursor, poolWorkerRuntimeBase+"*"+suffix, 100).Result()
+			if err != nil {
+				return workers, err
+			}
+			for _, key := range keys {
+				if workerID, ok := poolAssignmentWorkerID(key, suffix); ok {
+					workers = append(workers, workerID)
+				}
+			}
+			cursor = next
+			if cursor == 0 {
+				break
+			}
+		}
+	}
+	return uniqueStrings(workers), nil
+}
+
+func poolAssignmentWorkerID(key, suffix string) (string, bool) {
+	if !strings.HasPrefix(key, poolWorkerRuntimeBase) || !strings.HasSuffix(key, suffix) {
+		return "", false
+	}
+	workerID := strings.TrimSuffix(strings.TrimPrefix(key, poolWorkerRuntimeBase), suffix)
+	return workerID, workerID != ""
+}
+
+func (o *KubernetesOrchestrator) poolWorkerHasRuntime(ctx context.Context, workerID, webhookID string) (bool, error) {
+	pipe := o.rdb.Pipeline()
+	runtimeExists := pipe.HExists(ctx, poolWorkerRuntimeHash(workerID), webhookID)
+	statusExists := pipe.HExists(ctx, poolWorkerStatusHash(workerID), webhookID)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return false, err
+	}
+	return runtimeExists.Val() || statusExists.Val(), nil
+}
+
+func (o *KubernetesOrchestrator) releasePoolPorts(ctx context.Context, webhookID string) error {
+	reservations, err := o.rdb.HGetAll(ctx, poolPortsHash).Result()
+	if err != nil {
+		return err
+	}
+	ports := make([]string, 0, 1)
+	for port, owner := range reservations {
+		if owner == webhookID {
+			ports = append(ports, port)
+		}
+	}
+	if len(ports) == 0 {
+		return nil
+	}
+	return o.rdb.HDel(ctx, poolPortsHash, ports...).Err()
 }
 
 func (o *KubernetesOrchestrator) waitPoolWorkers(ctx context.Context, timeout time.Duration) ([]string, error) {
@@ -249,8 +323,8 @@ func (o *KubernetesOrchestrator) waitPoolRuntimeReady(ctx context.Context, webho
 			status, err := o.rdb.HGet(ctx, poolWorkerStatusHash(workerID), webhookID).Result()
 			if err == nil && status == "ready" {
 				ready++
-			} else if err == nil && status == "failed" {
-				return fmt.Errorf("runtime failed on worker %s", workerID)
+			} else if err == nil && runtimeStatusFailed(status) {
+				return fmt.Errorf("runtime failed on worker %s with status %s", workerID, status)
 			}
 		}
 		if ready == len(workers) {
@@ -266,13 +340,23 @@ func (o *KubernetesOrchestrator) waitPoolRuntimeReady(ctx context.Context, webho
 }
 
 func (o *KubernetesOrchestrator) poolPlacement(ctx context.Context, webhookID string) []string {
+	workers, _ := o.loadPoolPlacement(ctx, webhookID)
+	return workers
+}
+
+func (o *KubernetesOrchestrator) loadPoolPlacement(ctx context.Context, webhookID string) ([]string, error) {
 	raw, err := o.rdb.HGet(ctx, poolPlacementHash, webhookID).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var workers []string
-	_ = json.Unmarshal([]byte(raw), &workers)
-	return workers
+	if err := json.Unmarshal([]byte(raw), &workers); err != nil {
+		return nil, err
+	}
+	return workers, nil
 }
 
 func (o *KubernetesOrchestrator) allocatePoolPort(ctx context.Context, webhookID uuid.UUID) (int, error) {
@@ -314,6 +398,42 @@ func rendezvousWorkers(key string, workers []string, count int) []string {
 		out[i] = scores[i].id
 	}
 	return out
+}
+
+func runtimeStatusFailed(status string) bool {
+	return status == "failed" || strings.HasPrefix(status, "permanent_failure:")
+}
+
+func configurePoolRuntimeMode(env map[string]string, debug bool, testBotToken, internalToken string) error {
+	if debug {
+		env["BOT_TOKEN"] = testBotToken
+		env["DEBUG_MODE"] = "true"
+		env["DEBUG_EVENT_TOKEN"] = internalToken
+		delete(env, "IS_RELEASE")
+		delete(env, "RELEASE_BOT_TOKEN")
+	} else {
+		env["BOT_TOKEN"] = env["RELEASE_BOT_TOKEN"]
+		env["IS_RELEASE"] = "true"
+		delete(env, "DEBUG_MODE")
+		delete(env, "DEBUG_EVENT_TOKEN")
+	}
+	if strings.TrimSpace(env["BOT_TOKEN"]) == "" {
+		return errors.New("bot token is required")
+	}
+	return nil
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func difference(left, right []string) []string {

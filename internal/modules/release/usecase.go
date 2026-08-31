@@ -41,6 +41,7 @@ type Usecase interface {
 	// GetDebugLogs ports ProjectView.debug_logs — same snapshot shape as
 	// GetReleaseLogs, for the project's single debug container.
 	GetDebugLogs(ctx context.Context, projectID, ownerID uuid.UUID, tailLines, sinceSeconds int) (engine.LogSnapshot, error)
+	RefreshRuntimes(ctx context.Context, projectID, ownerID uuid.UUID) error
 
 	UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error)
 	ListEnvironments(ctx context.Context, projectID, ownerID uuid.UUID) ([]Environment, error)
@@ -426,6 +427,121 @@ func (u *usecase) reconcileDebug(ctx context.Context, dbg Debug) Debug {
 	return dbg
 }
 
+// RefreshRuntimes reapplies runtime configuration to already-deployed rows.
+// Releases keep their frozen flow/version; debug deliberately reloads the
+// editable project draft. No release row is created by this path.
+func (u *usecase) RefreshRuntimes(ctx context.Context, projectID, ownerID uuid.UUID) error {
+	releases, err := u.repo.ListReleasesForProject(ctx, projectID, ownerID)
+	if err != nil {
+		return runtimeRefreshUnavailable(fmt.Errorf("list project releases: %w", err))
+	}
+
+	var debug *Debug
+	debug, err = u.repo.GetDebugForOwner(ctx, projectID, ownerID)
+	if errors.Is(err, database.ErrNotFound) {
+		debug = nil
+	} else if err != nil {
+		return runtimeRefreshUnavailable(fmt.Errorf("load project debug runtime: %w", err))
+	}
+
+	activeReleases := make([]Release, 0, len(releases))
+	for _, rel := range releases {
+		if rel.ServiceID != "" && rel.Status != StatusStopped {
+			activeReleases = append(activeReleases, rel)
+		}
+	}
+	debugActive := debug != nil && debug.ServiceID != "" && debug.Status != StatusStopped
+	if len(activeReleases) == 0 && !debugActive {
+		return nil
+	}
+
+	env, err := u.envMap(ctx, projectID)
+	if err != nil {
+		return runtimeRefreshUnavailable(err)
+	}
+	releaseWebhookUUID, debugWebhookUUID, err := u.repo.GetProjectWebhookUUIDs(ctx, projectID, ownerID)
+	if err != nil {
+		return runtimeRefreshUnavailable(fmt.Errorf("load project webhook UUIDs: %w", err))
+	}
+	schemas, modules, err := u.runtimeAssets(ctx, projectID, ownerID)
+	if err != nil {
+		return runtimeRefreshUnavailable(err)
+	}
+	runtimeProjectID, err := u.runtimeProjectID(ctx, projectID, ownerID)
+	if err != nil {
+		return runtimeRefreshUnavailable(err)
+	}
+
+	var refreshErrs []error
+	for _, rel := range activeReleases {
+		releaseEnv := cloneEnv(env)
+		releaseEnv["IS_RELEASE"] = "true"
+		_, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
+			OwnerID: ownerID, ProjectID: projectID, RuntimeProjectID: runtimeProjectID,
+			RuntimeReplicas: runtimeReplicas(releaseEnv), ReleaseUUID: rel.ID,
+			Version: int(rel.Version), Flow: rel.Flow, Schemas: schemas, Modules: modules,
+			Env: releaseEnv, WebhookUUID: releaseWebhookUUID,
+		})
+		if deployErr != nil {
+			refreshErrs = append(refreshErrs, fmt.Errorf("refresh release %s version %d: %w", rel.ID, rel.Version, deployErr))
+			continue
+		}
+		if token := strings.TrimSpace(releaseEnv["RELEASE_BOT_TOKEN"]); token != "" {
+			if hookErr := registerReleaseWebhook(ctx, token, releaseWebhookUUID); hookErr != nil {
+				refreshErrs = append(refreshErrs, fmt.Errorf("re-register Telegram webhook for release %s: %w", rel.ID, hookErr))
+			}
+		}
+	}
+
+	if debugActive {
+		flow, flowErr := u.repo.GetProjectFlowForOwner(ctx, projectID, ownerID)
+		if flowErr != nil {
+			refreshErrs = append(refreshErrs, fmt.Errorf("load current debug draft: %w", flowErr))
+		} else {
+			_, deployErr := u.orch.Deploy(ctx, engine.DeploySpec{
+				OwnerID: ownerID, ProjectID: projectID, RuntimeProjectID: runtimeProjectID,
+				RuntimeReplicas: runtimeReplicas(env), ReleaseUUID: debug.ID, Debug: true,
+				Flow: flow, Schemas: schemas, Modules: modules, Env: cloneEnv(env),
+				WebhookUUID: debugWebhookUUID,
+			})
+			if deployErr != nil {
+				refreshErrs = append(refreshErrs, fmt.Errorf("refresh debug runtime %s: %w", debug.ID, deployErr))
+			}
+		}
+	}
+
+	if err := errors.Join(refreshErrs...); err != nil {
+		return runtimeRefreshUnavailable(err)
+	}
+	return nil
+}
+
+func cloneEnv(env map[string]string) map[string]string {
+	cloned := make(map[string]string, len(env))
+	for key, value := range env {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func runtimeRefreshUnavailable(err error) *httpx.AppError {
+	return &httpx.AppError{
+		Code:    "release.runtime_refresh_failed",
+		Message: "active runtimes could not be refreshed; retry the change",
+		Status:  http.StatusServiceUnavailable,
+		Err:     err,
+	}
+}
+
+func environmentRefreshUnavailable(action string, err error) *httpx.AppError {
+	return &httpx.AppError{
+		Code:    "enviroment.runtime_refresh_failed",
+		Message: fmt.Sprintf("environment variable was %s, but active runtimes could not be refreshed; retry the change", action),
+		Status:  http.StatusServiceUnavailable,
+		Err:     err,
+	}
+}
+
 func (u *usecase) UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInput) (*Environment, error) {
 	env, err := u.repo.UpsertEnvironment(ctx, in)
 	if err != nil {
@@ -433,6 +549,9 @@ func (u *usecase) UpsertEnvironment(ctx context.Context, in UpsertEnvironmentInp
 			return nil, httpx.NotFound("project.not_found", "project not found")
 		}
 		return nil, httpx.Internal(err)
+	}
+	if err := u.RefreshRuntimes(ctx, in.ProjectID, in.OwnerID); err != nil {
+		return env, environmentRefreshUnavailable("saved", err)
 	}
 	return env, nil
 }
@@ -451,6 +570,9 @@ func (u *usecase) DeleteEnvironment(ctx context.Context, key string, projectID, 
 			return httpx.NotFound("enviroment.not_found", "environment variable not found")
 		}
 		return httpx.Internal(err)
+	}
+	if err := u.RefreshRuntimes(ctx, projectID, ownerID); err != nil {
+		return environmentRefreshUnavailable("deleted", err)
 	}
 	return nil
 }

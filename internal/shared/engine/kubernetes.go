@@ -1,18 +1,15 @@
-// KubernetesOrchestrator is the real Orchestrator: it talks to the cluster's
-// apps/v1 + core/v1 APIs directly, porting the exact resource shape the old
-// Django kubernetes_service.py (core/apps/api/services/kubernetes_service.py)
-// and module_service.py produced, so it manages the SAME kind of objects the
-// already-running `release-*`/`debug-*`/`module-*` Deployments are (naming,
-// labels, image, probes, RollingUpdate strategy, imagePullSecrets).
+// KubernetesOrchestrator routes bot runtimes and shared modules to their
+// production execution models.
 //
-// Bot engines (release/debug — spec.Flow set): Deployment + "<name>-env"
-// Secret + "<name>-flow" ConfigMap (flow.json mounted at /app/assets) +,
-// when spec.WebhookUUID is set, a "bot-<uuid>" Service so Telegram webhook
-// routing survives redeploys.
+// Bot engines (release/debug — spec.Flow set) run as child processes inside the
+// shared engine pool. Their desired configuration is stored in Redis; deploying
+// a bot does not create a per-bot Kubernetes Deployment, Secret, ConfigMap, or
+// Service. Stop and status still accept legacy service IDs so resources left by
+// the old per-bot model can be removed safely.
 //
-// Shared module pods (spec.Flow empty, spec.Name pre-set by the plugin
-// module — see plugin.moduleDeploySpec): Deployment + "<name>-env" Secret +
-// a "<name>" Service (module RPC callers dial the deployment name itself).
+// Shared module pods (spec.Flow empty, spec.Name pre-set by the plugin module —
+// see plugin.moduleDeploySpec) still use Kubernetes directly: Deployment plus
+// "<name>-env" Secret and a "<name>" Service.
 package engine
 
 import (
