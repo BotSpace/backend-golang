@@ -56,16 +56,15 @@ type TemplateResolver interface {
 	ResolveForProjectCreate(ctx context.Context, idOrSlug string, buyerID uuid.UUID) (flow, collections json.RawMessage, err error)
 }
 
-// ReleaseOrchestrator is the minimal release-module surface
-// CreateFromTemplate needs: writing arbitrary env vars and mirroring
-// Django's create_from_template mode branch (release: create+deploy the
-// first release; debug: start the tokenless debug container immediately).
-// Same narrow-interface convention as CollectionProvisioner/TemplateResolver.
+// ReleaseOrchestrator is the minimal release-module surface project mutations
+// need: template deployment plus refreshing existing runtimes after a bot-token
+// update. Same narrow-interface convention as CollectionProvisioner/TemplateResolver.
 // release.Usecase satisfies this interface structurally.
 type ReleaseOrchestrator interface {
 	UpsertEnvironment(ctx context.Context, in release.UpsertEnvironmentInput) (*release.Environment, error)
 	CreateRelease(ctx context.Context, projectID, ownerID uuid.UUID) (*release.Release, error)
 	StartDebug(ctx context.Context, projectID, ownerID uuid.UUID) (*release.Debug, error)
+	RefreshRuntimes(ctx context.Context, projectID, ownerID uuid.UUID) error
 }
 
 // CollectionProvisioner is the minimal cms.Usecase surface this module needs
@@ -785,23 +784,32 @@ func (u *usecase) Update(ctx context.Context, id, ownerID uuid.UUID, in UpdateIn
 			return nil, err
 		}
 	}
+	tokenChanged := strings.TrimSpace(token) != ""
 	if err := u.applyToken(ctx, p, ownerID, token); err != nil {
 		return nil, err
 	}
-	// The debug runtime follows every saved draft. In the user-supervisor
-	// model StartDebug is a Redis-backed hot swap (not a pod redeploy), so the
-	// constructor's ordinary save becomes visible without a Run/Reload action.
-	if len(in.Flow) > 0 && u.rel != nil {
+	if tokenChanged && u.rel != nil {
+		if err := u.rel.RefreshRuntimes(ctx, id, ownerID); err != nil {
+			return nil, &httpx.AppError{
+				Code:    "project.runtime_refresh_failed",
+				Message: "release bot token was saved, but active runtimes could not be refreshed; retry the update",
+				Status:  503,
+				Err:     err,
+			}
+		}
+	}
+	// The debug runtime follows every saved draft. A token refresh already
+	// reloads the current draft, so avoid hot-swapping it twice in one update.
+	if len(in.Flow) > 0 && u.rel != nil && !tokenChanged {
 		u.scheduleDebugRuntime(ctx, id, ownerID)
 	}
 	return p, nil
 }
 
 // applyToken stores a non-blank Telegram bot token as the project's
-// RELEASE_BOT_TOKEN environment variable. Webhook registration belongs to the
-// release deploy path: doing it here as well sends two immediate setWebhook
-// calls for every create and Telegram rate-limits the second one with 429.
-// A blank token remains a no-op; tokenless projects are handled at deploy time.
+// RELEASE_BOT_TOKEN environment variable. Runtime refresh and webhook
+// registration are delegated to release.Usecase after an update. A blank token
+// remains a no-op; tokenless projects are handled at deploy time.
 func (u *usecase) applyToken(ctx context.Context, p *Project, ownerID uuid.UUID, token string) error {
 	token = strings.TrimSpace(token)
 	if token == "" {

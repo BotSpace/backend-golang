@@ -259,6 +259,50 @@ func TestUpdate_WithToken_StoresReleaseBotToken(t *testing.T) {
 // on update must not clobber an existing RELEASE_BOT_TOKEN (only a non-blank
 // value (re)writes it — matches CreateInput's same "store only if given"
 // rule).
+func TestUpdate_WithToken_RefreshesExistingRuntimes(t *testing.T) {
+	repo := newFakeRepo()
+	rel := &fakeReleaseOrchestrator{}
+	uc := NewUsecase(repo, nil, nil, nil, rel)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "My bot"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token := "999:refreshed"
+	if _, err := uc.Update(ctx, p.ID, ownerID, UpdateInput{Token: &token}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got := rel.refreshCalls.Load(); got != 1 {
+		t.Fatalf("RefreshRuntimes calls = %d, want 1", got)
+	}
+}
+
+func TestUpdate_TokenRefreshFailureSaysTokenWasSaved(t *testing.T) {
+	repo := newFakeRepo()
+	rel := &fakeReleaseOrchestrator{refreshErr: errors.New("pool unavailable")}
+	uc := NewUsecase(repo, nil, nil, nil, rel)
+	ctx := context.Background()
+	ownerID := uuid.New()
+	p, err := uc.Create(ctx, CreateInput{OwnerID: ownerID, Name: "My bot"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	token := "999:persisted"
+	_, err = uc.Update(ctx, p.ID, ownerID, UpdateInput{Token: &token})
+	if err == nil || !strings.Contains(err.Error(), "release bot token was saved") {
+		t.Fatalf("error = %v, want saved-but-refresh-failed message", err)
+	}
+	if got := repo.envs[p.ID.String()+"|RELEASE_BOT_TOKEN"]; got != token {
+		t.Fatalf("RELEASE_BOT_TOKEN = %q, want persisted %q", got, token)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "rollback") {
+		t.Fatalf("error must not claim rollback: %v", err)
+	}
+}
+
 func TestUpdate_BlankToken_LeavesReleaseBotTokenUntouched(t *testing.T) {
 	repo := newFakeRepo()
 	uc := NewUsecase(repo, nil, nil, nil, nil)
@@ -777,6 +821,8 @@ type fakeReleaseOrchestrator struct {
 	envs          map[string]string
 	releaseCalled atomic.Bool
 	debugCalled   atomic.Bool
+	refreshCalls  atomic.Int32
+	refreshErr    error
 	deployErr     error
 }
 
@@ -802,6 +848,11 @@ func (f *fakeReleaseOrchestrator) StartDebug(_ context.Context, projectID, _ uui
 		return nil, f.deployErr
 	}
 	return &release.Debug{ID: uuid.New(), ProjectID: projectID}, nil
+}
+
+func (f *fakeReleaseOrchestrator) RefreshRuntimes(_ context.Context, _, _ uuid.UUID) error {
+	f.refreshCalls.Add(1)
+	return f.refreshErr
 }
 
 // TestCreateFromTemplate_CopiesFlowAndProvisionsCollections is the
