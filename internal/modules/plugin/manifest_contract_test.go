@@ -109,6 +109,18 @@ func TestBuiltinManifestCanonicalRuntimeContracts(t *testing.T) {
 		t.Fatalf("AIAgentNode jsonSchema editorModes = %#v, want [builder json]", modes)
 	}
 
+	httpTool := byType["AIHTTPToolNode"]
+	httpDefaults, ok := httpTool["defaults"].(map[string]any)
+	if !ok || httpDefaults["toolName"] != "http_request" {
+		t.Fatalf("AIHTTPToolNode automatic toolName = %#v, want http_request", httpDefaults["toolName"])
+	}
+	for _, raw := range httpTool["content"].([]any) {
+		field, _ := raw.(map[string]any)
+		if field["key"] == "toolName" {
+			t.Fatal("AIHTTPToolNode must not expose the automatically assigned toolName field")
+		}
+	}
+
 	for nodeType, node := range byType {
 		content, _ := node["content"].([]any)
 		hasKeyboardRows := false
