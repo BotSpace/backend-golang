@@ -5438,12 +5438,6 @@
     ],
     "content": [
       {
-        "type": "text",
-        "key": "toolName",
-        "label": "Tool Name",
-        "placeholder": "http_request"
-      },
-      {
         "type": "textarea",
         "key": "description",
         "label": "Description (shown to LLM)",
