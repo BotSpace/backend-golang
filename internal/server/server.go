@@ -360,7 +360,10 @@ func (s *Server) registerRoutes(ctx context.Context) {
 		project.NewPostgresRepository(s.pool), orch, cmsUC, templateUC, releaseUC,
 		project.NewTelegramUsernameResolver(), s.cfg.Engine.TestBotToken, webhookUC,
 	)
-	projectUC = project.NewUsecaseWithMetrics(projectUC, project.NewPrometheusMetricsProvider(s.cfg.Monitor.PrometheusURL))
+	projectUC = project.NewUsecaseWithMetrics(projectUC, project.NewPrometheusMetricsProvider(s.cfg.Monitor.PrometheusURL, s.cfg.Engine.Namespace))
+	if mongoClient != nil {
+		projectUC = project.NewUsecaseWithAnalytics(projectUC, project.NewMongoAnalyticsRepository(mongoClient.Database(s.cfg.Engine.MongoDBName)))
+	}
 	// collab-token (GET /projects/:id/collab-token) needs to sign with the
 	// SAME RSA private key Django's SIGNING_KEY uses (k8s secret jwt-secret,
 	// env PRIVATE_KEY) — NOT this backend's own auth signing key

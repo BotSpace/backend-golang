@@ -125,8 +125,8 @@ func (r *fakeRepo) CountAdmin(_ context.Context, _ AdminListFilter) (int64, erro
 func (r *fakeRepo) GetAdmin(_ context.Context, _ uuid.UUID) (*AdminProjectDetail, error) {
 	return nil, database.ErrNotFound
 }
-func (r *fakeRepo) ListMonitoring(_ context.Context, _ AdminListFilter) ([]MonitoringProject, error) {
-	return r.monitoring, nil
+func (r *fakeRepo) ListMonitoring(_ context.Context, f AdminListFilter) ([]MonitoringProject, error) {
+	return append([]MonitoringProject(nil), pageSlice(r.monitoring, f.Offset, f.Limit)...), nil
 }
 
 func (r *fakeRepo) DiskHistory(_ context.Context, _ uuid.UUID, _ time.Time) ([]MetricPoint, error) {
@@ -1360,7 +1360,7 @@ func TestAdminMonitoring_MergesPrometheusMetrics(t *testing.T) {
 	}
 }
 
-func TestAdminMonitoring_PrometheusErrorFallsBackToSnapshots(t *testing.T) {
+func TestAdminMonitoring_PrometheusErrorClearsStaleSnapshots(t *testing.T) {
 	repo := newFakeRepo()
 	projectID := uuid.New()
 	repo.monitoring = []MonitoringProject{{
@@ -1377,8 +1377,8 @@ func TestAdminMonitoring_PrometheusErrorFallsBackToSnapshots(t *testing.T) {
 	if page.PrometheusAvailable {
 		t.Fatal("PrometheusAvailable = true, want false")
 	}
-	if page.Items[0].CPUCores != 7 || page.Items[0].MemoryBytes != 8 {
-		t.Fatalf("snapshot values not preserved: %#v", page.Items[0])
+	if page.Items[0].CPUCores != 0 || page.Items[0].MemoryBytes != 0 || page.Items[0].ResourceMetricsAvailable {
+		t.Fatalf("stale resource values exposed: %#v", page.Items[0])
 	}
 }
 
@@ -1436,7 +1436,7 @@ func TestPrometheusMetricsProvider_ProjectMetrics(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	provider := NewPrometheusMetricsProvider(srv.URL)
+	provider := NewPrometheusMetricsProvider(srv.URL, "botmother")
 	metrics, ok, err := provider.ProjectMetrics(context.Background())
 	if err != nil {
 		t.Fatalf("ProjectMetrics: %v", err)

@@ -362,14 +362,35 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Global sorting precedes pagination. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "projects-admin"
                 ],
-                "summary": "Per-project resource usage snapshot across every owner (admin)",
+                "summary": "Per-project resource usage and bot analytics across every owner (admin)",
                 "parameters": [
+                    {
+                        "enum": [
+                            "cpu_asc",
+                            "cpu_desc",
+                            "ram_asc",
+                            "ram_desc",
+                            "disk_asc",
+                            "disk_desc",
+                            "net_asc",
+                            "net_desc",
+                            "users_asc",
+                            "users_desc",
+                            "activity_asc",
+                            "activity_desc"
+                        ],
+                        "type": "string",
+                        "description": "Global ordering",
+                        "name": "ordering",
+                        "in": "query"
+                    },
                     {
                         "type": "string",
                         "description": "Filter by name",
@@ -394,6 +415,30 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_project.MonitoringListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -883,6 +928,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/projects/{id}/statistics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Counts retained inbound distinct positive user IDs, active users in rolling 24h/7d windows, all-direction events in 24h and last activity. No conversation payload or user IDs are returned. Mongo failure returns 500, not fabricated zeros.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects-admin"
+                ],
+                "summary": "Get a bot's conversation statistics (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_project.BotAnalyticsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/settings/{key}": {
             "get": {
                 "security": [
@@ -964,6 +1073,73 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/stats/bots": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Totals cover non-deleted projects. User totals sum per-bot distinct users (the same person in two bots counts twice). Ranking covers every project before limiting. Mongo failure returns 500.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects-admin"
+                ],
+                "summary": "Get overall bot statistics and top bots (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Top bot count (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "activity_desc",
+                            "users_desc"
+                        ],
+                        "type": "string",
+                        "description": "Ranking (default activity_desc)",
+                        "name": "ordering",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_project.BotStatisticsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
                         }
@@ -6592,7 +6768,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the latest Prometheus-backed CPU, RAM, network and disk snapshot for an owned project. If Prometheus is unavailable, prometheus_available is false and metric values are zero.",
+                "description": "Returns attributed runtime resources and retained bot conversation analytics for an owned project. prometheus_available reports query health; resource_metrics_available requires per-project CPU/RAM samples. analytics_available is false on Mongo failure. Shared pod resources are never attributed to a bot.",
                 "produces": [
                     "application/json"
                 ],
@@ -11971,6 +12147,43 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_project.BotAnalyticsResponse": {
+            "type": "object",
+            "properties": {
+                "active_users_24h": {
+                    "type": "integer"
+                },
+                "active_users_7d": {
+                    "type": "integer"
+                },
+                "last_activity_at": {
+                    "type": "string"
+                },
+                "messages_24h": {
+                    "type": "integer"
+                },
+                "users_total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_project.BotStatisticsResponse": {
+            "type": "object",
+            "properties": {
+                "projects_total": {
+                    "type": "integer"
+                },
+                "top_bots": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_project.TopBotResponse"
+                    }
+                },
+                "totals": {
+                    "$ref": "#/definitions/internal_modules_project.BotAnalyticsResponse"
+                }
+            }
+        },
         "internal_modules_project.CollabTokenResponse": {
             "type": "object",
             "properties": {
@@ -12109,6 +12322,9 @@ const docTemplate = `{
                 "prometheus_available": {
                     "type": "boolean"
                 },
+                "resource_metrics_available": {
+                    "type": "boolean"
+                },
                 "series": {
                     "$ref": "#/definitions/internal_modules_project.MonitoringSeriesResponse"
                 }
@@ -12117,6 +12333,9 @@ const docTemplate = `{
         "internal_modules_project.MonitoringListResponse": {
             "type": "object",
             "properties": {
+                "analytics_available": {
+                    "type": "boolean"
+                },
                 "items": {
                     "type": "array",
                     "items": {
@@ -12140,6 +12359,12 @@ const docTemplate = `{
         "internal_modules_project.MonitoringProjectResponse": {
             "type": "object",
             "properties": {
+                "active_users_24h": {
+                    "type": "integer"
+                },
+                "active_users_7d": {
+                    "type": "integer"
+                },
                 "cpu_cores": {
                     "type": "integer"
                 },
@@ -12155,7 +12380,13 @@ const docTemplate = `{
                 "is_template": {
                     "type": "boolean"
                 },
+                "last_activity_at": {
+                    "type": "string"
+                },
                 "memory_bytes": {
+                    "type": "integer"
+                },
+                "messages_24h": {
                     "type": "integer"
                 },
                 "name": {
@@ -12173,8 +12404,14 @@ const docTemplate = `{
                 "release_status": {
                     "type": "string"
                 },
+                "resource_metrics_available": {
+                    "type": "boolean"
+                },
                 "username": {
                     "type": "string"
+                },
+                "users_total": {
+                    "type": "integer"
                 }
             }
         },
@@ -12236,6 +12473,15 @@ const docTemplate = `{
         "internal_modules_project.ProjectMonitoringResponse": {
             "type": "object",
             "properties": {
+                "active_users_24h": {
+                    "type": "integer"
+                },
+                "active_users_7d": {
+                    "type": "integer"
+                },
+                "analytics_available": {
+                    "type": "boolean"
+                },
                 "cpu_cores": {
                     "type": "number"
                 },
@@ -12248,7 +12494,13 @@ const docTemplate = `{
                 "disk_files_bytes": {
                     "type": "integer"
                 },
+                "last_activity_at": {
+                    "type": "string"
+                },
                 "memory_bytes": {
+                    "type": "integer"
+                },
+                "messages_24h": {
                     "type": "integer"
                 },
                 "net_rx_bps": {
@@ -12259,6 +12511,12 @@ const docTemplate = `{
                 },
                 "prometheus_available": {
                     "type": "boolean"
+                },
+                "resource_metrics_available": {
+                    "type": "boolean"
+                },
+                "users_total": {
+                    "type": "integer"
                 }
             }
         },
@@ -12321,6 +12579,35 @@ const docTemplate = `{
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_project.TopBotResponse": {
+            "type": "object",
+            "properties": {
+                "active_users_24h": {
+                    "type": "integer"
+                },
+                "active_users_7d": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_activity_at": {
+                    "type": "string"
+                },
+                "messages_24h": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "users_total": {
+                    "type": "integer"
                 }
             }
         },

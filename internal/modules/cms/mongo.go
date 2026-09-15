@@ -57,6 +57,11 @@ func (m *MongoClient) Close(ctx context.Context) error {
 	return m.client.Disconnect(ctx)
 }
 
+// Database shares the existing connection with read-only infrastructure adapters.
+func (m *MongoClient) Database(name string) *mongo.Database {
+	return m.client.Database(name)
+}
+
 func (m *MongoClient) coll(dbName, collName string) *mongo.Collection {
 	return m.client.Database(dbName).Collection(collName)
 }

@@ -24,35 +24,40 @@ const (
 )
 
 type PrometheusMetricsProvider struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	namespace string
+	client    *http.Client
 }
 
-func NewPrometheusMetricsProvider(baseURL string) MetricsProvider {
+func NewPrometheusMetricsProvider(baseURL string, namespace string) MetricsProvider {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil
 	}
+	if namespace == "" {
+		namespace = "botmother"
+	}
 	return &PrometheusMetricsProvider{
-		baseURL: baseURL,
-		client:  &http.Client{Timeout: prometheusDefaultTimeout},
+		namespace: namespace,
+		baseURL:   baseURL,
+		client:    &http.Client{Timeout: prometheusDefaultTimeout},
 	}
 }
 
 func (p *PrometheusMetricsProvider) ProjectMetrics(ctx context.Context) (map[uuid.UUID]LiveMetrics, bool, error) {
-	cpu, err := p.query(ctx, prometheusCPUQuery)
+	cpu, err := p.query(ctx, `sum by (project_id) (rate(engine_pool_runtime_cpu_seconds_total{namespace=`+strconv.Quote(p.namespace)+`,project_id!=""}[5m])) or `+p.scoped(prometheusCPUQuery))
 	if err != nil {
 		return nil, false, err
 	}
-	mem, err := p.query(ctx, prometheusMemoryQuery)
+	mem, err := p.query(ctx, `sum by (project_id) (engine_pool_runtime_memory_rss_bytes{namespace=`+strconv.Quote(p.namespace)+`,project_id!=""}) or `+p.scoped(prometheusMemoryQuery))
 	if err != nil {
 		return nil, false, err
 	}
-	rx, err := p.query(ctx, prometheusNetworkRXQuery)
+	rx, err := p.query(ctx, p.scoped(prometheusNetworkRXQuery))
 	if err != nil {
 		return nil, false, err
 	}
-	tx, err := p.query(ctx, prometheusNetworkTXQuery)
+	tx, err := p.query(ctx, p.scoped(prometheusNetworkTXQuery))
 	if err != nil {
 		return nil, false, err
 	}
@@ -77,7 +82,18 @@ func (p *PrometheusMetricsProvider) ProjectMetrics(ctx context.Context) (map[uui
 		m.NetworkTXBps = bytesPerSecond * 8
 		out[id] = m
 	}
+	for id := range out {
+		_, hasCPU := cpu[id]
+		_, hasMemory := mem[id]
+		if !hasCPU || !hasMemory {
+			delete(out, id)
+		}
+	}
 	return out, true, nil
+}
+
+func (p *PrometheusMetricsProvider) scoped(query string) string {
+	return strings.ReplaceAll(query, `namespace="botmother"`, `namespace=`+strconv.Quote(p.namespace))
 }
 
 func (p *PrometheusMetricsProvider) ProjectHistory(ctx context.Context, projectID uuid.UUID, window string) (*MonitoringHistory, bool, error) {
@@ -89,6 +105,9 @@ func (p *PrometheusMetricsProvider) ProjectHistory(ctx context.Context, projectI
 	netTXQuery := fmt.Sprintf(`sum(rate(container_network_transmit_bytes_total{namespace="botmother",%s}[5m]))`, podSelector)
 	diskQuery := fmt.Sprintf(`sum(container_fs_usage_bytes{namespace="botmother",container="engine",%s})`, podSelector)
 
+	selector := `namespace=` + strconv.Quote(p.namespace) + `,project_id=` + strconv.Quote(projectID.String())
+	cpuQuery = `sum(rate(engine_pool_runtime_cpu_seconds_total{` + selector + `}[5m])) or ` + p.scoped(cpuQuery)
+	memoryQuery = `sum(engine_pool_runtime_memory_rss_bytes{` + selector + `}) or ` + p.scoped(memoryQuery)
 	cpu, err := p.queryRange(ctx, cpuQuery, rng)
 	if err != nil {
 		return nil, false, err
@@ -97,24 +116,25 @@ func (p *PrometheusMetricsProvider) ProjectHistory(ctx context.Context, projectI
 	if err != nil {
 		return nil, false, err
 	}
-	rx, err := p.queryRange(ctx, netRXQuery, rng)
+	rx, err := p.queryRange(ctx, p.scoped(netRXQuery), rng)
 	if err != nil {
 		return nil, false, err
 	}
-	tx, err := p.queryRange(ctx, netTXQuery, rng)
+	tx, err := p.queryRange(ctx, p.scoped(netTXQuery), rng)
 	if err != nil {
 		return nil, false, err
 	}
-	disk, err := p.queryRange(ctx, diskQuery, rng)
+	disk, err := p.queryRange(ctx, p.scoped(diskQuery), rng)
 	if err != nil {
 		return nil, false, err
 	}
 	return &MonitoringHistory{
-		CPU:       cpu,
-		Memory:    mem,
-		NetworkRX: scaleMetricPoints(rx, 8),
-		NetworkTX: scaleMetricPoints(tx, 8),
-		Disk:      disk,
+		ResourceMetricsAvailable: len(cpu) > 0 && len(mem) > 0,
+		CPU:                      cpu,
+		Memory:                   mem,
+		NetworkRX:                scaleMetricPoints(rx, 8),
+		NetworkTX:                scaleMetricPoints(tx, 8),
+		Disk:                     disk,
 	}, true, nil
 }
 
@@ -159,7 +179,7 @@ func (p *PrometheusMetricsProvider) query(ctx context.Context, promQL string) (m
 			continue
 		}
 		value, err := strconv.ParseFloat(raw, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
 			continue
 		}
 		out[id] = value

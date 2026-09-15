@@ -275,15 +275,43 @@ func toAdminProjectDetailResponse(p *AdminProjectDetail) AdminProjectDetailRespo
 
 // ===================== monitoring =====================
 
+type BotAnalyticsResponse struct {
+	UsersTotal     int64      `json:"users_total"`
+	ActiveUsers24h int64      `json:"active_users_24h"`
+	ActiveUsers7d  int64      `json:"active_users_7d"`
+	Messages24h    int64      `json:"messages_24h"`
+	LastActivityAt *time.Time `json:"last_activity_at"`
+}
+
+func toBotAnalyticsResponse(a BotAnalytics) BotAnalyticsResponse {
+	return BotAnalyticsResponse{a.UsersTotal, a.ActiveUsers24h, a.ActiveUsers7d, a.Messages24h, a.LastActivityAt}
+}
+
+type TopBotResponse struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Username string `json:"username,omitempty"`
+	BotAnalyticsResponse
+}
+
+type BotStatisticsResponse struct {
+	Totals        BotAnalyticsResponse `json:"totals"`
+	ProjectsTotal int64                `json:"projects_total"`
+	TopBots       []TopBotResponse     `json:"top_bots"`
+}
+
 type ProjectMonitoringResponse struct {
-	CPUCores            float64 `json:"cpu_cores"`
-	MemoryBytes         int64   `json:"memory_bytes"`
-	NetRXBps            float64 `json:"net_rx_bps"`
-	NetTXBps            float64 `json:"net_tx_bps"`
-	DiskBytes           int64   `json:"disk_bytes"`
-	DiskFilesBytes      int64   `json:"disk_files_bytes"`
-	DiskCMSBytes        int64   `json:"disk_cms_bytes"`
-	PrometheusAvailable bool    `json:"prometheus_available"`
+	BotAnalyticsResponse
+	AnalyticsAvailable       bool    `json:"analytics_available"`
+	ResourceMetricsAvailable bool    `json:"resource_metrics_available"`
+	CPUCores                 float64 `json:"cpu_cores"`
+	MemoryBytes              int64   `json:"memory_bytes"`
+	NetRXBps                 float64 `json:"net_rx_bps"`
+	NetTXBps                 float64 `json:"net_tx_bps"`
+	DiskBytes                int64   `json:"disk_bytes"`
+	DiskFilesBytes           int64   `json:"disk_files_bytes"`
+	DiskCMSBytes             int64   `json:"disk_cms_bytes"`
+	PrometheusAvailable      bool    `json:"prometheus_available"`
 }
 
 func toProjectMonitoringResponse(m *ProjectMonitoring) ProjectMonitoringResponse {
@@ -291,31 +319,36 @@ func toProjectMonitoringResponse(m *ProjectMonitoring) ProjectMonitoringResponse
 		return ProjectMonitoringResponse{}
 	}
 	return ProjectMonitoringResponse{
-		CPUCores:            m.CPUCores,
-		MemoryBytes:         m.MemoryBytes,
-		NetRXBps:            m.NetworkRXBps,
-		NetTXBps:            m.NetworkTXBps,
-		DiskBytes:           m.DiskBytes,
-		DiskFilesBytes:      m.DiskFilesBytes,
-		DiskCMSBytes:        m.DiskCMSBytes,
-		PrometheusAvailable: m.PrometheusAvailable,
+		BotAnalyticsResponse:     toBotAnalyticsResponse(m.Analytics),
+		AnalyticsAvailable:       m.AnalyticsAvailable,
+		ResourceMetricsAvailable: m.ResourceMetricsAvailable,
+		CPUCores:                 m.CPUCores,
+		MemoryBytes:              m.MemoryBytes,
+		NetRXBps:                 m.NetworkRXBps,
+		NetTXBps:                 m.NetworkTXBps,
+		DiskBytes:                m.DiskBytes,
+		DiskFilesBytes:           m.DiskFilesBytes,
+		DiskCMSBytes:             m.DiskCMSBytes,
+		PrometheusAvailable:      m.PrometheusAvailable,
 	}
 }
 
 // MonitoringProjectResponse is one row of the admin monitoring page.
 type MonitoringProjectResponse struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Username      string    `json:"username,omitempty"`
-	OwnerID       string    `json:"owner_id"`
-	OwnerPhone    string    `json:"owner_phone,omitempty"`
-	ReleaseStatus *string   `json:"release_status"`
-	CPUCores      int32     `json:"cpu_cores"`
-	MemoryBytes   int32     `json:"memory_bytes"`
-	DiskBytes     int64     `json:"disk_bytes"`
-	NetBytes      int64     `json:"net_bytes"`
-	IsTemplate    bool      `json:"is_template"`
-	CreatedAt     time.Time `json:"created_at"`
+	BotAnalyticsResponse
+	ResourceMetricsAvailable bool      `json:"resource_metrics_available"`
+	ID                       string    `json:"id"`
+	Name                     string    `json:"name"`
+	Username                 string    `json:"username,omitempty"`
+	OwnerID                  string    `json:"owner_id"`
+	OwnerPhone               string    `json:"owner_phone,omitempty"`
+	ReleaseStatus            *string   `json:"release_status"`
+	CPUCores                 int32     `json:"cpu_cores"`
+	MemoryBytes              int32     `json:"memory_bytes"`
+	DiskBytes                int64     `json:"disk_bytes"`
+	NetBytes                 int64     `json:"net_bytes"`
+	IsTemplate               bool      `json:"is_template"`
+	CreatedAt                time.Time `json:"created_at"`
 }
 
 func toMonitoringProjectResponse(p *MonitoringProject) MonitoringProjectResponse {
@@ -324,26 +357,28 @@ func toMonitoringProjectResponse(p *MonitoringProject) MonitoringProjectResponse
 		releaseStatus = &p.ReleaseStatus
 	}
 	return MonitoringProjectResponse{
-		ID:            p.ID.String(),
-		Name:          p.Name,
-		Username:      p.Username,
-		OwnerID:       p.OwnerID.String(),
-		OwnerPhone:    p.OwnerPhone,
-		ReleaseStatus: releaseStatus,
-		CPUCores:      p.CPUCores,
-		MemoryBytes:   p.MemoryBytes,
-		DiskBytes:     p.DiskBytes,
-		NetBytes:      p.NetBytes,
-		IsTemplate:    p.IsTemplate,
-		CreatedAt:     p.CreatedAt,
+		BotAnalyticsResponse:     toBotAnalyticsResponse(p.Analytics),
+		ResourceMetricsAvailable: p.ResourceMetricsAvailable,
+		ID:                       p.ID.String(),
+		Name:                     p.Name,
+		Username:                 p.Username,
+		OwnerID:                  p.OwnerID.String(),
+		OwnerPhone:               p.OwnerPhone,
+		ReleaseStatus:            releaseStatus,
+		CPUCores:                 p.CPUCores,
+		MemoryBytes:              p.MemoryBytes,
+		DiskBytes:                p.DiskBytes,
+		NetBytes:                 p.NetBytes,
+		IsTemplate:               p.IsTemplate,
+		CreatedAt:                p.CreatedAt,
 	}
 }
 
 // MonitoringListResponse is a paginated envelope for the admin monitoring
-// listing. CPU/RAM are filled from Prometheus when it is reachable, otherwise
-// from the latest resource snapshot rows (see AdminMonitoringProjects in
-// queries/projects.sql).
+// listing. CPU/RAM require attributed Prometheus samples; stale snapshots
+// from dedicated pods are never presented as shared runtime usage.
 type MonitoringListResponse struct {
+	AnalyticsAvailable  bool                        `json:"analytics_available"`
 	Items               []MonitoringProjectResponse `json:"items"`
 	Total               int64                       `json:"total"`
 	Limit               int32                       `json:"limit"`
@@ -360,11 +395,13 @@ type MonitoringSeriesResponse struct {
 }
 
 type MonitoringHistoryResponse struct {
-	Series              MonitoringSeriesResponse `json:"series"`
-	PrometheusAvailable bool                     `json:"prometheus_available"`
+	ResourceMetricsAvailable bool                     `json:"resource_metrics_available"`
+	Series                   MonitoringSeriesResponse `json:"series"`
+	PrometheusAvailable      bool                     `json:"prometheus_available"`
 }
 
 func toMonitoringListResponse(page *MonitoringPage, limit, offset int32) MonitoringListResponse {
+	limit, offset = clampPage(limit, offset)
 	items := page.Items
 	out := make([]MonitoringProjectResponse, len(items))
 	for i := range items {
@@ -373,11 +410,13 @@ func toMonitoringListResponse(page *MonitoringPage, limit, offset int32) Monitor
 	return MonitoringListResponse{
 		Items: out, Total: page.Total, Limit: limit, Offset: offset,
 		PrometheusAvailable: page.PrometheusAvailable,
+		AnalyticsAvailable:  page.AnalyticsAvailable,
 	}
 }
 
 func toMonitoringHistoryResponse(history *MonitoringHistory) MonitoringHistoryResponse {
 	return MonitoringHistoryResponse{
+		ResourceMetricsAvailable: history.ResourceMetricsAvailable,
 		Series: MonitoringSeriesResponse{
 			CPUCores:    toSeries(history.CPU),
 			MemoryBytes: toSeries(history.Memory),

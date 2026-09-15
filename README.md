@@ -112,6 +112,9 @@ Kengroq amaliy qo'llanma: [docs/go-architecture-and-working-guide.md](docs/go-ar
 
 Engine integratsiyasi uchun: [docs/engine-golang-integration-guide.md](docs/engine-golang-integration-guide.md).
 
+Shared-pool monitoring, Mongo conversation analytics, and admin API contracts:
+[docs/bot-monitoring-analytics.md](docs/bot-monitoring-analytics.md).
+
 ## sqlc'ga o'tish (opsional)
 
 Manual pgx queries yetarli — lekin SQL ko'paygach `sqlc` foydali bo'ladi:

@@ -403,7 +403,7 @@ func (h *Handler) AdminGet(c *gin.Context) {
 
 // Monitoring godoc
 // @Summary      Get my project's live resource usage
-// @Description  Returns the latest Prometheus-backed CPU, RAM, network and disk snapshot for an owned project. If Prometheus is unavailable, prometheus_available is false and metric values are zero.
+// @Description  Returns attributed runtime resources and retained bot conversation analytics for an owned project. prometheus_available reports query health; resource_metrics_available requires per-project CPU/RAM samples. analytics_available is false on Mongo failure. Shared pod resources are never attributed to a bot.
 // @Tags         projects
 // @Produce      json
 // @Security     BearerAuth
@@ -463,7 +463,13 @@ func (h *Handler) MonitoringHistory(c *gin.Context) {
 }
 
 // AdminMonitoring godoc
-// @Summary      Per-project resource usage snapshot across every owner (admin)
+// @Summary      Per-project resource usage and bot analytics across every owner (admin)
+// @Description  Global sorting precedes pagination. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.
+// @Param        ordering query string false "Global ordering" Enums(cpu_asc,cpu_desc,ram_asc,ram_desc,disk_asc,disk_desc,net_asc,net_desc,users_asc,users_desc,activity_asc,activity_desc)
+// @Failure      400 {object} httpx.ErrorResponse
+// @Failure      401 {object} httpx.ErrorResponse
+// @Failure      403 {object} httpx.ErrorResponse
+// @Failure      500 {object} httpx.ErrorResponse
 // @Tags         projects-admin
 // @Produce      json
 // @Security     BearerAuth
@@ -486,6 +492,61 @@ func (h *Handler) AdminMonitoring(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, 200, toMonitoringListResponse(page, int32(limit), int32(offset)))
+}
+
+// AdminProjectStatistics godoc
+// @Summary Get a bot's conversation statistics (admin)
+// @Description Counts retained inbound distinct positive user IDs, active users in rolling 24h/7d windows, all-direction events in 24h and last activity. No conversation payload or user IDs are returned. Mongo failure returns 500, not fabricated zeros.
+// @Tags projects-admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Project ID (uuid)"
+// @Success 200 {object} BotAnalyticsResponse
+// @Failure 400 {object} httpx.ErrorResponse
+// @Failure 401 {object} httpx.ErrorResponse
+// @Failure 403 {object} httpx.ErrorResponse
+// @Failure 404 {object} httpx.ErrorResponse
+// @Failure 500 {object} httpx.ErrorResponse
+// @Router /admin/projects/{id}/statistics [get]
+func (h *Handler) AdminProjectStatistics(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	result, err := h.uc.AdminProjectStatistics(c.Request.Context(), id)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toBotAnalyticsResponse(*result))
+}
+
+// AdminBotStatistics godoc
+// @Summary Get overall bot statistics and top bots (admin)
+// @Description Totals cover non-deleted projects. User totals sum per-bot distinct users (the same person in two bots counts twice). Ranking covers every project before limiting. Mongo failure returns 500.
+// @Tags projects-admin
+// @Produce json
+// @Security BearerAuth
+// @Param limit query int false "Top bot count (default 20, max 100)"
+// @Param ordering query string false "Ranking (default activity_desc)" Enums(activity_desc,users_desc)
+// @Success 200 {object} BotStatisticsResponse
+// @Failure 400 {object} httpx.ErrorResponse
+// @Failure 401 {object} httpx.ErrorResponse
+// @Failure 403 {object} httpx.ErrorResponse
+// @Failure 500 {object} httpx.ErrorResponse
+// @Router /admin/stats/bots [get]
+func (h *Handler) AdminBotStatistics(c *gin.Context) {
+	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
+	result, err := h.uc.AdminBotStatistics(c.Request.Context(), int32(limit), c.Query("ordering"))
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	top := make([]TopBotResponse, len(result.TopBots))
+	for i, bot := range result.TopBots {
+		top[i] = TopBotResponse{ID: bot.ID.String(), Name: bot.Name, Username: bot.Username, BotAnalyticsResponse: toBotAnalyticsResponse(bot.Analytics)}
+	}
+	httpx.OK(c, 200, BotStatisticsResponse{Totals: toBotAnalyticsResponse(result.Totals), ProjectsTotal: result.ProjectsTotal, TopBots: top})
 }
 
 // AdminMonitoringHistory godoc
