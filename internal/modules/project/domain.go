@@ -123,7 +123,7 @@ type AdminListFilter struct {
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
 	// Ordering optionally sorts the monitoring list by a resource metric:
-	// "cpu_asc"/"cpu_desc", "ram_*", "disk_*", "net_*". Empty keeps the default
+	// "cpu_asc"/"cpu_desc", "ram_*", "disk_*", "net_*", "users_*", "activity_*". Empty keeps the default
 	// (created_at DESC). Sorting is applied in Go over the full set (see
 	// usecase.AdminMonitoring) since the values are per-project subqueries.
 	Ordering string
@@ -159,16 +159,18 @@ type AdminProjectDetail struct {
 }
 
 // MonitoringProject is one row of the admin monitoring page: a project plus
-// its latest reported resource usage. CPUCores/MemoryBytes are 0 when the
-// bot has never reported (no resource row yet).
+// its attributed resource usage and conversation analytics. CPUCores/MemoryBytes
+// are zero when ResourceMetricsAvailable is false, never shared pod estimates.
 type MonitoringProject struct {
 	Project
-	OwnerPhone    string
-	ReleaseStatus string
-	CPUCores      int32
-	MemoryBytes   int32
-	DiskBytes     int64
-	NetBytes      int64
+	Analytics                BotAnalytics
+	ResourceMetricsAvailable bool
+	OwnerPhone               string
+	ReleaseStatus            string
+	CPUCores                 int32
+	MemoryBytes              int32
+	DiskBytes                int64
+	NetBytes                 int64
 }
 
 type LiveMetrics struct {
@@ -179,17 +181,21 @@ type LiveMetrics struct {
 }
 
 type ProjectMonitoring struct {
-	CPUCores            float64
-	MemoryBytes         int64
-	NetworkRXBps        float64
-	NetworkTXBps        float64
-	DiskBytes           int64
-	DiskFilesBytes      int64
-	DiskCMSBytes        int64
-	PrometheusAvailable bool
+	Analytics                BotAnalytics
+	AnalyticsAvailable       bool
+	ResourceMetricsAvailable bool
+	CPUCores                 float64
+	MemoryBytes              int64
+	NetworkRXBps             float64
+	NetworkTXBps             float64
+	DiskBytes                int64
+	DiskFilesBytes           int64
+	DiskCMSBytes             int64
+	PrometheusAvailable      bool
 }
 
 type MonitoringPage struct {
+	AnalyticsAvailable  bool
 	Items               []MonitoringProject
 	Total               int64
 	PrometheusAvailable bool
@@ -201,12 +207,32 @@ type MetricPoint struct {
 }
 
 type MonitoringHistory struct {
-	CPU                 []MetricPoint
-	Memory              []MetricPoint
-	NetworkRX           []MetricPoint
-	NetworkTX           []MetricPoint
-	Disk                []MetricPoint
-	PrometheusAvailable bool
+	ResourceMetricsAvailable bool
+	CPU                      []MetricPoint
+	Memory                   []MetricPoint
+	NetworkRX                []MetricPoint
+	NetworkTX                []MetricPoint
+	Disk                     []MetricPoint
+	PrometheusAvailable      bool
+}
+
+// BotAnalytics counts retained conversation events, not platform accounts.
+type BotAnalytics struct {
+	UsersTotal     int64
+	ActiveUsers24h int64
+	ActiveUsers7d  int64
+	Messages24h    int64
+	LastActivityAt *time.Time
+}
+
+type AnalyticsRepository interface {
+	ReadAnalytics(ctx context.Context, projectIDs []string, now time.Time) (map[string]BotAnalytics, error)
+}
+
+type BotStatistics struct {
+	Totals        BotAnalytics
+	ProjectsTotal int64
+	TopBots       []MonitoringProject
 }
 
 // Repository is the persistence port; owner-scoped methods never return or

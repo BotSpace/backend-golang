@@ -90,7 +90,7 @@ FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
-ORDER BY p.created_at DESC
+ORDER BY p.created_at DESC, p.id ASC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ProjectDiskHistory :many

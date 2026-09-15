@@ -2054,6 +2054,30 @@ definitions:
       uuid:
         type: string
     type: object
+  internal_modules_project.BotAnalyticsResponse:
+    properties:
+      active_users_7d:
+        type: integer
+      active_users_24h:
+        type: integer
+      last_activity_at:
+        type: string
+      messages_24h:
+        type: integer
+      users_total:
+        type: integer
+    type: object
+  internal_modules_project.BotStatisticsResponse:
+    properties:
+      projects_total:
+        type: integer
+      top_bots:
+        items:
+          $ref: '#/definitions/internal_modules_project.TopBotResponse'
+        type: array
+      totals:
+        $ref: '#/definitions/internal_modules_project.BotAnalyticsResponse'
+    type: object
   internal_modules_project.CollabTokenResponse:
     properties:
       room:
@@ -2155,11 +2179,15 @@ definitions:
     properties:
       prometheus_available:
         type: boolean
+      resource_metrics_available:
+        type: boolean
       series:
         $ref: '#/definitions/internal_modules_project.MonitoringSeriesResponse'
     type: object
   internal_modules_project.MonitoringListResponse:
     properties:
+      analytics_available:
+        type: boolean
       items:
         items:
           $ref: '#/definitions/internal_modules_project.MonitoringProjectResponse'
@@ -2175,6 +2203,10 @@ definitions:
     type: object
   internal_modules_project.MonitoringProjectResponse:
     properties:
+      active_users_7d:
+        type: integer
+      active_users_24h:
+        type: integer
       cpu_cores:
         type: integer
       created_at:
@@ -2185,7 +2217,11 @@ definitions:
         type: string
       is_template:
         type: boolean
+      last_activity_at:
+        type: string
       memory_bytes:
+        type: integer
+      messages_24h:
         type: integer
       name:
         type: string
@@ -2197,8 +2233,12 @@ definitions:
         type: string
       release_status:
         type: string
+      resource_metrics_available:
+        type: boolean
       username:
         type: string
+      users_total:
+        type: integer
     type: object
   internal_modules_project.MonitoringSeriesResponse:
     properties:
@@ -2240,6 +2280,12 @@ definitions:
     type: object
   internal_modules_project.ProjectMonitoringResponse:
     properties:
+      active_users_7d:
+        type: integer
+      active_users_24h:
+        type: integer
+      analytics_available:
+        type: boolean
       cpu_cores:
         type: number
       disk_bytes:
@@ -2248,7 +2294,11 @@ definitions:
         type: integer
       disk_files_bytes:
         type: integer
+      last_activity_at:
+        type: string
       memory_bytes:
+        type: integer
+      messages_24h:
         type: integer
       net_rx_bps:
         type: number
@@ -2256,6 +2306,10 @@ definitions:
         type: number
       prometheus_available:
         type: boolean
+      resource_metrics_available:
+        type: boolean
+      users_total:
+        type: integer
     type: object
   internal_modules_project.ProjectResponse:
     properties:
@@ -2306,6 +2360,25 @@ definitions:
         type: string
       uuid:
         type: string
+    type: object
+  internal_modules_project.TopBotResponse:
+    properties:
+      active_users_7d:
+        type: integer
+      active_users_24h:
+        type: integer
+      id:
+        type: string
+      last_activity_at:
+        type: string
+      messages_24h:
+        type: integer
+      name:
+        type: string
+      username:
+        type: string
+      users_total:
+        type: integer
     type: object
   internal_modules_project.UpdateRequest:
     properties:
@@ -3648,7 +3721,28 @@ paths:
       - credentials-admin
   /admin/monitoring:
     get:
+      description: Global sorting precedes pagination. users sorts by inbound distinct
+        users; activity sorts by inbound plus outbound events in the last 24 hours.
+        analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available
+        distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.
       parameters:
+      - description: Global ordering
+        enum:
+        - cpu_asc
+        - cpu_desc
+        - ram_asc
+        - ram_desc
+        - disk_asc
+        - disk_desc
+        - net_asc
+        - net_desc
+        - users_asc
+        - users_desc
+        - activity_asc
+        - activity_desc
+        in: query
+        name: ordering
+        type: string
       - description: Filter by name
         in: query
         name: search
@@ -3668,9 +3762,25 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/internal_modules_project.MonitoringListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Per-project resource usage snapshot across every owner (admin)
+      summary: Per-project resource usage and bot analytics across every owner (admin)
       tags:
       - projects-admin
   /admin/monitoring/{id}/history:
@@ -3969,6 +4079,50 @@ paths:
       summary: Get any project's detail regardless of owner (admin)
       tags:
       - projects-admin
+  /admin/projects/{id}/statistics:
+    get:
+      description: Counts retained inbound distinct positive user IDs, active users
+        in rolling 24h/7d windows, all-direction events in 24h and last activity.
+        No conversation payload or user IDs are returned. Mongo failure returns 500,
+        not fabricated zeros.
+      parameters:
+      - description: Project ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.BotAnalyticsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a bot's conversation statistics (admin)
+      tags:
+      - projects-admin
   /admin/settings/{key}:
     get:
       parameters:
@@ -4024,6 +4178,51 @@ paths:
       summary: Update a platform config entry (admin)
       tags:
       - admin-settings
+  /admin/stats/bots:
+    get:
+      description: Totals cover non-deleted projects. User totals sum per-bot distinct
+        users (the same person in two bots counts twice). Ranking covers every project
+        before limiting. Mongo failure returns 500.
+      parameters:
+      - description: Top bot count (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Ranking (default activity_desc)
+        enum:
+        - activity_desc
+        - users_desc
+        in: query
+        name: ordering
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_project.BotStatisticsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get overall bot statistics and top bots (admin)
+      tags:
+      - projects-admin
   /admin/stats/dashboard:
     get:
       produces:
@@ -7495,9 +7694,11 @@ paths:
       - modules
   /projects/{id}/monitoring:
     get:
-      description: Returns the latest Prometheus-backed CPU, RAM, network and disk
-        snapshot for an owned project. If Prometheus is unavailable, prometheus_available
-        is false and metric values are zero.
+      description: Returns attributed runtime resources and retained bot conversation
+        analytics for an owned project. prometheus_available reports query health;
+        resource_metrics_available requires per-project CPU/RAM samples. analytics_available
+        is false on Mongo failure. Shared pod resources are never attributed to a
+        bot.
       parameters:
       - description: Project ID (uuid)
         in: path

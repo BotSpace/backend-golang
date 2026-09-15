@@ -36,6 +36,8 @@ type Usecase interface {
 	Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*ProjectMonitoring, error)
 	MonitoringHistory(ctx context.Context, id, ownerID uuid.UUID, window string) (*MonitoringHistory, error)
 	AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error)
+	AdminProjectStatistics(ctx context.Context, id uuid.UUID) (*BotAnalytics, error)
+	AdminBotStatistics(ctx context.Context, limit int32, ordering string) (*BotStatistics, error)
 	AdminMonitoringHistory(ctx context.Context, id uuid.UUID, window string) (*MonitoringHistory, error)
 
 	// IssueCollabToken mints the short-lived RS256 token the constructor
@@ -138,6 +140,7 @@ type usecase struct {
 	// collab_token.go. Wired via NewUsecaseWithCollabSigner.
 	collabSigner *CollabTokenSigner
 	metrics      MetricsProvider
+	analytics    AnalyticsRepository
 }
 
 // NewUsecase wires the project usecase. orch may be nil — Get then skips
@@ -923,13 +926,13 @@ func (u *usecase) AdminGet(ctx context.Context, id uuid.UUID) (*AdminProjectDeta
 
 // AdminMonitoring returns a page of every project across every owner with
 // its latest reported resource usage (admin-only).
-// maxMonitoringSortRows caps how many projects a resource sort loads into memory
-// to order globally before paginating. Far above the real project count; a
-// runaway backstop, not a functional limit.
-const maxMonitoringSortRows = 10000
+const monitoringBatchSize = 1000
 
 func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*MonitoringPage, error) {
 	f.Limit, f.Offset = clampPage(f.Limit, f.Offset)
+	if f.Ordering != "" && !isResourceOrdering(f.Ordering) {
+		return nil, httpx.BadRequest("request.invalid", "unsupported monitoring ordering")
+	}
 	total, err := u.repo.CountAdmin(ctx, f)
 	if err != nil {
 		return nil, httpx.Internal(err)
@@ -939,15 +942,19 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 	// a per-project subquery, not a real column), so load all matching rows and
 	// slice in Go; otherwise page in SQL as before.
 	resourceSort := isResourceOrdering(f.Ordering)
-	listFilter := f
-	if resourceSort {
-		listFilter.Limit, listFilter.Offset = maxMonitoringSortRows, 0
-	}
-	items, err := u.repo.ListMonitoring(ctx, listFilter)
+	items, err := u.monitoringItems(ctx, f, resourceSort)
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
 
+	analyticsAvailable := u.populateAnalytics(ctx, items) == nil
+	if !analyticsAvailable && (strings.HasPrefix(f.Ordering, "users_") || strings.HasPrefix(f.Ordering, "activity_")) {
+		return nil, analyticsUnavailable()
+	}
+	// Persisted resource snapshots belong to the old dedicated-pod model.
+	for i := range items {
+		items[i].CPUCores, items[i].MemoryBytes, items[i].NetBytes = 0, 0, 0
+	}
 	available := false
 	if u.metrics != nil {
 		live, ok, err := u.metrics.ProjectMetrics(ctx)
@@ -957,6 +964,7 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 				if m, exists := live[items[i].ID]; exists {
 					items[i].CPUCores = m.CPUMilli
 					items[i].MemoryBytes = m.MemoryBytes
+					items[i].ResourceMetricsAvailable = true
 				}
 			}
 		}
@@ -968,14 +976,14 @@ func (u *usecase) AdminMonitoring(ctx context.Context, f AdminListFilter) (*Moni
 		items = pageSlice(items, f.Offset, f.Limit)
 	}
 
-	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available}, nil
+	return &MonitoringPage{Items: items, Total: total, PrometheusAvailable: available, AnalyticsAvailable: analyticsAvailable}, nil
 }
 
 // isResourceOrdering reports whether the ordering key selects a resource metric
 // sort handled in Go (vs the default created_at DESC done in SQL).
 func isResourceOrdering(o string) bool {
 	switch o {
-	case "cpu_asc", "cpu_desc", "ram_asc", "ram_desc", "disk_asc", "disk_desc", "net_asc", "net_desc":
+	case "cpu_asc", "cpu_desc", "ram_asc", "ram_desc", "disk_asc", "disk_desc", "net_asc", "net_desc", "users_asc", "users_desc", "activity_asc", "activity_desc":
 		return true
 	}
 	return false
@@ -986,6 +994,10 @@ func sortMonitoringByResource(items []MonitoringProject, ordering string) {
 	desc := strings.HasSuffix(ordering, "_desc")
 	value := func(m *MonitoringProject) int64 {
 		switch field {
+		case "users":
+			return m.Analytics.UsersTotal
+		case "activity":
+			return m.Analytics.Messages24h
 		case "cpu":
 			return int64(m.CPUCores)
 		case "ram":
@@ -1000,6 +1012,9 @@ func sortMonitoringByResource(items []MonitoringProject, ordering string) {
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := value(&items[i]), value(&items[j])
 		if a == b {
+			if items[i].CreatedAt.Equal(items[j].CreatedAt) {
+				return items[i].ID.String() < items[j].ID.String()
+			}
 			return items[i].CreatedAt.After(items[j].CreatedAt)
 		}
 		if desc {
@@ -1026,6 +1041,9 @@ func (u *usecase) Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*Proje
 		return nil, err
 	}
 	out := &ProjectMonitoring{}
+	items := []MonitoringProject{{Project: Project{ID: id}}}
+	out.AnalyticsAvailable = u.populateAnalytics(ctx, items) == nil
+	out.Analytics = items[0].Analytics
 	if u.metrics == nil {
 		return out, nil
 	}
@@ -1035,6 +1053,7 @@ func (u *usecase) Monitoring(ctx context.Context, id, ownerID uuid.UUID) (*Proje
 	}
 	out.PrometheusAvailable = true
 	if m, exists := live[id]; exists {
+		out.ResourceMetricsAvailable = true
 		out.CPUCores = float64(m.CPUMilli) / 1000
 		out.MemoryBytes = int64(m.MemoryBytes)
 		out.NetworkRXBps = m.NetworkRXBps

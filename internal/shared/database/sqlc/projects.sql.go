@@ -23,7 +23,7 @@ FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
   AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
-ORDER BY p.created_at DESC
+ORDER BY p.created_at DESC, p.id ASC
 LIMIT $3 OFFSET $2
 `
 
