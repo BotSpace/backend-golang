@@ -46,6 +46,10 @@ func (u *Usecase) Run(ctx context.Context) {
 		return
 	}
 
+	if reconciler, ok := u.Reloader.(RuntimeReconciler); ok {
+		go u.reconcileRuntimes(ctx, reconciler)
+	}
+
 	pubsub := u.Redis.Subscribe(ctx, channelName)
 	defer func() { _ = pubsub.Close() }()
 
@@ -69,6 +73,24 @@ func (u *Usecase) Run(ctx context.Context) {
 			if err := u.handleMessage(ctx, msg.Payload); err != nil {
 				u.Log.Warn("collab_persist message skipped", zap.Error(err))
 			}
+		}
+	}
+}
+
+func (u *Usecase) reconcileRuntimes(ctx context.Context, reconciler RuntimeReconciler) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for ctx.Err() == nil {
+		passCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		err := reconciler.ReconcileRuntimes(passCtx)
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			u.Log.Warn("pool runtime identity reconciliation incomplete", zap.Error(err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
 }

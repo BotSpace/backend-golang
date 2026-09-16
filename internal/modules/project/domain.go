@@ -115,13 +115,12 @@ type AdminListFilter struct {
 	Search string
 	Limit  int32
 	Offset int32
-	// Project-list filters (admin projects page). nil = not filtering on that
-	// dimension. IsTemplate/HasRelease/CreatedAfter/CreatedBefore only apply to
-	// AdminList (the monitoring list leaves them nil).
+	// SQL filters shared by the admin project and monitoring lists; nil disables a filter.
+	OwnerID       *uuid.UUID
 	IsTemplate    *bool
 	HasRelease    *bool
 	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
+	CreatedBefore *time.Time // Exclusive upper bound.
 	// Ordering optionally sorts the monitoring list by a resource metric:
 	// "cpu_asc"/"cpu_desc", "ram_*", "disk_*", "net_*", "users_*", "activity_*". Empty keeps the default
 	// (created_at DESC). Sorting is applied in Go over the full set (see

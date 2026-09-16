@@ -51,6 +51,9 @@ func poolWorkerCommandStream(workerID string) string {
 }
 
 func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec DeploySpec) (DeployResult, error) {
+	if spec.ProjectID == uuid.Nil {
+		return DeployResult{}, errors.New("canonical project id is required for pool runtime")
+	}
 	if spec.WebhookUUID == uuid.Nil {
 		return DeployResult{}, errors.New("webhook uuid is required for pool runtime")
 	}
@@ -74,48 +77,10 @@ func (o *KubernetesOrchestrator) deployPoolRuntime(ctx context.Context, spec Dep
 		return DeployResult{}, err
 	}
 
-	runtimeProjectID := spec.ProjectID.String()
-	if strings.TrimSpace(spec.RuntimeProjectID) != "" {
-		runtimeProjectID = strings.TrimSpace(spec.RuntimeProjectID)
-	}
-	env := make(map[string]string, len(spec.Env)+16)
-	for key, value := range spec.Env {
-		env[key] = value
-	}
-	env["PROJECT_ID"] = runtimeProjectID
-	env["REDIS_ENABLED"] = "true"
-	env["REDIS_ADDR"] = o.cfg.RedisAddr
-	env["REDIS_PASSWORD"] = o.cfg.RedisPassword
-	env["REDIS_PREFIX"] = redisPrefix(spec, resolveDeploymentName(spec))
-	env["BACKEND_EVENTS_STREAM"] = "true"
-	if o.cfg.APIURL != "" {
-		env["API_URL"] = o.cfg.APIURL
-	}
-	if o.cfg.InternalToken != "" {
-		env["API_TOKEN"] = o.cfg.InternalToken
-		env["INTERNAL_TOKEN"] = o.cfg.InternalToken
-	}
-	if o.cfg.MongoAddr != "" {
-		env["MONGO_ADDR"] = o.cfg.MongoAddr
-		env["MONGO_DB_NAME"] = o.cfg.MongoDBName
-	}
-	if err := configurePoolRuntimeMode(env, spec.Debug, o.cfg.TestBotToken, o.cfg.InternalToken); err != nil {
-		return DeployResult{}, fmt.Errorf("BOT_TOKEN is required for runtime %s", spec.WebhookUUID)
-	}
-
-	flow, err := canonicalJSONObject(spec.Flow, `{"nodes":[],"edges":[]}`, "flow")
+	runtime, err := o.poolRuntimeSpec(spec, port, replication)
 	if err != nil {
 		return DeployResult{}, err
 	}
-	schemas, err := canonicalJSONObject(spec.Schemas, `{}`, "schemas")
-	if err != nil {
-		return DeployResult{}, err
-	}
-	modules, err := canonicalJSONObject(spec.Modules, `{"modules":[]}`, "modules")
-	if err != nil {
-		return DeployResult{}, err
-	}
-	runtime := storedRuntimeSpec{WebhookID: spec.WebhookUUID.String(), ProjectID: runtimeProjectID, Name: resolveDeploymentName(spec), Debug: spec.Debug, RoutePort: port, Replicas: replication, Flow: flow, Schemas: schemas, Modules: modules, Env: env}
 	raw, err := json.Marshal(runtime)
 	if err != nil {
 		return DeployResult{}, err

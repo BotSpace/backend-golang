@@ -7,8 +7,10 @@ inside `engine-pool`. The old monitoring PromQL extracted a project UUID from
 `release-*`/`debug-*` pod names; it cannot identify bots inside shared workers.
 Never divide pod CPU/RAM by bot count or assign a worker's resources to every bot.
 
-The backend now prefers these proposed worker-exported metrics (engine/deploy
-agents must implement and scrape them; backend changes alone do not emit them):
+The backend prefers these worker-exported metrics. The engine supervisor exposes
+them on `:8000/metrics`; the `engine-pool` ServiceMonitor in
+`k8s/helm/infra/monitoring.yaml` scrapes each worker. Deploy compatible images
+and sync the monitor: backend changes alone do not emit these metrics.
 
 - `engine_pool_runtime_cpu_seconds_total{project_id, ...}`: child-process CPU
   seconds counter. Backend uses a 5-minute rate, summed across runtime replicas.
@@ -101,8 +103,11 @@ Existing `{items,total,limit,offset,prometheus_available}` envelope gains
 - Existing `cpu_*`, `ram_*`, `disk_*`, `net_*` keys remain accepted.
 - Empty ordering: SQL creation date descending; invalid ordering: 400.
 - Ties: creation date descending, then project UUID ascending.
-- Search is applied before global sorting, then offset/limit (default 20,
-  max 100). The old 10,000-project ranking cutoff has been removed.
+- Search and SQL filters (`owner`, `is_template`, `has_release`,
+  `created_after`, `created_before`) apply before global sorting, then
+  offset/limit (default 20, max 100). `owner` is a user UUID; dates use
+  `YYYY-MM-DD` and inclusive UTC days. Filters combine with AND and invalid
+  values return 400. The old 10,000-project ranking cutoff has been removed.
 - Mongo error: unsorted/resource-sorted list still works with
   `analytics_available=false`; analytics-sorted lists return 500 rather than
   pretending that every bot has zero activity.
