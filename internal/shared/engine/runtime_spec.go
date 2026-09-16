@@ -12,16 +12,17 @@ const (
 )
 
 type storedRuntimeSpec struct {
-	WebhookID string            `json:"webhook_id"`
-	ProjectID string            `json:"project_id"`
-	Name      string            `json:"name"`
-	Debug     bool              `json:"debug"`
-	RoutePort int               `json:"route_port"`
-	Replicas  int               `json:"replicas,omitempty"`
-	Flow      json.RawMessage   `json:"flow"`
-	Schemas   json.RawMessage   `json:"schemas"`
-	Modules   json.RawMessage   `json:"modules"`
-	Env       map[string]string `json:"env"`
+	WebhookID        string            `json:"webhook_id"`
+	ProjectID        string            `json:"project_id"`
+	BackendProjectID string            `json:"backend_project_id,omitempty"`
+	Name             string            `json:"name"`
+	Debug            bool              `json:"debug"`
+	RoutePort        int               `json:"route_port"`
+	Replicas         int               `json:"replicas,omitempty"`
+	Flow             json.RawMessage   `json:"flow"`
+	Schemas          json.RawMessage   `json:"schemas"`
+	Modules          json.RawMessage   `json:"modules"`
+	Env              map[string]string `json:"env"`
 }
 
 func canonicalJSONObject(raw []byte, empty string, field string) (json.RawMessage, error) {

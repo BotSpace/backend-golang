@@ -316,67 +316,87 @@ func (h *Handler) Delete(c *gin.Context) {
 
 // AdminList godoc
 // @Summary      List all projects across every owner (admin)
+// @Description  SQL filters are combined before counting and pagination. Invalid filters return 400.
+// @Param ordering query string false "Project ordering" Enums(name,created_at)
+// @Failure 400 {object} httpx.ErrorResponse
+// @Failure 401 {object} httpx.ErrorResponse
+// @Failure 403 {object} httpx.ErrorResponse
+// @Failure 500 {object} httpx.ErrorResponse
 // @Tags         projects-admin
 // @Produce      json
 // @Security     BearerAuth
+// @Param        owner query string false "Owner user UUID"
+// @Param        is_template query boolean false "Filter template projects (true or false)"
+// @Param        has_release query boolean false "Whether any release exists, regardless of status"
+// @Param        created_after query string false "Created on or after YYYY-MM-DD (UTC, inclusive)"
+// @Param        created_before query string false "Created on or before YYYY-MM-DD (UTC, inclusive day)"
 // @Param        search  query     string  false  "Filter by name"
 // @Param        limit   query     int     false  "Page size (default 20, max 100)"
 // @Param        offset  query     int     false  "Rows to skip"
 // @Success      200  {object}  AdminProjectListResponse
 // @Router       /admin/projects [get]
 func (h *Handler) AdminList(c *gin.Context) {
-	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
-	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
-	f := AdminListFilter{
-		Search:   c.Query("search"),
-		Limit:    int32(limit),
-		Offset:   int32(offset),
-		Ordering: c.Query("ordering"),
-	}
-	if b, ok := parseBoolQuery(c.Query("is_template")); ok {
-		f.IsTemplate = &b
-	}
-	if b, ok := parseBoolQuery(c.Query("has_release")); ok {
-		f.HasRelease = &b
-	}
-	if t, ok := parseDateQuery(c.Query("created_after")); ok {
-		f.CreatedAfter = &t
-	}
-	if t, ok := parseDateQuery(c.Query("created_before")); ok {
-		// Inclusive of the whole selected day.
-		end := t.Add(24 * time.Hour)
-		f.CreatedBefore = &end
+	f, err := parseAdminListFilter(c)
+	if err != nil {
+		httpx.Error(c, err)
+		return
 	}
 	items, total, err := h.uc.AdminList(c.Request.Context(), f)
 	if err != nil {
 		httpx.Error(c, err)
 		return
 	}
-	httpx.OK(c, 200, toAdminProjectListResponse(items, total, int32(limit), int32(offset)))
+	httpx.OK(c, 200, toAdminProjectListResponse(items, total, f.Limit, f.Offset))
 }
 
-func parseBoolQuery(s string) (bool, bool) {
-	if s == "" {
-		return false, false
+func parseAdminListFilter(c *gin.Context) (AdminListFilter, error) {
+	f := AdminListFilter{Search: c.Query("search"), Ordering: c.Query("ordering")}
+	invalid := func(message string) (AdminListFilter, error) {
+		return f, httpx.BadRequest("request.invalid", message)
 	}
-	b, err := strconv.ParseBool(s)
-	if err != nil {
-		return false, false
+	for key, target := range map[string]*int32{"limit": &f.Limit, "offset": &f.Offset} {
+		if raw := c.Query(key); c.Request.URL.Query().Has(key) {
+			n, err := strconv.ParseInt(raw, 10, 32)
+			if err != nil || n < 0 {
+				return invalid(key + " must be a non-negative 32-bit integer")
+			}
+			*target = int32(n)
+		}
 	}
-	return b, true
-}
-
-// parseDateQuery parses a "YYYY-MM-DD" filter value (UTC midnight); ok=false for
-// empty or malformed input.
-func parseDateQuery(s string) (time.Time, bool) {
-	if s == "" {
-		return time.Time{}, false
+	if raw := c.Query("owner"); c.Request.URL.Query().Has("owner") {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return invalid("owner must be a UUID")
+		}
+		f.OwnerID = &id
 	}
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return time.Time{}, false
+	for key, target := range map[string]**bool{"is_template": &f.IsTemplate, "has_release": &f.HasRelease} {
+		if raw := c.Query(key); c.Request.URL.Query().Has(key) {
+			b, err := strconv.ParseBool(raw)
+			if err != nil {
+				return invalid(key + " must be a boolean")
+			}
+			*target = &b
+		}
 	}
-	return t, true
+	for key, target := range map[string]**time.Time{"created_after": &f.CreatedAfter, "created_before": &f.CreatedBefore} {
+		if raw := c.Query(key); c.Request.URL.Query().Has(key) {
+			t, err := time.Parse("2006-01-02", raw)
+			if err != nil {
+				return invalid(key + " must be YYYY-MM-DD")
+			}
+			*target = &t
+		}
+	}
+	if f.CreatedAfter != nil && f.CreatedBefore != nil && f.CreatedAfter.After(*f.CreatedBefore) {
+		return invalid("created_after must not be later than created_before")
+	}
+	if f.CreatedBefore != nil {
+		// SQL uses an exclusive upper bound to include exactly the selected UTC day.
+		end := f.CreatedBefore.AddDate(0, 0, 1)
+		f.CreatedBefore = &end
+	}
+	return f, nil
 }
 
 // AdminGet godoc
@@ -464,7 +484,7 @@ func (h *Handler) MonitoringHistory(c *gin.Context) {
 
 // AdminMonitoring godoc
 // @Summary      Per-project resource usage and bot analytics across every owner (admin)
-// @Description  Global sorting precedes pagination. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.
+// @Description  SQL filters are combined before counting, global sorting and pagination. Invalid filters return 400. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.
 // @Param        ordering query string false "Global ordering" Enums(cpu_asc,cpu_desc,ram_asc,ram_desc,disk_asc,disk_desc,net_asc,net_desc,users_asc,users_desc,activity_asc,activity_desc)
 // @Failure      400 {object} httpx.ErrorResponse
 // @Failure      401 {object} httpx.ErrorResponse
@@ -473,25 +493,28 @@ func (h *Handler) MonitoringHistory(c *gin.Context) {
 // @Tags         projects-admin
 // @Produce      json
 // @Security     BearerAuth
+// @Param        owner query string false "Owner user UUID"
+// @Param        is_template query boolean false "Filter template projects (true or false)"
+// @Param        has_release query boolean false "Whether any release exists, regardless of status"
+// @Param        created_after query string false "Created on or after YYYY-MM-DD (UTC, inclusive)"
+// @Param        created_before query string false "Created on or before YYYY-MM-DD (UTC, inclusive day)"
 // @Param        search  query     string  false  "Filter by name"
 // @Param        limit   query     int     false  "Page size (default 20, max 100)"
 // @Param        offset  query     int     false  "Rows to skip"
 // @Success      200  {object}  MonitoringListResponse
 // @Router       /admin/monitoring [get]
 func (h *Handler) AdminMonitoring(c *gin.Context) {
-	limit, _ := strconv.ParseInt(c.Query("limit"), 10, 32)
-	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 32)
-	page, err := h.uc.AdminMonitoring(c.Request.Context(), AdminListFilter{
-		Search:   c.Query("search"),
-		Limit:    int32(limit),
-		Offset:   int32(offset),
-		Ordering: c.Query("ordering"),
-	})
+	f, err := parseAdminListFilter(c)
 	if err != nil {
 		httpx.Error(c, err)
 		return
 	}
-	httpx.OK(c, 200, toMonitoringListResponse(page, int32(limit), int32(offset)))
+	page, err := h.uc.AdminMonitoring(c.Request.Context(), f)
+	if err != nil {
+		httpx.Error(c, err)
+		return
+	}
+	httpx.OK(c, 200, toMonitoringListResponse(page, f.Limit, f.Offset))
 }
 
 // AdminProjectStatistics godoc

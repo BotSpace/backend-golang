@@ -23,14 +23,25 @@ FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
   AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
+  AND ($2::uuid IS NULL OR p.owner_id = $2::uuid)
+  AND ($3::bool IS NULL OR p.is_template = $3::bool)
+  AND ($4::bool IS NULL
+       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = $4::bool)
+  AND ($5::timestamptz IS NULL OR p.created_at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR p.created_at < $6::timestamptz)
 ORDER BY p.created_at DESC, p.id ASC
-LIMIT $3 OFFSET $2
+LIMIT $8 OFFSET $7
 `
 
 type AdminMonitoringProjectsParams struct {
-	Search *string `json:"search"`
-	Offset int32   `json:"offset"`
-	Limit  int32   `json:"limit"`
+	Search        *string    `json:"search"`
+	OwnerID       *uuid.UUID `json:"owner_id"`
+	IsTemplate    *bool      `json:"is_template"`
+	HasRelease    *bool      `json:"has_release"`
+	CreatedAfter  *time.Time `json:"created_after"`
+	CreatedBefore *time.Time `json:"created_before"`
+	Offset        int32      `json:"offset"`
+	Limit         int32      `json:"limit"`
 }
 
 type AdminMonitoringProjectsRow struct {
@@ -48,7 +59,16 @@ type AdminMonitoringProjectsRow struct {
 // (project_resource_snapshot), and the most recent release's status.
 // cpu_cores/memory_bytes are nullable (no report yet); disk_bytes defaults to 0.
 func (q *Queries) AdminMonitoringProjects(ctx context.Context, arg AdminMonitoringProjectsParams) ([]AdminMonitoringProjectsRow, error) {
-	rows, err := q.db.Query(ctx, adminMonitoringProjects, arg.Search, arg.Offset, arg.Limit)
+	rows, err := q.db.Query(ctx, adminMonitoringProjects,
+		arg.Search,
+		arg.OwnerID,
+		arg.IsTemplate,
+		arg.HasRelease,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,15 +116,17 @@ const countProjectsAdmin = `-- name: CountProjectsAdmin :one
 SELECT COUNT(*) FROM projects p
 WHERE p.deleted_at IS NULL
   AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
-  AND ($2::bool IS NULL OR p.is_template = $2::bool)
-  AND ($3::bool IS NULL
-       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = $3::bool)
-  AND ($4::timestamptz IS NULL OR p.created_at >= $4::timestamptz)
-  AND ($5::timestamptz IS NULL OR p.created_at <= $5::timestamptz)
+  AND ($2::uuid IS NULL OR p.owner_id = $2::uuid)
+  AND ($3::bool IS NULL OR p.is_template = $3::bool)
+  AND ($4::bool IS NULL
+       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = $4::bool)
+  AND ($5::timestamptz IS NULL OR p.created_at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR p.created_at < $6::timestamptz)
 `
 
 type CountProjectsAdminParams struct {
 	Search        *string    `json:"search"`
+	OwnerID       *uuid.UUID `json:"owner_id"`
 	IsTemplate    *bool      `json:"is_template"`
 	HasRelease    *bool      `json:"has_release"`
 	CreatedAfter  *time.Time `json:"created_after"`
@@ -114,6 +136,7 @@ type CountProjectsAdminParams struct {
 func (q *Queries) CountProjectsAdmin(ctx context.Context, arg CountProjectsAdminParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countProjectsAdmin,
 		arg.Search,
+		arg.OwnerID,
 		arg.IsTemplate,
 		arg.HasRelease,
 		arg.CreatedAfter,
@@ -307,20 +330,22 @@ FROM projects p
 JOIN users u ON u.id = p.owner_id
 WHERE p.deleted_at IS NULL
   AND ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%')
-  AND ($2::bool IS NULL OR p.is_template = $2::bool)
-  AND ($3::bool IS NULL
-       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = $3::bool)
-  AND ($4::timestamptz IS NULL OR p.created_at >= $4::timestamptz)
-  AND ($5::timestamptz IS NULL OR p.created_at <= $5::timestamptz)
+  AND ($2::uuid IS NULL OR p.owner_id = $2::uuid)
+  AND ($3::bool IS NULL OR p.is_template = $3::bool)
+  AND ($4::bool IS NULL
+       OR (EXISTS (SELECT 1 FROM relase r WHERE r.project_id = p.id)) = $4::bool)
+  AND ($5::timestamptz IS NULL OR p.created_at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR p.created_at < $6::timestamptz)
 ORDER BY
-  CASE WHEN $6::text = 'name' THEN p.name END ASC,
-  CASE WHEN $6::text = 'created_at' THEN p.created_at END ASC,
+  CASE WHEN $7::text = 'name' THEN p.name END ASC,
+  CASE WHEN $7::text = 'created_at' THEN p.created_at END ASC,
   p.created_at DESC
-LIMIT $8 OFFSET $7
+LIMIT $9 OFFSET $8
 `
 
 type ListProjectsAdminParams struct {
 	Search        *string    `json:"search"`
+	OwnerID       *uuid.UUID `json:"owner_id"`
 	IsTemplate    *bool      `json:"is_template"`
 	HasRelease    *bool      `json:"has_release"`
 	CreatedAfter  *time.Time `json:"created_after"`
@@ -341,6 +366,7 @@ type ListProjectsAdminRow struct {
 func (q *Queries) ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]ListProjectsAdminRow, error) {
 	rows, err := q.db.Query(ctx, listProjectsAdmin,
 		arg.Search,
+		arg.OwnerID,
 		arg.IsTemplate,
 		arg.HasRelease,
 		arg.CreatedAfter,

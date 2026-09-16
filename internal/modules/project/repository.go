@@ -209,6 +209,7 @@ func (r *pgRepo) Count(ctx context.Context, ownerID uuid.UUID, search string) (i
 func (r *pgRepo) ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProjectSummary, error) {
 	rows, err := r.queries.ListProjectsAdmin(ctx, sqlcdb.ListProjectsAdminParams{
 		Search:        strPtr(f.Search),
+		OwnerID:       f.OwnerID,
 		IsTemplate:    f.IsTemplate,
 		HasRelease:    f.HasRelease,
 		CreatedAfter:  f.CreatedAfter,
@@ -235,6 +236,7 @@ func (r *pgRepo) ListAdmin(ctx context.Context, f AdminListFilter) ([]AdminProje
 func (r *pgRepo) CountAdmin(ctx context.Context, f AdminListFilter) (int64, error) {
 	n, err := r.queries.CountProjectsAdmin(ctx, sqlcdb.CountProjectsAdminParams{
 		Search:        strPtr(f.Search),
+		OwnerID:       f.OwnerID,
 		IsTemplate:    f.IsTemplate,
 		HasRelease:    f.HasRelease,
 		CreatedAfter:  f.CreatedAfter,
@@ -275,9 +277,14 @@ func (r *pgRepo) GetAdmin(ctx context.Context, id uuid.UUID) (*AdminProjectDetai
 
 func (r *pgRepo) ListMonitoring(ctx context.Context, f AdminListFilter) ([]MonitoringProject, error) {
 	rows, err := r.queries.AdminMonitoringProjects(ctx, sqlcdb.AdminMonitoringProjectsParams{
-		Search: strPtr(f.Search),
-		Limit:  f.Limit,
-		Offset: f.Offset,
+		Search:        strPtr(f.Search),
+		OwnerID:       f.OwnerID,
+		IsTemplate:    f.IsTemplate,
+		HasRelease:    f.HasRelease,
+		CreatedAfter:  f.CreatedAfter,
+		CreatedBefore: f.CreatedBefore,
+		Limit:         f.Limit,
+		Offset:        f.Offset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list monitoring projects: %w", err)

@@ -3721,9 +3721,10 @@ paths:
       - credentials-admin
   /admin/monitoring:
     get:
-      description: Global sorting precedes pagination. users sorts by inbound distinct
-        users; activity sorts by inbound plus outbound events in the last 24 hours.
-        analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available
+      description: SQL filters are combined before counting, global sorting and pagination.
+        Invalid filters return 400. users sorts by inbound distinct users; activity
+        sorts by inbound plus outbound events in the last 24 hours. analytics_available
+        distinguishes zero activity from Mongo failure; resource_metrics_available
         distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.
       parameters:
       - description: Global ordering
@@ -3742,6 +3743,26 @@ paths:
         - activity_desc
         in: query
         name: ordering
+        type: string
+      - description: Owner user UUID
+        in: query
+        name: owner
+        type: string
+      - description: Filter template projects (true or false)
+        in: query
+        name: is_template
+        type: boolean
+      - description: Whether any release exists, regardless of status
+        in: query
+        name: has_release
+        type: boolean
+      - description: Created on or after YYYY-MM-DD (UTC, inclusive)
+        in: query
+        name: created_after
+        type: string
+      - description: Created on or before YYYY-MM-DD (UTC, inclusive day)
+        in: query
+        name: created_before
         type: string
       - description: Filter by name
         in: query
@@ -4030,7 +4051,36 @@ paths:
       - plans-admin
   /admin/projects:
     get:
+      description: SQL filters are combined before counting and pagination. Invalid
+        filters return 400.
       parameters:
+      - description: Project ordering
+        enum:
+        - name
+        - created_at
+        in: query
+        name: ordering
+        type: string
+      - description: Owner user UUID
+        in: query
+        name: owner
+        type: string
+      - description: Filter template projects (true or false)
+        in: query
+        name: is_template
+        type: boolean
+      - description: Whether any release exists, regardless of status
+        in: query
+        name: has_release
+        type: boolean
+      - description: Created on or after YYYY-MM-DD (UTC, inclusive)
+        in: query
+        name: created_after
+        type: string
+      - description: Created on or before YYYY-MM-DD (UTC, inclusive day)
+        in: query
+        name: created_before
+        type: string
       - description: Filter by name
         in: query
         name: search
@@ -4050,6 +4100,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/internal_modules_project.AdminProjectListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List all projects across every owner (admin)

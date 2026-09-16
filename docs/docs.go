@@ -362,7 +362,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Global sorting precedes pagination. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.",
+                "description": "SQL filters are combined before counting, global sorting and pagination. Invalid filters return 400. users sorts by inbound distinct users; activity sorts by inbound plus outbound events in the last 24 hours. analytics_available distinguishes zero activity from Mongo failure; resource_metrics_available distinguishes attributed CPU/RAM samples from unavailable shared-pool metrics.",
                 "produces": [
                     "application/json"
                 ],
@@ -389,6 +389,36 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Global ordering",
                         "name": "ordering",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Owner user UUID",
+                        "name": "owner",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter template projects (true or false)",
+                        "name": "is_template",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Whether any release exists, regardless of status",
+                        "name": "has_release",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created on or after YYYY-MM-DD (UTC, inclusive)",
+                        "name": "created_after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created on or before YYYY-MM-DD (UTC, inclusive day)",
+                        "name": "created_before",
                         "in": "query"
                     },
                     {
@@ -852,6 +882,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "SQL filters are combined before counting and pagination. Invalid filters return 400.",
                 "produces": [
                     "application/json"
                 ],
@@ -860,6 +891,46 @@ const docTemplate = `{
                 ],
                 "summary": "List all projects across every owner (admin)",
                 "parameters": [
+                    {
+                        "enum": [
+                            "name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Project ordering",
+                        "name": "ordering",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Owner user UUID",
+                        "name": "owner",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter template projects (true or false)",
+                        "name": "is_template",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Whether any release exists, regardless of status",
+                        "name": "has_release",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created on or after YYYY-MM-DD (UTC, inclusive)",
+                        "name": "created_after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created on or before YYYY-MM-DD (UTC, inclusive day)",
+                        "name": "created_before",
+                        "in": "query"
+                    },
                     {
                         "type": "string",
                         "description": "Filter by name",
@@ -884,6 +955,30 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_modules_project.AdminProjectListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_botspace_backend_internal_shared_httpx.ErrorResponse"
                         }
                     }
                 }

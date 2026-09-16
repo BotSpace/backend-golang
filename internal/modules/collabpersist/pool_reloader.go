@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
+	"github.com/botspace/backend/internal/shared/engine"
 	"github.com/redis/go-redis/v9"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -17,32 +18,63 @@ const (
 )
 
 type poolReloader struct {
-	repo Repository
-	rdb  *redis.Client
-	log  *zap.Logger
+	repo      Repository
+	rdb       *redis.Client
+	log       *zap.Logger
+	mongo     engine.PoolMongoConfig
+	configErr error
 }
 
 // poolRuntimeSpec intentionally matches engine supervisor RuntimeSpec field
 // order. Stable JSON avoids the reconciler treating a flow-only rewrite as a
 // second config change and starting the child twice.
 type poolRuntimeSpec struct {
-	WebhookID string            `json:"webhook_id"`
-	ProjectID string            `json:"project_id"`
-	Name      string            `json:"name"`
-	Debug     bool              `json:"debug"`
-	RoutePort int               `json:"route_port"`
-	Replicas  int               `json:"replicas,omitempty"`
-	Flow      json.RawMessage   `json:"flow"`
-	Schemas   json.RawMessage   `json:"schemas"`
-	Modules   json.RawMessage   `json:"modules"`
-	Env       map[string]string `json:"env"`
+	WebhookID        string            `json:"webhook_id"`
+	ProjectID        string            `json:"project_id"`
+	BackendProjectID string            `json:"backend_project_id,omitempty"`
+	Name             string            `json:"name"`
+	Debug            bool              `json:"debug"`
+	RoutePort        int               `json:"route_port"`
+	Replicas         int               `json:"replicas,omitempty"`
+	Flow             json.RawMessage   `json:"flow"`
+	Schemas          json.RawMessage   `json:"schemas"`
+	Modules          json.RawMessage   `json:"modules"`
+	Env              map[string]string `json:"env"`
 }
 
 func NewPoolReloader(repo Repository, rdb *redis.Client, log *zap.Logger) RuntimeReloader {
-	return &poolReloader{repo: repo, rdb: rdb, log: log}
+	mongo, err := loadPoolMongoConfig()
+	return &poolReloader{repo: repo, rdb: rdb, log: log, mongo: mongo, configErr: err}
+}
+
+// The worker does not load the API Config. Read only its Mongo database setting
+// here; invoking config.Load would impose unrelated API/JWT validation on workers.
+func loadPoolMongoConfig() (engine.PoolMongoConfig, error) {
+	v := viper.New()
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath("./configs")
+	v.AddConfigPath(".")
+	if err := v.ReadInConfig(); err != nil {
+		var missing viper.ConfigFileNotFoundError
+		if !errors.As(err, &missing) {
+			return engine.PoolMongoConfig{}, errors.New("cannot read backend Mongo configuration")
+		}
+	}
+	return engine.CanonicalPoolMongoConfig(v.GetString("engine.mongo_db_name")), nil
 }
 
 func (r *poolReloader) ReloadProject(ctx context.Context, projectID string) error {
+	for attempt := 0; attempt < 3; attempt++ {
+		err := r.reloadProject(ctx, projectID)
+		if !errors.Is(err, redis.TxFailedErr) {
+			return err
+		}
+	}
+	return redis.TxFailedErr
+}
+
+func (r *poolReloader) reloadProject(ctx context.Context, projectID string) error {
 	if r.repo == nil || r.rdb == nil {
 		return nil
 	}
@@ -57,41 +89,47 @@ func (r *poolReloader) ReloadProject(ctx context.Context, projectID string) erro
 	if err != nil {
 		return err
 	}
-	desiredRaw, err = replaceRuntimeFlow(desiredRaw, flow)
+	var expected poolRuntimeSpec
+	if err := json.Unmarshal([]byte(desiredRaw), &expected); err != nil {
+		return errors.New("invalid desired runtime JSON")
+	}
+	if expected.WebhookID != webhookID || !expected.Debug {
+		return errors.New("debug runtime identity mismatch")
+	}
+	canonical := ""
+	if resolver, ok := r.repo.(RuntimeIdentityRepository); ok {
+		if r.configErr != nil {
+			return errors.New("backend Mongo configuration unavailable")
+		}
+		canonical, err = resolver.ResolveRuntimeProject(ctx, expected.ProjectID, webhookID, true)
+		if err != nil || canonical != projectID {
+			return errors.New("SQL debug runtime identity could not be verified")
+		}
+	}
+	hashes, err := r.runtimeHashes(ctx)
 	if err != nil {
 		return err
 	}
-	placementRaw, err := r.rdb.HGet(ctx, poolPlacementHash, webhookID).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
+	if err := r.updateRuntimeCopies(ctx, webhookID, desiredRaw, hashes, func(raw string) (string, error) {
+		var spec poolRuntimeSpec
+		if err := json.Unmarshal([]byte(raw), &spec); err != nil {
+			return "", errors.New("invalid runtime JSON")
+		}
+		if spec.WebhookID != webhookID || spec.ProjectID != expected.ProjectID || !spec.Debug {
+			return "", errors.New("worker debug identity mismatch")
+		}
+		if canonical != "" {
+			var err error
+			raw, err = upgradeRuntimeIdentity(raw, expected, canonical, r.mongo)
+			if err != nil {
+				return "", err
+			}
+		}
+		return replaceRuntimeFlow(raw, flow)
+	}); err != nil {
 		return err
 	}
-	var workers []string
-	_ = json.Unmarshal([]byte(placementRaw), &workers)
-
-	pipe := r.rdb.Pipeline()
-	pipe.HSet(ctx, poolDesiredHash, webhookID, desiredRaw)
-	for _, workerID := range workers {
-		runtimeHash := "engine:pool:worker:" + workerID + ":runtimes"
-		workerRaw, getErr := r.rdb.HGet(ctx, runtimeHash, webhookID).Result()
-		if getErr != nil {
-			continue // pool reconciler restores a missing/stale worker assignment
-		}
-		workerRaw, replaceErr := replaceRuntimeFlow(workerRaw, flow)
-		if replaceErr != nil {
-			return replaceErr
-		}
-		pipe.HSet(ctx, runtimeHash, webhookID, workerRaw)
-		pipe.HSet(ctx, "engine:pool:worker:"+workerID+":status", webhookID, "loading")
-		pipe.XAdd(ctx, &redis.XAddArgs{
-			Stream: "engine:pool:worker:" + workerID + ":commands",
-			MaxLen: 1000, Approx: true,
-			Values: map[string]any{"action": "upsert", "webhook_id": webhookID, "ts": time.Now().UnixMilli()},
-		})
-	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return err
-	}
-	r.log.Debug("collab runtime reload queued", zap.String("project_id", projectID), zap.String("webhook_id", webhookID), zap.Int("workers", len(workers)))
+	r.log.Debug("collab runtime reload queued", zap.String("project_id", projectID), zap.String("webhook_id", webhookID))
 	return nil
 }
 
@@ -107,9 +145,31 @@ func replaceRuntimeFlow(raw string, flow json.RawMessage) (string, error) {
 		return "", errors.New("runtime spec identity is missing")
 	}
 	spec.Flow = append(json.RawMessage(nil), flow...)
-	next, err := json.Marshal(spec)
+	next, err := marshalRuntimeSpec(raw, spec)
 	if err != nil {
 		return "", fmt.Errorf("encode runtime spec: %w", err)
 	}
 	return string(next), nil
+}
+
+// Keep supervisor field order for byte-stable reconciliation, but do not erase
+// fields written by a newer engine/backend during a rolling deployment.
+func marshalRuntimeSpec(raw string, spec poolRuntimeSpec) ([]byte, error) {
+	var extra map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &extra); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"webhook_id", "project_id", "backend_project_id", "name", "debug", "route_port", "replicas", "flow", "schemas", "modules", "env"} {
+		delete(extra, key)
+	}
+	base, err := json.Marshal(spec)
+	if err != nil || len(extra) == 0 {
+		return base, err
+	}
+	tail, err := json.Marshal(extra)
+	if err != nil {
+		return nil, err
+	}
+	base[len(base)-1] = ','
+	return append(base, tail[1:]...), nil
 }

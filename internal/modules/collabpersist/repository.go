@@ -76,6 +76,42 @@ func lockProjectFlow(ctx context.Context, q *sqlcdb.Queries, ref string) (string
 	return row.ID.String(), row.Flow, err
 }
 
+func (r *pgRepo) ResolveRuntimeProject(ctx context.Context, projectRef, webhookID string, debug bool) (string, error) {
+	var id uuid.UUID
+	if n, err := strconv.ParseInt(projectRef, 10, 32); err == nil {
+		legacyID := int32(n)
+		id, err = r.queries.DebugResolveProjectByLegacyID(ctx, &legacyID)
+		if err != nil {
+			return "", fmt.Errorf("resolve runtime tenant: %w", err)
+		}
+	} else {
+		id, err = uuid.Parse(projectRef)
+		if err != nil || id == uuid.Nil {
+			return "", fmt.Errorf("invalid runtime project reference")
+		}
+	}
+	row, err := r.queries.GetProjectAdmin(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("load runtime project: %w", err)
+	}
+	return verifiedRuntimeProject(row.Project, webhookID, debug)
+}
+
+func verifiedRuntimeProject(project sqlcdb.Project, webhookID string, debug bool) (string, error) {
+	webhook, err := uuid.Parse(webhookID)
+	if err != nil || webhook == uuid.Nil || project.ID == uuid.Nil {
+		return "", fmt.Errorf("invalid runtime identity")
+	}
+	expected := project.ReleaseWebhookUuid
+	if debug {
+		expected = project.DebugWebhookUuid
+	}
+	if webhook != expected {
+		return "", fmt.Errorf("runtime webhook does not belong to SQL project and mode")
+	}
+	return project.ID.String(), nil
+}
+
 func (r *pgRepo) RuntimeSnapshot(ctx context.Context, projectID string) (string, json.RawMessage, error) {
 	id, err := uuid.Parse(projectID)
 	if err != nil {
