@@ -6,6 +6,9 @@ image:
   repository: registry.iprogrammer.uz/botspace/backend-golang
   tag: "dc790d3"
 
+imagePullSecrets:
+  - name: iprogrammer-registry
+
 # engine.KubernetesOrchestrator (internal/shared/engine/kubernetes.go) now
 # talks to the botmother namespace directly (create/update/delete Deployment
 # + Service + ConfigMap + Secret for every release/debug/module deploy), so
